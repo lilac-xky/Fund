@@ -1,0 +1,11 @@
+spring:
+  profiles:
+    active: dev
+  application:
+    name: lilac-blog
+  servlet:
+    multipart:
+      max-file-size: 10MB
+server:
+  servlet:
+    context-path: /api
