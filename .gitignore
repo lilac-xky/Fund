@@ -35,3 +35,10 @@ build/
 docs
 .agents
 /backend/src/main/resources/application-dev.yml
+
+### 探针（ISSUE-001）###
+# 缓存与运行产物不入库；源码与结论报告（probe/REPORT.md）随 probe/ 一起入库。
+probe/.cache/
+probe/out/
+__pycache__/
+*.pyc
