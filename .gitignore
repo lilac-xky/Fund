@@ -36,3 +36,4 @@ docs
 .agents
 /backend/src/main/resources/application-dev.yml
 AGENTS.md
+/data

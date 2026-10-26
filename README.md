@@ -12,7 +12,7 @@
 | 技术方案 | 已定案（`docs/02-tech/TECH-PRD.md` v0.4） |
 | 排期 | 30 条 issue / 184 小时（`docs/03-plan/`） |
 | 探针 | ISSUE-001 已完成，结论见 `docs/04-research/` |
-| 代码 | 工程骨架阶段：后端仅有统一返回、异常处理等基础设施，前端仅有路由与入口 |
+| 代码 | ISSUE-003 数据层已落地（5 张业务表 + 仓储 + 启动自检）；其余模块仅有统一返回、异常处理等基础设施 |
 
 ## 这个工具做什么
 
@@ -53,12 +53,22 @@ fund/
 │   └── src/main/
 │       ├── java/com/lilac/
 │       │   ├── common/           # 通用请求对象（分页、删除）
-│       │   ├── domain/result/    # 统一返回 Result
+│       │   ├── config/           # MyBatis-Flex 全局配置、Redis key 规范、data 目录配置
+│       │   ├── domain/
+│       │   │   ├── entity/       # 品种、持仓、策略参数、误差历史、发送留痕
+│       │   │   ├── enums/        # 品种类型、基金类型、持仓状态等枚举
+│       │   │   ├── listener/     # 创建时间与更新时间的自动填充
+│       │   │   ├── mapper/       # MyBatis-Flex BaseMapper
+│       │   │   ├── repository/   # 仓储接口与 impl
+│       │   │   └── result/       # 统一返回 Result
 │       │   ├── enums/            # 状态码枚举 HttpsCodeEnum
 │       │   ├── exception/        # BusinessException 与全局异常处理
+│       │   ├── init/             # 启动自检与 data 目录初始化
 │       │   ├── utils/            # 工具类（ThrowUtils 等）
 │       │   └── BackendApplication.java
-│       └── resources/            # application.yml、application-dev.yml
+│       └── resources/
+│           ├── db/schema.sql     # 五张业务表结构，启动时自动执行
+│           └── application.yml   # application-dev.yml 为本地连接配置（不进 Git）
 ├── frontend/                     # Vue 3 前端
 │   ├── src/
 │   │   ├── api/                  # 接口层（由 Apifox 生成，尚未生成，禁止手改）
@@ -97,6 +107,8 @@ java -jar target/backend-0.0.1-SNAPSHOT.jar
 开发模式直接运行 `BackendApplication` 即可。默认激活 `dev` 配置，服务端口 `9090`，统一上下文路径 `/api`，即接口地址形如 `http://127.0.0.1:9090/api/xxx`。
 
 数据库与 Redis 连接信息在 `backend/src/main/resources/application-dev.yml`，该文件**已被 `.gitignore` 排除**，请勿提交。
+
+五张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
 
 ### 前端
 
@@ -149,3 +161,18 @@ docs/06-features/web/ISSUE-015-早午盘总览页.md
 ```
 
 必含六节：功能目标、实现位置、接口与数据结构、关键决策与取舍、已知限制与风险、验证方式。模板见 `docs/05-conventions/文档沉淀规范.md`。
+
+## 文档索引
+
+| 阶段 | 入口 |
+|------|------|
+| 需求 | [`docs/01-requirements/PRD.md`](docs/01-requirements/PRD.md) |
+| 技术方案 | [`docs/02-tech/TECH-PRD.md`](docs/02-tech/TECH-PRD.md)、[`docs/02-tech/decisions.md`](docs/02-tech/decisions.md) |
+| 排期 | [`docs/03-plan/ROADMAP.md`](docs/03-plan/ROADMAP.md)、[`docs/03-plan/ISSUES.md`](docs/03-plan/ISSUES.md) |
+| 研究 | [`docs/04-research/`](docs/04-research/) |
+| 规范 | [`docs/05-conventions/README.md`](docs/05-conventions/README.md) |
+| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md) |
+
+## 与 TECH-PRD 的偏差（待裁定）
+
+TECH-PRD v0.4 定案的是 Java 25 + Spring Boot 4.1.1 + Spring Data JPA，但仓库实际是 **Java 21 + Spring Boot 3.5.14 + MyBatis-Flex 1.11.1**。ISSUE-003 按「以现有代码为准」实现：实体用 `@Table` / `@Column` / `@Id`，Mapper 继承 `BaseMapper`，未引入任何 JPA 注解。该偏差待使用者裁定后统一回写 TECH-PRD。

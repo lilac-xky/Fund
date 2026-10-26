@@ -6,11 +6,23 @@ spring:
   servlet:
     multipart:
       max-file-size: 10MB
+  sql:
+    init:
+      # 业务表结构随应用启动执行，脚本全部使用 IF NOT EXISTS，可重复执行
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      continue-on-error: false
 server:
   servlet:
     context-path: /api
 
 mybatis-flex:
   configuration:
+    # 数据库字段统一驼峰，实体属性与列名同名，关闭下划线转换
     map-underscore-to-camel-case: false
 #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+fund:
+  data:
+    # 复盘 CSV、操作日志、未送达邮件留存的本地根目录
+    root: data
