@@ -2,6 +2,9 @@ package com.lilac.enums;
 
 import lombok.Getter;
 
+/**
+ * 业务状态码
+ */
 @Getter
 public enum HttpsCodeEnum {
     SUCCESS(200, "操作成功"),
