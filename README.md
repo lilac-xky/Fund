@@ -12,7 +12,7 @@
 | 技术方案 | 已定案（`docs/02-tech/TECH-PRD.md` v0.4） |
 | 排期 | 30 条 issue / 184 小时（`docs/03-plan/`） |
 | 探针 | ISSUE-001 已完成，结论见 `docs/04-research/` |
-| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口） |
+| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口）；ISSUE-005 历史净值与重仓股已落地（第 7 张表 `fund_net_worth` + `GET /fund/snapshot`） |
 
 ## 这个工具做什么
 
@@ -52,7 +52,7 @@ fund/
 │   ├── pom.xml
 │   └── src/main/
 │       ├── java/com/lilac/
-│       │   ├── adapter/          # 外部数据源适配器（基金全集、身份回显、HTTP 封装）
+│       │   ├── adapter/          # 外部数据源适配器（基金全集、身份回显、净值与持仓、HTTP 封装）
 │       │   ├── common/           # 通用请求对象（分页、删除）
 │       │   ├── config/           # MyBatis-Flex 全局配置、Redis key 规范、data 目录配置
 │       │   ├── domain/
@@ -68,7 +68,7 @@ fund/
 │       │   ├── utils/            # 工具类（ThrowUtils 等）
 │       │   └── BackendApplication.java
 │       └── resources/
-│           ├── db/schema.sql     # 六张业务表结构，启动时自动执行
+│           ├── db/schema.sql     # 七张业务表结构，启动时自动执行
 │           └── application.yml   # application-dev.yml 为本地连接配置（不进 Git）
 ├── frontend/                     # Vue 3 前端
 │   ├── src/
@@ -109,7 +109,7 @@ java -jar target/backend-0.0.1-SNAPSHOT.jar
 
 数据库与 Redis 连接信息在 `backend/src/main/resources/application-dev.yml`，该文件**已被 `.gitignore` 排除**，请勿提交。
 
-六张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。其中 `fund_catalog` 是基金全集缓存，首次录入前调 `POST /api/fund/catalog/sync` 拉取（约 2.8 万条），也可等首次消歧时自动触发。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
+七张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。其中 `fund_catalog` 是基金全集缓存，首次录入前调 `POST /api/fund/catalog/sync` 拉取（约 2.8 万条），也可等首次消歧时自动触发；`fund_net_worth` 是历史净值序列，调 `GET /api/fund/snapshot?code=` 时按需落库。这两张表都可从上游重建。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
 
 ### 前端
 
@@ -172,7 +172,7 @@ docs/06-features/web/ISSUE-015-早午盘总览页.md
 | 排期 | [`docs/03-plan/ROADMAP.md`](docs/03-plan/ROADMAP.md)、[`docs/03-plan/ISSUES.md`](docs/03-plan/ISSUES.md) |
 | 研究 | [`docs/04-research/`](docs/04-research/) |
 | 规范 | [`docs/05-conventions/README.md`](docs/05-conventions/README.md) |
-| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md) |
+| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md)、[`docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md`](docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md) |
 
 ## 与 TECH-PRD 的偏差（待裁定）
 
