@@ -19,13 +19,13 @@ import java.util.List;
 public class StartupSelfCheck implements ApplicationRunner {
 
     private static final List<String> REQUIRED_TABLES =
-            List.of("variety", "holding", "strategy_param", "estimate_error", "send_record");
+            List.of("variety", "holding", "strategy_param", "estimate_error", "send_record", "fund_catalog");
 
     @Resource
     private JdbcTemplate jdbcTemplate;
 
     /**
-     * 校验五张业务表均已建好，并确认逻辑删除处理器已生效
+     * 校验六张业务表均已建好，并确认逻辑删除处理器已生效
      *
      * @param args 启动参数
      */

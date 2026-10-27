@@ -80,3 +80,16 @@ CREATE TABLE IF NOT EXISTS send_record (
     UNIQUE KEY ukSendDatePoint (sendDate, sendPoint)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='发送留痕，每个交易日每个时点一条记录';
+
+CREATE TABLE IF NOT EXISTS fund_catalog (
+    id         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    fundCode   VARCHAR(16)  NOT NULL COMMENT '6 位基金代码',
+    fundName   VARCHAR(255) NOT NULL COMMENT '基金简称',
+    fundType   VARCHAR(32)           DEFAULT NULL COMMENT '天天基金原始类型，如 混合型-灵活',
+    createTime DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY ukFundCode (fundCode),
+    KEY idxFundName (fundName)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='基金全集缓存，供代码消歧查表，可随时重建';
