@@ -4,6 +4,23 @@ declare namespace API {
     id?: number;
   };
 
+  type ForexRateVO = {
+    /** 汇率对，如 HKDCNY */
+    pair?: string;
+    /** 最新汇率 */
+    rate?: number;
+    /** 上一有效交易日的汇率 */
+    previousRate?: number;
+    /** 当日变动，小数形式 */
+    changeRate?: number;
+    /** 汇率数据日期 */
+    tradeDate?: string;
+    /** 取数来源 */
+    source?: string;
+    /** 是否可用 */
+    usable?: boolean;
+  };
+
   type FundCandidateVO = {
     /** 业务主键，如 OF:000001 */
     varietyKey?: string;
@@ -151,6 +168,11 @@ declare namespace API {
     id?: number;
   };
 
+  type historyParams = {
+    codes: string[];
+    limit?: number;
+  };
+
   type HoldingAddRequest = {
     /** 所持品种的业务主键 */
     varietyKey?: string;
@@ -212,6 +234,59 @@ declare namespace API {
     updateTime?: string;
   };
 
+  type MarketBarVO = {
+    /** 交易日 */
+    date?: string;
+    /** 收盘价 */
+    close?: number;
+  };
+
+  type MarketHistoryVO = {
+    /** 带交易所前缀的完整代码 */
+    symbol?: string;
+    /** 日线，按日期升序 */
+    bars?: MarketBarVO[];
+    /** 根数 */
+    size?: number;
+    /** 最新交易日 */
+    latestDate?: string;
+    /** 最新收盘价 */
+    latestClose?: number;
+    /** 是否前复权口径 */
+    adjusted?: boolean;
+    /** 取数来源 */
+    source?: string;
+  };
+
+  type MarketQuoteVO = {
+    /** 带交易所前缀的完整代码 */
+    symbol?: string;
+    /** 标的名称 */
+    name?: string;
+    /** 最新价 */
+    price?: number;
+    /** 昨收 */
+    previousClose?: number;
+    /** 当日涨跌幅，单位百分点 */
+    changePercent?: number;
+    /** 数据日期 */
+    tradeDate?: string;
+    /** 行情时间 */
+    quoteTime?: string;
+    /** 是否交易时段内的实时数据，false 表示上一交易日 */
+    realtime?: boolean;
+    /** 可用性状态 */
+    status?: "OK" | "SUSPENDED" | "NO_DATA" | "UNAVAILABLE";
+    /** 是否可用于预估 */
+    usable?: boolean;
+    /** 不可用原因 */
+    unavailableReason?: string;
+    /** 取数来源 */
+    source?: string;
+    /** 是否前复权口径 */
+    adjusted?: boolean;
+  };
+
   type NetWorthPointVO = {
     /** 净值日期 */
     netWorthDate?: string;
@@ -239,10 +314,42 @@ declare namespace API {
     paramDesc?: string;
   };
 
+  type QuoteBatchRequest = {
+    /** 标的代码列表，可带 sh/sz/bj/hk 前缀，不带时按号段推断 */
+    codes?: string[];
+    /** 日线根数，只在查历史时使用，不传取配置默认值 */
+    historyLimit?: number;
+  };
+
+  type QuoteBatchVO = {
+    /** 逐只行情，按请求顺序 */
+    quotes?: MarketQuoteVO[];
+    /** 请求的标的数 */
+    requested?: number;
+    /** 可用于预估的标的数 */
+    usableCount?: number;
+    /** 停牌的标的数 */
+    suspendedCount?: number;
+    /** 无行情的标的数，含 920xxx 北交所 */
+    noDataCount?: number;
+    /** 本次是否有标的走了备用源 */
+    fallbackUsed?: boolean;
+    /** 数据日期，取可用标的中最新的交易日 */
+    dataDate?: string;
+    /** 是否处于交易时段，false 时数据为上一交易日 */
+    tradingHours?: boolean;
+  };
+
   type ResultBoolean = {
     code?: number;
     msg?: string;
     data?: boolean;
+  };
+
+  type ResultForexRateVO = {
+    code?: number;
+    msg?: string;
+    data?: ForexRateVO;
   };
 
   type ResultFundCatalogStatusVO = {
@@ -282,6 +389,12 @@ declare namespace API {
     data?: HoldingVO[];
   };
 
+  type ResultListMarketHistoryVO = {
+    code?: number;
+    msg?: string;
+    data?: MarketHistoryVO[];
+  };
+
   type ResultListStrategyParamVO = {
     code?: number;
     msg?: string;
@@ -292,6 +405,18 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: VarietyVO[];
+  };
+
+  type ResultMarketQuoteVO = {
+    code?: number;
+    msg?: string;
+    data?: MarketQuoteVO;
+  };
+
+  type ResultQuoteBatchVO = {
+    code?: number;
+    msg?: string;
+    data?: QuoteBatchVO;
   };
 
   type ResultStrategyParamVO = {
@@ -305,6 +430,10 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: VarietyVO;
+  };
+
+  type singleParams = {
+    code: string;
   };
 
   type snapshotParams = {
