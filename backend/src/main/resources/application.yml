@@ -26,3 +26,16 @@ fund:
   data:
     # 复盘 CSV、操作日志、未送达邮件留存的本地根目录
     root: data
+  adapter:
+    http:
+      # 东财等公开源对无 UA 的请求直接拒绝，统一带浏览器 UA
+      user-agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+      connect-timeout-ms: 5000
+      read-timeout-ms: 15000
+    eastmoney:
+      fund-universe-url: "https://fund.eastmoney.com/js/fundcode_search.js"
+      fund-detail-url: "https://fundf10.eastmoney.com/jbgk_{code}.html"
+      # 基金全集缓存最长保留天数，过期后下次消歧自动刷新
+      catalog-max-age-days: 7
+    tencent:
+      quote-url: "https://qt.gtimg.cn/q="
