@@ -51,3 +51,23 @@ fund:
       catalog-max-age-days: 7
     tencent:
       quote-url: "https://qt.gtimg.cn/q="
+      # 日线前复权地址，{symbol} 带交易所前缀，{limit} 为返回根数；该接口一次只认一个 param
+      kline-url: "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{limit},qfq"
+      # 港股必须走 hkfqkline，通用接口对 hk 前缀返回 501
+      hk-kline-url: "https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param={symbol},day,,,{limit},qfq"
+    sina:
+      # 新浪实时行情不带 Referer 一律返回 Forbidden
+      referer: "https://finance.sina.com.cn"
+      quote-url: "https://hq.sinajs.cn/list="
+      # 新浪日线不复权，只能作备用源，使用时须标注 adjusted=false
+      kline-url: "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={limit}"
+      # 新浪外汇日线，东财 133.HKDCNH 已被限流，腾讯无历史
+      forex-daily-url: "https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/var%20_=/NewForexService.getDayKLine?symbol={pair}"
+      forex-quote-url: "https://hq.sinajs.cn/list={pair}"
+    quote:
+      # 单次批量请求的标的上限，超过则拆成多个请求
+      batch-size: 60
+      # 行情缓存粒度，秒；盘中同一标的 5 分钟内不重复取数
+      cache-ttl-seconds: 300
+      # 历史日线默认返回根数，供滚动收益与 β 估计复用
+      history-limit: 60

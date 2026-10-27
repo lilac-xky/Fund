@@ -41,11 +41,11 @@ public final class RedisKeys {
     /**
      * 拼接当日行情缓存 key
      *
-     * @param varietyKey 品种业务主键，形如 ETF:510300
+     * @param symbol 标的标识，行情缓存用完整代码（如 sh510300），页面缓存用品种业务主键（如 OF:000001）
      * @return 缓存 key
      */
-    public static String quoteKey(String varietyKey) {
-        return QUOTE + varietyKey;
+    public static String quoteKey(String symbol) {
+        return QUOTE + symbol;
     }
 
     /**
