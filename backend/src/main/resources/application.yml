@@ -20,6 +20,8 @@ mybatis-flex:
   configuration:
     # 数据库字段统一驼峰，实体属性与列名同名，关闭下划线转换
     map-underscore-to-camel-case: false
+    # 一级缓存只在一个语句内生效，避免同一事务里读到写入前的旧值
+    local-cache-scope: statement
 #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 fund:
@@ -35,6 +37,16 @@ fund:
     eastmoney:
       fund-universe-url: "https://fund.eastmoney.com/js/fundcode_search.js"
       fund-detail-url: "https://fundf10.eastmoney.com/jbgk_{code}.html"
+      # 净值与季末仓位取自 pingzhongdata 非正式 JS，无版本承诺
+      fund-pingzhong-url: "https://fund.eastmoney.com/pingzhongdata/{code}.js"
+      # 重仓股与债券持仓取自 fundf10，{kind} 为 jjcc/zqcc，month 决定中报年报是否展开全量
+      fund-holding-url: "https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type={kind}&code={code}&topline=100&year={year}&month={month}"
+      # fundf10 与公告接口不带 Referer 一律返回 404，实测必带
+      referer: "https://fundf10.eastmoney.com/"
+      # 定期报告公告列表，用于取各报告期的披露日
+      fund-announcement-url: "https://api.fund.eastmoney.com/f10/JJGG?fundcode={code}&pageIndex=1&pageSize=30&type=3&_=1"
+      # 返回给前端的净值序列长度，供指标与页面复用
+      net-worth-history-days: 400
       # 基金全集缓存最长保留天数，过期后下次消歧自动刷新
       catalog-max-age-days: 7
     tencent:
