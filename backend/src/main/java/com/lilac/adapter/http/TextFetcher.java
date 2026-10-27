@@ -1,6 +1,7 @@
 package com.lilac.adapter.http;
 
 import java.nio.charset.Charset;
+import java.util.Map;
 
 /**
  * 文本取数接口，屏蔽具体 HTTP 实现以便替换与测试
@@ -23,4 +24,16 @@ public interface TextFetcher {
      * @return 响应文本
      */
     String getText(String url, Charset charset);
+
+    /**
+     * 按指定字符集与附加请求头取回文本，默认实现忽略请求头
+     *
+     * @param url     请求地址
+     * @param charset 响应字符集
+     * @param headers 附加请求头
+     * @return 响应文本
+     */
+    default String getText(String url, Charset charset, Map<String, String> headers) {
+        return getText(url, charset);
+    }
 }

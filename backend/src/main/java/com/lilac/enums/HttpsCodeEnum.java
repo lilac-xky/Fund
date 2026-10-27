@@ -19,6 +19,7 @@ public enum HttpsCodeEnum {
     USER_OR_PASSWORD_ERROR(400004, "用户名或密码错误"),
     USER_EXIST(400005, "用户已存在"),
     NOT_FOUND_ERROR(400006, "未找到该资源"),
+    DATA_SOURCE_BROKEN(400007, "外部数据源结构变化，今日无法预估"),
     RESOURCE_NOT_FOUND(404, "请求的资源不存在");
 
     private final Integer code;
