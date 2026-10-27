@@ -98,6 +98,47 @@ declare namespace API {
     catalogUpdatedAt?: string;
   };
 
+  type FundSnapshotVO = {
+    /** 6 位基金代码 */
+    code?: string;
+    /** 基金简称 */
+    name?: string;
+    /** 净值数据日期 */
+    netWorthDate?: string;
+    /** 持仓截止日 */
+    holdingCutoffDate?: string;
+    /** 持仓披露日 */
+    holdingDisclosureDate?: string;
+    /** 报告期，如 2026Q2 */
+    holdingPeriod?: string;
+    /** 重仓股列表，按权重降序 */
+    stockHoldings?: HoldingItemVO[];
+    /** 债券持仓列表 */
+    bondHoldings?: HoldingItemVO[];
+    /** 重仓股合计占比，单位百分点；季报只有前十大时明显低于股票仓位 */
+    totalStockWeight?: number;
+    /** 债券持仓合计占比，单位百分点 */
+    totalBondWeight?: number;
+    /** 是否全量披露 */
+    fullDisclosure?: boolean;
+    /** 季末股票占净比 */
+    stockRatio?: number;
+    /** 季末债券占净比 */
+    bondRatio?: number;
+    /** 季末现金占净比 */
+    cashRatio?: number;
+    /** 是否可用于当日预估 */
+    estimable?: boolean;
+    /** 不可预估的具体原因，可预估时为 null */
+    unavailableReason?: string;
+    /** 是否走了降级缓存 */
+    degraded?: boolean;
+    /** 降级时的数据截止时间 */
+    dataCutoffDate?: string;
+    /** 净值序列，按日期升序 */
+    netWorthPoints?: NetWorthPointVO[];
+  };
+
   type getByIdParams = {
     id?: number;
   };
@@ -121,6 +162,15 @@ declare namespace API {
     openDate?: string;
     /** 持仓状态 */
     status?: "HOLDING" | "CLOSED";
+  };
+
+  type HoldingItemVO = {
+    /** 证券代码 */
+    code?: string;
+    /** 证券名称 */
+    name?: string;
+    /** 占净值比例，单位百分点 */
+    weight?: number;
   };
 
   type HoldingQueryRequest = {
@@ -160,6 +210,15 @@ declare namespace API {
     createTime?: string;
     /** 更新时间 */
     updateTime?: string;
+  };
+
+  type NetWorthPointVO = {
+    /** 净值日期 */
+    netWorthDate?: string;
+    /** 单位净值 */
+    unitNetWorth?: number;
+    /** 当日净值回报，单位百分点 */
+    equityReturn?: number;
   };
 
   type ParamQueryRequest = {
@@ -204,6 +263,12 @@ declare namespace API {
     data?: FundDisambiguateVO;
   };
 
+  type ResultFundSnapshotVO = {
+    code?: number;
+    msg?: string;
+    data?: FundSnapshotVO;
+  };
+
   type ResultHoldingVO = {
     code?: number;
     msg?: string;
@@ -240,6 +305,10 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: VarietyVO;
+  };
+
+  type snapshotParams = {
+    code: string;
   };
 
   type StrategyParamVO = {
