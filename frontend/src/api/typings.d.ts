@@ -1,4 +1,117 @@
 declare namespace API {
+  type CalibrationGapVO = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 6 位代码 */
+    varietyCode?: string;
+    /** 标的名称 */
+    varietyName?: string;
+    /** 未能校准的原因 */
+    reason?: string;
+  };
+
+  type CalibrationItemVO = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 6 位代码 */
+    varietyCode?: string;
+    /** 标的名称 */
+    varietyName?: string;
+    /** 基金类型 */
+    category?:
+      | "STOCK"
+      | "MIXED"
+      | "BOND"
+      | "GOLD"
+      | "DIVIDEND"
+      | "ETF"
+      | "UNKNOWN";
+    /** 基金类型中文名 */
+    categoryLabel?: string;
+    /** 交易日 */
+    tradeDate?: string;
+    /** 当时输出档位 */
+    outputTier?: "A" | "B" | "C";
+    /** 当时给出的预估涨跌幅，百分点；B、C 档为 null */
+    estimatedChange?: number;
+    /** 当日实际涨跌幅，百分点 */
+    actualChange?: number;
+    /** 误差，预估减实际，百分点 */
+    errorValue?: number;
+    /** 本次判定所用阈值，百分点；混合型为 null */
+    thresholdValue?: number;
+    /** 是否超阈值 */
+    overThreshold?: boolean;
+    /** 方向是否命中，混合型才有 */
+    directionHit?: boolean;
+    /** 实际值是否落在区间内，混合型才有 */
+    inInterval?: boolean;
+    /** 当时区间下限，百分点 */
+    intervalLow?: number;
+    /** 当时区间上限，百分点 */
+    intervalHigh?: number;
+    /** 当时区间宽度，百分点 */
+    intervalWidth?: number;
+    /** 校准后的滚动档位 */
+    rollingTier?: "A" | "B" | "C";
+    /** 滚动窗口内绝对误差的中位数，百分点 */
+    medianAbsError?: number;
+    /** 滚动窗口内的方向准确率 */
+    directionAccuracy?: number;
+    /** 滚动窗口内的区间覆盖率 */
+    intervalCoverage?: number;
+    /** 连续超阈值期数 */
+    consecutiveOverCount?: number;
+    /** 是否建议停用该基金预估 */
+    suggestSuspend?: boolean;
+    /** 黄金 β，非黄金为 null */
+    beta?: number;
+    /** 黄金 AR(1) 系数，非黄金为 null */
+    rho?: number;
+    /** 黄金残差 P90，百分点 */
+    residualP90?: number;
+    /** 当时持仓截止日 */
+    holdingCutoffDate?: string;
+    /** 当时持仓披露日 */
+    holdingDisclosureDate?: string;
+    /** 预估来源，SNAPSHOT 或 RECOMPUTED */
+    estimateSource?: string;
+    /** 本条的说明文字，每条一句 */
+    remarks?: string[];
+  };
+
+  type CalibrationRequest = {
+    /** 待校准交易日，为空时取当日 */
+    tradeDate?: string;
+    /** 指定基金，为空时按全部持有中的持仓 */
+    varietyKeys?: string[];
+    /** 是否在预估留存缺失时用当日行情重算，默认 false 只报缺口 */
+    recompute?: boolean;
+  };
+
+  type CalibrationResultVO = {
+    /** 校准交易日 */
+    tradeDate?: string;
+    /** 逐只对照结果 */
+    items?: CalibrationItemVO[];
+    /** 超阈值的基金，从 items 中筛出便于页面直接标红 */
+    overThresholdItems?: CalibrationItemVO[];
+    /** 建议停用的基金 */
+    suspensionHints?: CalibrationItemVO[];
+    /** 未能校准的基金，如当日预估缺失或净值尚未公布 */
+    gaps?: CalibrationGapVO[];
+    /** 校准只数 */
+    calibratedCount?: number;
+    /** 超阈值只数 */
+    overThresholdCount?: number;
+    /** 未能校准只数 */
+    gapCount?: number;
+    /** 净利润落库条数，含覆盖写 */
+    writtenCount?: number;
+    /** 本次说明，如「当日预估缺失已跳过 2 只」 */
+    notice?: string;
+  };
+
   type DeleteRequest = {
     /** id */
     id?: number;
@@ -38,6 +151,96 @@ declare namespace API {
     overallNote?: string;
     /** 操作提示，如超上限已分批 */
     notice?: string;
+  };
+
+  type EstimateErrorQueryRequest = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 区间起始日，含 */
+    startDate?: string;
+    /** 区间截止日，含 */
+    endDate?: string;
+    /** 是否超阈值 */
+    overThreshold?: boolean;
+  };
+
+  type EstimateErrorTrendVO = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 6 位代码 */
+    varietyCode?: string;
+    /** 标的名称 */
+    varietyName?: string;
+    /** 基金类型 */
+    category?:
+      | "STOCK"
+      | "MIXED"
+      | "BOND"
+      | "GOLD"
+      | "DIVIDEND"
+      | "ETF"
+      | "UNKNOWN";
+    /** 基金类型中文名 */
+    categoryLabel?: string;
+    /** 滚动窗口内的样本数 */
+    sampleCount?: number;
+    /** 滚动窗口内绝对误差的中位数，百分点 */
+    medianAbsError?: number;
+    /** 滚动窗口内的平均绝对误差，百分点 */
+    mae?: number;
+    /** 滚动窗口内的方向准确率 */
+    directionAccuracy?: number;
+    /** 滚动窗口内的区间覆盖率，混合型才有 */
+    intervalCoverage?: number;
+    /** 最近一次滚动判定的档位 */
+    rollingTier?: "A" | "B" | "C";
+    /** 最近一次校准的交易日 */
+    latestTradeDate?: string;
+    /** 连续超阈值期数 */
+    consecutiveOverCount?: number;
+    /** 是否建议停用该基金预估 */
+    suggestSuspend?: boolean;
+    /** 逐日误差序列，按交易日升序 */
+    series?: EstimateErrorVO[];
+  };
+
+  type EstimateErrorVO = {
+    /** 主键 */
+    id?: number;
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 交易日 */
+    tradeDate?: string;
+    /** 预估涨跌幅 */
+    estimatedChange?: number;
+    /** 实际涨跌幅 */
+    actualChange?: number;
+    /** 误差 */
+    errorValue?: number;
+    /** 是否超阈值 */
+    overThreshold?: boolean;
+    /** 本次判定所用阈值，百分点；混合型不参与点估计判定，为 null */
+    thresholdValue?: number;
+    /** 方向是否命中，混合型统计用 */
+    directionHit?: boolean;
+    /** 实际值是否落在所给区间内，混合型统计用 */
+    inInterval?: boolean;
+    /** 所给区间宽度，百分点 */
+    intervalWidth?: number;
+    /** 重仓股披露期 */
+    disclosurePeriod?: string;
+    /** 当时持仓截止日 */
+    holdingCutoffDate?: string;
+    /** 当时持仓披露日 */
+    holdingDisclosureDate?: string;
+    /** 当时输出档位 */
+    outputTier?: string;
+    /** 预估来源，SNAPSHOT 取当日留存、RECOMPUTED 事后重算 */
+    estimateSource?: string;
+    /** 创建时间 */
+    createTime?: string;
+    /** 更新时间 */
+    updateTime?: string;
   };
 
   type EstimateVO = {
@@ -105,6 +308,8 @@ declare namespace API {
     beta?: number;
     /** 黄金 AR(1) 系数 */
     rho?: number;
+    /** 黄金残差 P90，百分点；供 β+AR(1) 估计的交叉校验与校准留存 */
+    residualP90?: number;
     /** 是否来自降级缓存 */
     degraded?: boolean;
     /** 是否可预估 */
@@ -281,6 +486,35 @@ declare namespace API {
 
   type getByIdParams = {
     id?: number;
+  };
+
+  type goldBetaParams = {
+    varietyKey?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+
+  type GoldBetaRecordVO = {
+    /** 主键 */
+    id?: number;
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 记录日 */
+    tradeDate?: string;
+    /** 对黄金 ETF 的滚动 β */
+    beta?: number;
+    /** 回归截距，百分点 */
+    alpha?: number;
+    /** AR(1) 误差系数 ρ */
+    rho?: number;
+    /** 残差绝对值的 P90，百分点 */
+    residualP90?: number;
+    /** 参与估计的配对样本数 */
+    samples?: number;
+    /** 是否因样本不足退化为代理直取 */
+    fallback?: boolean;
+    /** 写入时间 */
+    createTime?: string;
   };
 
   type historyParams = {
@@ -461,10 +695,22 @@ declare namespace API {
     data?: boolean;
   };
 
+  type ResultCalibrationResultVO = {
+    code?: number;
+    msg?: string;
+    data?: CalibrationResultVO;
+  };
+
   type ResultEstimateBatchVO = {
     code?: number;
     msg?: string;
     data?: EstimateBatchVO;
+  };
+
+  type ResultEstimateErrorTrendVO = {
+    code?: number;
+    msg?: string;
+    data?: EstimateErrorTrendVO;
   };
 
   type ResultEstimateVO = {
@@ -508,6 +754,24 @@ declare namespace API {
     msg?: string;
     /** 持仓视图对象 */
     data?: HoldingVO;
+  };
+
+  type ResultListEstimateErrorTrendVO = {
+    code?: number;
+    msg?: string;
+    data?: EstimateErrorTrendVO[];
+  };
+
+  type ResultListEstimateErrorVO = {
+    code?: number;
+    msg?: string;
+    data?: EstimateErrorVO[];
+  };
+
+  type ResultListGoldBetaRecordVO = {
+    code?: number;
+    msg?: string;
+    data?: GoldBetaRecordVO[];
   };
 
   type ResultListHoldingVO = {
@@ -586,6 +850,15 @@ declare namespace API {
     createTime?: string;
     /** 更新时间 */
     updateTime?: string;
+  };
+
+  type suspendHintsParams = {
+    tradeDate?: string;
+  };
+
+  type trendParams = {
+    varietyKey: string;
+    days?: number;
   };
 
   type VarietyQueryRequest = {

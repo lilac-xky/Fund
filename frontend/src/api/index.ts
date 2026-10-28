@@ -9,6 +9,7 @@ import * as strategyParamController from "./strategyParamController";
 import * as fundSnapshotController from "./fundSnapshotController";
 import * as marketQuoteController from "./marketQuoteController";
 import * as estimateController from "./estimateController";
+import * as estimateCalibrationController from "./estimateCalibrationController";
 export default {
   fundController,
   holdingController,
@@ -17,4 +18,5 @@ export default {
   fundSnapshotController,
   marketQuoteController,
   estimateController,
+  estimateCalibrationController,
 };
