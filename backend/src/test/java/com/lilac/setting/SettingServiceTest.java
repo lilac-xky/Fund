@@ -183,17 +183,20 @@ class SettingServiceTest {
     }
 
     /**
-     * 邮件设置读取时只说明授权码是否配置，返回值里根本不存在口令字段
+     * 邮件设置读取时只说明授权码是否配置，返回值里根本不存在口令字段，也不暴露本地路径
      */
     @Test
-    @DisplayName("邮件设置任何返回都不含授权码明文")
+    @DisplayName("邮件设置任何返回都不含授权码明文与本地路径")
     void mailSettingNeverReturnsPassword() {
         MailSettingVO vo = settingService.mailSetting();
 
-        assertThat(vo.getSecretsFile()).isNotBlank();
         assertThat(vo.getPasswordConfigured()).isNotNull();
         // 只允许出现 boolean 形式的状态字段，不允许有 String 形式的明文载体
         assertThat(plaintextPasswordFields(MailSettingVO.class)).isEmpty();
+        // 页面不需要知道密钥文件在哪，任何返回都不应出现本地路径字段
+        assertThat(vo.getClass().getDeclaredFields())
+                .noneMatch(field -> field.getName().toLowerCase().contains("secrets")
+                        || field.getName().toLowerCase().contains("file"));
     }
 
     /**

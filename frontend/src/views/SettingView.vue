@@ -110,7 +110,7 @@
               v-if="activeGroup === 'MAIL'"
               title="邮件与 SMTP"
               code="MAIL"
-              meta="授权码只写入，任何接口都不回显"
+              meta="这里保存的配置会立即用于发信，覆盖本地的同名配置"
             >
               <template #icon>
                 <span v-html="GROUP_ICONS.MAIL" />
@@ -164,11 +164,7 @@
                 />
               </AppField>
 
-              <AppField
-                label="授权码"
-                description="写入密钥文件，接口只回「已配置 / 未配置」"
-                :hint="mail.secretsFile ? '密钥文件：' + mail.secretsFile : undefined"
-              >
+              <AppField label="授权码" description="输入后点保存写入，任何页面都不会再显示它">
                 <div class="app-secret">
                   <span class="app-secret__mask">••••••••••••</span>
                   <span
@@ -181,7 +177,7 @@
                 </div>
               </AppField>
 
-              <AppField label="新授权码" description="留空表示不修改；写入后任何接口都不回显">
+              <AppField label="新授权码" description="留空表示不修改">
                 <AppInput
                   v-model="newPassword"
                   type="password"
@@ -279,6 +275,9 @@
           </AppAsideBlock>
 
           <AppAsideBlock title="邮件通道">
+            <template #count>
+              <span v-if="mail.testable" class="app-count">可测试</span>
+            </template>
             <div class="app-mailbox" :class="{ 'app-mailbox--off': !mail.ready }">
               <b>{{ mail.ready ? '通道就绪' : '通道未就绪' }}</b>
               {{ mail.note || '尚未配置 SMTP 参数' }}
@@ -382,7 +381,7 @@ const errors = reactive<Record<string, string>>({})
 const globalError = ref('')
 
 /** 邮件设置 */
-const mail = reactive<API.MailSettingVO>({})
+const mail = reactive<API.MailSettingVO & { testable?: boolean }>({})
 
 /** 新授权码，只写不回显，保存后立即清空 */
 const newPassword = ref('')

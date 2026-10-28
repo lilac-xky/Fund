@@ -20,5 +20,10 @@ public class MailStatusVO implements Serializable {
      */
     private String note;
 
+    /**
+     * 当前配置是否可以进行连接测试
+     */
+    private Boolean testable;
+
     private static final long serialVersionUID = 1L;
 }

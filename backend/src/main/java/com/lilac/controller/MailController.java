@@ -3,6 +3,7 @@ package com.lilac.controller;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.MailPreviewVO;
 import com.lilac.domain.vo.MailStatusVO;
+import com.lilac.mail.SmtpSettingsResolver;
 import com.lilac.mail.CloseReminderMailService;
 import com.lilac.mail.MailContent;
 import com.lilac.mail.MailContentBuilder;
@@ -29,6 +30,9 @@ public class MailController {
     private CloseReminderMailService closeReminderMailService;
 
     @Resource
+    private SmtpSettingsResolver smtpSettingsResolver;
+
+    @Resource
     private MailContentBuilder mailContentBuilder;
 
     @Resource
@@ -43,8 +47,10 @@ public class MailController {
     @GetMapping("/status")
     public Result<MailStatusVO> status() {
         MailStatusVO vo = new MailStatusVO();
-        vo.setReady(closeReminderMailService.ready());
-        vo.setNote(closeReminderMailService.statusNote());
+        SmtpSettingsResolver.SmtpSettings settings = smtpSettingsResolver.resolve();
+        vo.setReady(settings.complete());
+        vo.setNote(settings.complete() ? "当前配置完整，可以测试连接" : String.join("；", settings.getMissing()));
+        vo.setTestable(settings.complete());
         return Result.success(vo);
     }
 

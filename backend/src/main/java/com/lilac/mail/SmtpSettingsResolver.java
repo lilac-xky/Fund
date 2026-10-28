@@ -69,8 +69,9 @@ public class SmtpSettingsResolver {
         settings.setHost(prefer(secrets.get(HOST_KEY), mailProperties.getHost()));
         settings.setPort(portOf(prefer(secrets.get(PORT_KEY), null)));
         settings.setUsername(prefer(secrets.get(USERNAME_KEY), mailProperties.getUsername()));
-        settings.setPassword(secrets.get(PASSWORD_KEY));
-        settings.setFrom(prefer(secrets.get(FROM_KEY), prefer(mailProperties.getFrom(), settings.getUsername())));
+        settings.setPassword(prefer(secrets.get(PASSWORD_KEY), null));
+        settings.setFrom(prefer(secrets.get(FROM_KEY),
+                prefer(mailProperties.getFrom(), settings.getUsername())));
         settings.setRecipients(recipientsOf(secrets.get(RECIPIENTS_KEY), mailProperties.getRecipients()));
         settings.setMissing(settings.missingItems());
         return settings;
@@ -82,9 +83,7 @@ public class SmtpSettingsResolver {
      * @return 已配置返回 true
      */
     public boolean passwordConfigured() {
-        SecretsLoader.Secrets secrets = secretsLoader.loadAll(mailProperties.getSecretsFile());
-        return notBlank(secrets.get(PASSWORD_KEY))
-                && notBlank(prefer(secrets.get(USERNAME_KEY), mailProperties.getUsername()));
+        return notBlank(resolve().getPassword());
     }
 
     /**
@@ -200,16 +199,16 @@ public class SmtpSettingsResolver {
         public List<String> missingItems() {
             List<String> items = new ArrayList<>();
             if (host == null || host.isBlank()) {
-                items.add("SMTP 主机未配置，请在 config/secrets.env 写入键 " + HOST_KEY);
+                items.add("SMTP 主机未配置");
             }
             if (username == null || username.isBlank()) {
-                items.add("SMTP 账号未配置，请在 config/secrets.env 写入键 " + USERNAME_KEY);
+                items.add("SMTP 账号未配置");
             }
             if (password == null || password.isBlank()) {
-                items.add("SMTP 授权码未配置，请在 config/secrets.env 写入键 " + PASSWORD_KEY);
+                items.add("SMTP 授权码未配置");
             }
             if (recipients == null || recipients.isEmpty()) {
-                items.add("收件地址未配置，请在 config/secrets.env 写入键 " + RECIPIENTS_KEY);
+                items.add("收件地址未配置");
             }
             return items;
         }

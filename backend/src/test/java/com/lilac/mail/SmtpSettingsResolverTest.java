@@ -91,10 +91,12 @@ class SmtpSettingsResolverTest {
         SmtpSettingsResolver.SmtpSettings settings = resolver.resolve();
         assertThat(settings.complete()).isFalse();
         assertThat(settings.getMissing()).hasSize(3);
+        // 面向使用者的文案只说缺什么，不再出现密钥文件键名与任何内容
         assertThat(String.join("|", settings.getMissing()))
-                .contains("SMTP_HOST").contains("SMTP_USERNAME").contains("SMTP_RECIPIENTS")
+                .contains("SMTP 主机未配置").contains("SMTP 账号未配置").contains("收件地址未配置")
                 .doesNotContain("token123");
-        assertThat(resolver.passwordConfigured()).isFalse();
+        // 「授权码已配置」只看授权码本身；账号缺失体现在通道缺项里，两者不混在一个标志上
+        assertThat(resolver.passwordConfigured()).isTrue();
     }
 
     /**

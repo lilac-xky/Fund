@@ -3,6 +3,7 @@ package com.lilac.service;
 import com.lilac.domain.dto.setting.MailSettingSaveRequest;
 import com.lilac.domain.dto.setting.SettingBatchSaveRequest;
 import com.lilac.domain.vo.MailSettingVO;
+import com.lilac.domain.vo.MailTestVO;
 import com.lilac.domain.vo.SettingOverviewVO;
 import com.lilac.domain.vo.SettingSaveVO;
 
@@ -48,4 +49,11 @@ public interface SettingService {
      * @return 保存结果
      */
     SettingSaveVO saveMailSetting(MailSettingSaveRequest request);
+
+    /**
+     * 测试当前生效 SMTP 配置的连接与认证，不发送邮件
+     *
+     * @return 测试结果
+     */
+    MailTestVO testMailConnection();
 }

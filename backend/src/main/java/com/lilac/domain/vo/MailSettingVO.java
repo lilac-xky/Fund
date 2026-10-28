@@ -51,9 +51,14 @@ public class MailSettingVO implements Serializable {
     private String note;
 
     /**
-     * 密钥文件路径，便于使用者知道去哪里改，本身不是密钥
+     * 当前配置是否可以进行连接测试
      */
-    private String secretsFile;
+    private Boolean testable;
+
+    /**
+     * 最近一次连接测试结果
+     */
+    private String testNote;
 
     private static final long serialVersionUID = 1L;
 }

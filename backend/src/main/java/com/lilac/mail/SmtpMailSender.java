@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
+import jakarta.mail.Transport;
 
 /**
  * SMTP 发送器，按当前密钥配置即时构建会话，配置改错后下一次发送立刻按新配置生效
@@ -49,6 +50,25 @@ public class SmtpMailSender {
             sender.send(message);
         } catch (MessagingException e) {
             throw new IllegalStateException("邮件组装失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 测试 SMTP 连接与认证，不发送邮件
+     *
+     * @param settings 当前生效的 SMTP 参数
+     */
+    public void testConnection(SmtpSettingsResolver.SmtpSettings settings) {
+        JavaMailSenderImpl sender = buildSender(settings);
+        try {
+            Transport transport = sender.getSession().getTransport("smtp");
+            try {
+                transport.connect(settings.getHost(), settings.getPort(), settings.getUsername(), settings.getPassword());
+            } finally {
+                transport.close();
+            }
+        } catch (MessagingException e) {
+            throw new IllegalStateException("SMTP 连接或认证失败", e);
         }
     }
 

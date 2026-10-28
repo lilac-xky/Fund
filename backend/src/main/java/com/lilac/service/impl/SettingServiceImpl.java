@@ -7,16 +7,16 @@ import com.lilac.domain.dto.setting.SettingBatchSaveRequest;
 import com.lilac.domain.dto.setting.SettingFieldError;
 import com.lilac.domain.dto.setting.SettingGroupSaveRequest;
 import com.lilac.domain.vo.MailSettingVO;
+import com.lilac.domain.vo.MailTestVO;
 import com.lilac.domain.vo.SettingGroupVO;
 import com.lilac.domain.vo.SettingItemVO;
 import com.lilac.domain.vo.SettingOverviewVO;
 import com.lilac.domain.vo.SettingSaveVO;
 import com.lilac.domain.vo.StrategyParamVO;
 import com.lilac.enums.ParamGroup;
-import com.lilac.mail.CloseReminderMailService;
 import com.lilac.mail.MailProperties;
-import com.lilac.mail.SecretsLoader;
 import com.lilac.mail.SecretsWriter;
+import com.lilac.mail.SmtpMailSender;
 import com.lilac.mail.SmtpSettingsResolver;
 import com.lilac.service.SettingService;
 import com.lilac.service.StrategyParamService;
@@ -61,16 +61,13 @@ public class SettingServiceImpl implements SettingService {
     private MailProperties mailProperties;
 
     @Resource
-    private SecretsLoader secretsLoader;
-
-    @Resource
     private SecretsWriter secretsWriter;
 
     @Resource
     private SmtpSettingsResolver smtpSettingsResolver;
 
     @Resource
-    private CloseReminderMailService closeReminderMailService;
+    private SmtpMailSender smtpMailSender;
 
     /**
      * 读取全部参数分组，库里没有的字段回落到内置默认值并标注未自定义
@@ -186,21 +183,50 @@ public class SettingServiceImpl implements SettingService {
      */
     @Override
     public MailSettingVO mailSetting() {
-        SecretsLoader.Secrets secrets = secretsLoader.loadAll(mailProperties.getSecretsFile());
         MailSettingVO vo = new MailSettingVO();
-        vo.setRecipients(firstNotBlank(secrets.get(SmtpSettingsResolver.RECIPIENTS_KEY),
-                join(mailProperties.getRecipients())));
-        vo.setHost(firstNotBlank(secrets.get(SmtpSettingsResolver.HOST_KEY), mailProperties.getHost()));
-        vo.setPort(firstNotBlank(secrets.get(SmtpSettingsResolver.PORT_KEY),
-                String.valueOf(mailProperties.getPort())));
-        vo.setUsername(firstNotBlank(secrets.get(SmtpSettingsResolver.USERNAME_KEY),
-                mailProperties.getUsername()));
-        vo.setFrom(firstNotBlank(secrets.get(SmtpSettingsResolver.FROM_KEY), mailProperties.getFrom()));
-        vo.setPasswordConfigured(smtpSettingsResolver.passwordConfigured());
-        vo.setReady(closeReminderMailService.ready());
-        vo.setNote(closeReminderMailService.statusNote());
-        vo.setSecretsFile(mailProperties.getSecretsFile());
+        SmtpSettingsResolver.SmtpSettings settings = smtpSettingsResolver.resolve();
+        vo.setRecipients(settings.getRecipients() == null ? null : String.join(",", settings.getRecipients()));
+        vo.setHost(settings.getHost());
+        vo.setPort(String.valueOf(settings.getPort()));
+        vo.setUsername(settings.getUsername());
+        vo.setFrom(settings.getFrom());
+        vo.setPasswordConfigured(settings.getPassword() != null && !settings.getPassword().isBlank());
+        vo.setReady(mailProperties.isEnabled() && settings.complete());
+        vo.setTestable(settings.complete());
+        vo.setNote(!mailProperties.isEnabled() ? "邮件开关已关闭"
+                : settings.complete() ? "当前配置完整，可以测试连接" : String.join("；", settings.getMissing()));
         return vo;
+    }
+
+    /**
+     * 测试当前生效 SMTP 配置的连接与认证，不发送邮件
+     *
+     * @return 测试结果
+     */
+    @Override
+    public MailTestVO testMailConnection() {
+        MailTestVO result = new MailTestVO();
+        SmtpSettingsResolver.SmtpSettings settings = smtpSettingsResolver.resolve();
+        if (!mailProperties.isEnabled()) {
+            result.setOk(Boolean.FALSE);
+            result.setMessage("邮件开关已关闭");
+            return result;
+        }
+        if (!settings.complete()) {
+            result.setOk(Boolean.FALSE);
+            result.setMessage(String.join("；", settings.getMissing()));
+            return result;
+        }
+        try {
+            smtpMailSender.testConnection(settings);
+            result.setOk(Boolean.TRUE);
+            result.setMessage("SMTP 连接与认证成功");
+        } catch (RuntimeException e) {
+            result.setOk(Boolean.FALSE);
+            result.setMessage("SMTP 连接失败，请检查服务器、端口、账号或授权码");
+            log.warn("SMTP 连接测试失败：{}", e.getClass().getSimpleName());
+        }
+        return result;
     }
 
     /**
@@ -321,8 +347,11 @@ public class SettingServiceImpl implements SettingService {
      */
     private com.lilac.domain.vo.MailStatusVO mailStatus() {
         com.lilac.domain.vo.MailStatusVO status = new com.lilac.domain.vo.MailStatusVO();
-        status.setReady(closeReminderMailService.ready());
-        status.setNote(closeReminderMailService.statusNote());
+        SmtpSettingsResolver.SmtpSettings settings = smtpSettingsResolver.resolve();
+        status.setReady(mailProperties.isEnabled() && settings.complete());
+        status.setTestable(settings.complete());
+        status.setNote(!mailProperties.isEnabled() ? "邮件开关已关闭"
+                : settings.complete() ? "当前配置完整，可以测试连接" : String.join("；", settings.getMissing()));
         return status;
     }
 

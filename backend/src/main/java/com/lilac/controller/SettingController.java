@@ -4,6 +4,7 @@ import com.lilac.domain.dto.setting.MailSettingSaveRequest;
 import com.lilac.domain.dto.setting.SettingBatchSaveRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.MailSettingVO;
+import com.lilac.domain.vo.MailTestVO;
 import com.lilac.domain.vo.SettingOverviewVO;
 import com.lilac.domain.vo.SettingSaveVO;
 import com.lilac.service.SettingService;
@@ -58,7 +59,15 @@ public class SettingController {
     }
 
     /**
-     * 保存邮件设置，授权码写入密钥文件且永不回显
+     * 测试当前邮件配置的 SMTP 连接与认证，不发送邮件
+     */
+    @PostMapping("/mail/test")
+    public Result<MailTestVO> testMailConnection() {
+        return Result.success(settingService.testMailConnection());
+    }
+
+    /**
+     * 保存邮件设置，网页输入覆盖密钥文件中同名配置且授权码永不回显
      */
     @PostMapping("/mail/save")
     public Result<SettingSaveVO> saveMailSetting(@RequestBody MailSettingSaveRequest request) {
