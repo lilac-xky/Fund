@@ -66,9 +66,30 @@ public class GoldBetaEstimator {
         model.setSamples(used.size());
         model.setRho(autocorrelation(residuals));
         model.setLastResidual(scale(residuals[residuals.length - 1]));
+        model.setResidualP90(percentile90(residuals));
         model.setFallback(false);
-        log.info("黄金 β 估计完成 样本={} β={} ρ={}", used.size(), model.getBeta(), model.getRho());
+        log.info("黄金 β 估计完成 样本={} β={} ρ={} 残差P90={}", used.size(), model.getBeta(), model.getRho(),
+                model.getResidualP90());
         return model;
+    }
+
+    /**
+     * 取残差绝对值的 P90，样本不足时退化为最大值
+     *
+     * @param residuals 残差序列
+     * @return P90，百分点
+     */
+    private BigDecimal percentile90(double[] residuals) {
+        if (residuals.length == 0) {
+            return null;
+        }
+        double[] sorted = new double[residuals.length];
+        for (int i = 0; i < residuals.length; i++) {
+            sorted[i] = Math.abs(residuals[i]);
+        }
+        java.util.Arrays.sort(sorted);
+        int index = (int) Math.ceil(0.9 * sorted.length) - 1;
+        return scale(sorted[Math.max(0, Math.min(index, sorted.length - 1))]);
     }
 
     /**

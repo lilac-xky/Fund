@@ -48,6 +48,7 @@ public class EstimateConverter {
         vo.setProxySymbol(outcome.getProxySymbol());
         vo.setBeta(outcome.getBeta());
         vo.setRho(outcome.getRho());
+        vo.setResidualP90(outcome.getResidualP90());
         vo.setDegraded(outcome.getDegraded());
         vo.setEstimable(outcome.estimable());
         vo.setUnavailableReason(outcome.getUnavailableReason());

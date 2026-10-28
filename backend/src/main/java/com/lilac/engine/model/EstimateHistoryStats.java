@@ -21,9 +21,19 @@ public class EstimateHistoryStats {
     private BigDecimal mae;
 
     /**
+     * 绝对误差的中位数，百分点；单日大误差拉不动它，档位判定以它为准
+     */
+    private BigDecimal medianAbsError;
+
+    /**
      * 方向准确率，0~1；无有效样本时为 null
      */
     private BigDecimal directionAccuracy;
+
+    /**
+     * 区间覆盖率，实际值落在所给区间内的比例，0~1；无区间样本时为 null
+     */
+    private BigDecimal intervalCoverage;
 
     /**
      * 误差标准差，百分点
@@ -57,12 +67,13 @@ public class EstimateHistoryStats {
     }
 
     /**
-     * 样本是否足够参与档位判定
+     * 样本是否足够参与档位判定，混合型没有点估计但方向与区间够也可判定
      *
      * @param minimum 最少样本数
      * @return 足够返回 true
      */
     public boolean enough(int minimum) {
-        return sampleCount >= minimum && mae != null;
+        return sampleCount >= minimum
+                && (medianAbsError != null || directionAccuracy != null || intervalCoverage != null);
     }
 }

@@ -184,6 +184,7 @@ public class EstimateEngine {
         outcome.setRealtime(quote.getRealtime());
         outcome.setBeta(model.getBeta());
         outcome.setRho(model.getRho());
+        outcome.setResidualP90(model.getResidualP90());
         outcome.setCoverage(HUNDRED);
         fillSnapshotDates(context, outcome);
         fillAllocationDate(context, outcome);

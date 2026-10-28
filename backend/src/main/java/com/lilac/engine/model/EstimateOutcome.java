@@ -124,6 +124,11 @@ public class EstimateOutcome {
     private BigDecimal rho;
 
     /**
+     * 黄金残差 P90，百分点；供 β+AR(1) 估计的交叉校验与校准留存
+     */
+    private BigDecimal residualP90;
+
+    /**
      * 是否走降级缓存
      */
     private Boolean degraded;

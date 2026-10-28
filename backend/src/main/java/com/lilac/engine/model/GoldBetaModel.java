@@ -36,6 +36,11 @@ public class GoldBetaModel {
     private BigDecimal lastResidual;
 
     /**
+     * 窗口内残差绝对值的 P90，百分点；供 β+AR(1) 估计的误差区间交叉校验
+     */
+    private BigDecimal residualP90;
+
+    /**
      * 是否因样本不足退化为直取代理
      */
     private boolean fallback;

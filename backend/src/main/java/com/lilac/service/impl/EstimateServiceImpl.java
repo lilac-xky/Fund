@@ -35,6 +35,7 @@ import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.exception.BusinessException;
 import com.lilac.service.EstimateErrorService;
 import com.lilac.service.EstimateService;
+import com.lilac.service.EstimateSnapshotService;
 import com.lilac.service.FundCatalogService;
 import com.lilac.service.FundNetWorthService;
 import com.lilac.service.FundSnapshotService;
@@ -104,6 +105,9 @@ public class EstimateServiceImpl implements EstimateService {
     private EstimateErrorService estimateErrorService;
 
     @Resource
+    private EstimateSnapshotService estimateSnapshotService;
+
+    @Resource
     private MarketQuoteAdapter marketQuoteAdapter;
 
     /**
@@ -127,8 +131,32 @@ public class EstimateServiceImpl implements EstimateService {
         ThrowUtils.throwIf(varietyKeys.isEmpty(), HttpsCodeEnum.NOT_FOUND_ERROR,
                 "尚未录入持仓，请先录入品种与持仓");
         EstimateBatchVO result = estimateInChunks(varietyKeys, today);
+        // 白天真正输出的结果必须留档，否则晚间校准拿不到「当时说的是什么」
+        retainSnapshots(result, result.getDataDate() == null ? today : result.getDataDate());
         estimateCache.save(result, result.getDataDate() == null ? today : result.getDataDate());
         return result;
+    }
+
+    /**
+     * 把本次输出的逐只结论留存，供晚间校准逐只对照
+     *
+     * @param result    预估总览
+     * @param tradeDate 预估所属交易日
+     */
+    private void retainSnapshots(EstimateBatchVO result, LocalDate tradeDate) {
+        List<EstimateVO> items = new ArrayList<>();
+        if (result.getItems() != null) {
+            items.addAll(result.getItems());
+        }
+        if (result.getUnavailableItems() != null) {
+            items.addAll(result.getUnavailableItems());
+        }
+        try {
+            estimateSnapshotService.saveBatch(items, tradeDate);
+        } catch (RuntimeException e) {
+            // 留存失败只是让晚间校准缺一条记录，不能让预估本身失败
+            log.warn("当日预估留存失败 日期={}：{}", tradeDate, e.getMessage());
+        }
     }
 
     /**
