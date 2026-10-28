@@ -4,6 +4,119 @@ declare namespace API {
     id?: number;
   };
 
+  type EstimateBatchRequest = {
+    /** 品种业务主键列表，为空时按全部 HOLDING 状态的持仓预估 */
+    varietyKeys?: string[];
+    /** 是否跳过缓存强制重算 */
+    refresh?: boolean;
+  };
+
+  type EstimateBatchVO = {
+    /** 可预估的基金，按预估涨跌幅降序 */
+    items?: EstimateVO[];
+    /** 不可预估的基金，逐只带出原因 */
+    unavailableItems?: EstimateVO[];
+    /** 本次预估的基金数 */
+    requested?: number;
+    /** 可预估的基金数 */
+    estimableCount?: number;
+    /** 不可预估的基金数 */
+    unavailableCount?: number;
+    /** 整体预估涨跌幅，按持仓等权平均，百分点；只统计可预估且为 A 档的基金 */
+    overallChange?: number;
+    /** 参与整体统计的基金数 */
+    overallCount?: number;
+    /** 行情数据日期 */
+    dataDate?: string;
+    /** 是否处于交易时段 */
+    tradingHours?: boolean;
+    /** 是否有基金走了降级缓存 */
+    degraded?: boolean;
+    /** 混合型基金数，页面据此提示「仅方向参考」 */
+    mixedCount?: number;
+    /** 整体涨跌的口径说明，只统计 A 档时给出提示 */
+    overallNote?: string;
+    /** 操作提示，如超上限已分批 */
+    notice?: string;
+  };
+
+  type EstimateVO = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 6 位代码 */
+    varietyCode?: string;
+    /** 标的名称 */
+    varietyName?: string;
+    /** 基金类型 */
+    category?:
+      | "STOCK"
+      | "MIXED"
+      | "BOND"
+      | "GOLD"
+      | "DIVIDEND"
+      | "ETF"
+      | "UNKNOWN";
+    /** 基金类型中文名 */
+    categoryLabel?: string;
+    /** 本次走的分支 */
+    branch?:
+      | "INDEX_ONLY"
+      | "STOCK_WEIGHTED"
+      | "GOLD_PROXY"
+      | "BOND_PROXY"
+      | "UNAVAILABLE";
+    /** 分支中文名 */
+    branchLabel?: string;
+    /** 输出档位 */
+    tier?: "A" | "B" | "C";
+    /** 档位中文名 */
+    tierLabel?: string;
+    /** 可信度 */
+    confidence?: "HIGH" | "MEDIUM" | "LOW";
+    /** 可信度中文名 */
+    confidenceLabel?: string;
+    /** 预估涨跌幅，百分点；仅 A 档有值，B 档与 C 档为 null */
+    estimatedChange?: number;
+    /** 涨跌方向，B 档与部分 C 档使用 */
+    direction?: "UP" | "DOWN" | "FLAT";
+    /** 方向中文名 */
+    directionLabel?: string;
+    /** 区间下限，百分点，仅 B 档 */
+    intervalLow?: number;
+    /** 区间上限，百分点，仅 B 档 */
+    intervalHigh?: number;
+    /** 参与加权的覆盖率，百分点 */
+    coverage?: number;
+    /** 持仓报告期 */
+    holdingPeriod?: string;
+    /** 持仓截止日 */
+    holdingCutoffDate?: string;
+    /** 持仓披露日 */
+    holdingDisclosureDate?: string;
+    /** 净值数据日期 */
+    netWorthDate?: string;
+    /** 行情数据日期 */
+    quoteDate?: string;
+    /** 行情是否来自交易时段内 */
+    realtime?: boolean;
+    /** 代理标的完整代码 */
+    proxySymbol?: string;
+    /** 黄金 β */
+    beta?: number;
+    /** 黄金 AR(1) 系数 */
+    rho?: number;
+    /** 是否来自降级缓存 */
+    degraded?: boolean;
+    /** 是否可预估 */
+    estimable?: boolean;
+    /** 不可预估原因，可预估时为 null */
+    unavailableReason?: string;
+    /** 不可预估细节，如停牌标的名单 */
+    unavailableDetail?: string;
+    /** 同屏说明文字，每条一句 */
+    remarks?: string[];
+  };
+
   type ForexRateVO = {
     /** 汇率对，如 HKDCNY */
     pair?: string;
@@ -126,6 +239,8 @@ declare namespace API {
     holdingCutoffDate?: string;
     /** 持仓披露日 */
     holdingDisclosureDate?: string;
+    /** 季末仓位报告期截止日，无股票持仓时用它表示数据的报告期 */
+    allocationReportDate?: string;
     /** 报告期，如 2026Q2 */
     holdingPeriod?: string;
     /** 重仓股列表，按权重降序 */
@@ -346,6 +461,18 @@ declare namespace API {
     data?: boolean;
   };
 
+  type ResultEstimateBatchVO = {
+    code?: number;
+    msg?: string;
+    data?: EstimateBatchVO;
+  };
+
+  type ResultEstimateVO = {
+    code?: number;
+    msg?: string;
+    data?: EstimateVO;
+  };
+
   type ResultForexRateVO = {
     code?: number;
     msg?: string;
@@ -434,6 +561,10 @@ declare namespace API {
 
   type singleParams = {
     code: string;
+  };
+
+  type singleParams = {
+    varietyKey: string;
   };
 
   type snapshotParams = {
