@@ -14,6 +14,7 @@ import * as indexDividendController from "./indexDividendController";
 import * as dividendAdviceController from "./dividendAdviceController";
 import * as mailController from "./mailController";
 import * as taskController from "./taskController";
+import * as settingController from "./settingController";
 export default {
   fundController,
   holdingController,
@@ -27,4 +28,5 @@ export default {
   dividendAdviceController,
   mailController,
   taskController,
+  settingController,
 };

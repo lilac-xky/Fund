@@ -807,11 +807,53 @@ declare namespace API {
     text?: string;
   };
 
+  type MailSettingSaveRequest = {
+    /** 收件地址，多个用逗号分隔 */
+    recipients?: string;
+    /** SMTP 主机 */
+    host?: string;
+    /** SMTP 端口，465 走 SSL、587 走 STARTTLS */
+    port?: string;
+    /** SMTP 账号 */
+    username?: string;
+    /** 发件地址，留空时取账号 */
+    from?: string;
+    /** 授权码，留空表示不改；写入后任何接口都不回显 */
+    password?: string;
+    /** 是否清除已保存的授权码，为 true 时忽略 password */
+    clearPassword?: boolean;
+  };
+
+  type MailSettingVO = {
+    /** 收件地址，多个用逗号分隔 */
+    recipients?: string;
+    /** SMTP 主机 */
+    host?: string;
+    /** SMTP 端口 */
+    port?: string;
+    /** SMTP 账号 */
+    username?: string;
+    /** 发件地址 */
+    from?: string;
+    /** 授权码是否已配置，只回布尔值 */
+    passwordConfigured?: boolean;
+    /** 通道是否具备发送条件 */
+    ready?: boolean;
+    /** 状态说明，未就绪时逐项列出缺什么 */
+    note?: string;
+    /** 密钥文件路径，便于使用者知道去哪里改，本身不是密钥 */
+    secretsFile?: string;
+  };
+
   type MailStatusVO = {
     /** 是否具备发送条件 */
     ready?: boolean;
     /** 状态说明，未就绪时逐项列出缺什么 */
     note?: string;
+  };
+
+  type MapString = {
+    key?: string;
   };
 
   type MarketBarVO = {
@@ -941,6 +983,10 @@ declare namespace API {
 
   type resendParams = {
     tradeDate?: string;
+  };
+
+  type resetParams = {
+    group: string;
   };
 
   type ResultBoolean = {
@@ -1107,6 +1153,12 @@ declare namespace API {
     data?: MailPreviewVO;
   };
 
+  type ResultMailSettingVO = {
+    code?: number;
+    msg?: string;
+    data?: MailSettingVO;
+  };
+
   type ResultMailStatusVO = {
     code?: number;
     msg?: string;
@@ -1129,6 +1181,18 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: QuoteBatchVO;
+  };
+
+  type ResultSettingOverviewVO = {
+    code?: number;
+    msg?: string;
+    data?: SettingOverviewVO;
+  };
+
+  type ResultSettingSaveVO = {
+    code?: number;
+    msg?: string;
+    data?: SettingSaveVO;
   };
 
   type ResultStrategyParamVO = {
@@ -1186,6 +1250,84 @@ declare namespace API {
     createTime?: string;
     /** 更新时间 */
     updateTime?: string;
+  };
+
+  type SettingBatchSaveRequest = {
+    /** 待保存的分组列表 */
+    groups?: SettingGroupSaveRequest[];
+  };
+
+  type SettingFieldError = {
+    /** 分组，与 ParamGroup 同名 */
+    group?: string;
+    /** 字段名，与参数键同名 */
+    field?: string;
+    /** 字段中文名，用于拼提示语 */
+    label?: string;
+    /** 错误原因，直接展示给使用者 */
+    message?: string;
+  };
+
+  type SettingGroupSaveRequest = {
+    /** 分组，与 ParamGroup 同名 */
+    group?: string;
+    /** 参数键到参数值的映射，未出现的键保持原值不动 */
+    values?: MapString;
+  };
+
+  type SettingGroupVO = {
+    /** 分组，与 ParamGroup 同名 */
+    group?: string;
+    /** 分组中文名 */
+    label?: string;
+    /** 分组说明，一句话 */
+    description?: string;
+    /** 分组内的字段 */
+    items?: SettingItemVO[];
+  };
+
+  type SettingItemVO = {
+    /** 分组，与 ParamGroup 同名 */
+    group?: string;
+    /** 参数键 */
+    key?: string;
+    /** 字段中文名 */
+    label?: string;
+    /** 字段说明，一句话 */
+    description?: string;
+    /** 当前值，库里没有时取默认值，都没有则为 null */
+    value?: string;
+    /** 内置默认值，用于「恢复默认」与提示 */
+    defaultValue?: string;
+    /** 单位，如 元 / % / 日 */
+    unit?: string;
+    /** 控件类型，TEXT / DECIMAL / INTEGER / BOOLEAN */
+    type?: string;
+    /** 当前值是否来自库，false 表示仍在用默认值 */
+    customized?: boolean;
+  };
+
+  type SettingOverviewVO = {
+    /** 参数分组，按固定顺序排列 */
+    groups?: SettingGroupVO[];
+    mailStatus?: MailStatusVO;
+    /** 生效说明，告诉使用者改完何时能用上 */
+    effectiveNote?: string;
+    /** 当前是否存在校验问题，存在时页面可直接提示 */
+    hasIssues?: boolean;
+  };
+
+  type SettingSaveVO = {
+    /** 是否保存成功 */
+    ok?: boolean;
+    /** 成功时写入的参数条数 */
+    savedCount?: number;
+    /** 失败时的字段级错误，页面据此逐项标红 */
+    errors?: SettingFieldError[];
+    /** 汇总说明，成功与失败都有一句，便于底部保存条展示 */
+    message?: string;
+    /** 本次保存后新生效的时间点说明，如「下一个时点 20:00 生效」 */
+    effectiveNote?: string;
   };
 
   type singleParams = {
