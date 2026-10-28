@@ -1,0 +1,15 @@
+# 基策罗盘前端格式化配置
+# 与 frontend/.prettierrc.json 保持一致；VS Code 的 Prettier 插件会优先读取本文件
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+trim_trailing_whitespace = false
