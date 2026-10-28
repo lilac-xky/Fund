@@ -24,6 +24,7 @@ import com.lilac.exception.BusinessException;
 import com.lilac.mapper.VarietyMapper;
 import com.lilac.service.FundCatalogService;
 import com.lilac.service.FundDisambiguateService;
+import com.lilac.service.HoldingService;
 import com.lilac.utils.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
@@ -65,6 +66,9 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
 
     @Resource
     private VarietyMapper varietyMapper;
+
+    @Resource
+    private HoldingService holdingService;
 
     /**
      * 按 6 位代码返回候选列表与身份回显
@@ -123,6 +127,8 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         result.setRelatedShareClasses(findRelatedShareClasses(code, catalog));
         result.setNeedConfirm(candidates.stream().anyMatch(candidate -> Boolean.TRUE.equals(candidate.getRecordable())
                 && Boolean.FALSE.equals(candidate.getConfirmed())));
+        fillRegistered(candidates);
+        fillRegistered(result.getRelatedShareClasses());
         log.info("消歧完成 code={} 候选 {} 个 降级 {} 号段 {} 同码股票 {}",
                 code, candidates.size(), degraded, segmentHint(code), result.getStockHint());
         return result;
@@ -457,5 +463,25 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
             case ETF -> "场内 ETF";
             case IDX -> "指数";
         };
+    }
+
+    /**
+     * 回填候选的注册状态与持有概况，已确认过的代码不再重复询问
+     *
+     * @param candidates 候选列表
+     */
+    private void fillRegistered(List<FundCandidateVO> candidates) {
+        if (candidates == null) {
+            return;
+        }
+        for (FundCandidateVO candidate : candidates) {
+            if (!Boolean.TRUE.equals(candidate.getRecordable()) || candidate.getVarietyKey() == null) {
+                continue;
+            }
+            Variety variety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                    .eq(Variety::getVarietyKey, candidate.getVarietyKey()));
+            candidate.setRegistered(variety != null);
+            candidate.setHoldingSummary(variety == null ? null : holdingService.summaryOf(candidate.getVarietyKey()));
+        }
     }
 }

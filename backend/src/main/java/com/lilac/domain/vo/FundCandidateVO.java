@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
+
 /**
  * 消歧候选项，一个代码在一种品种类型下的身份
  */
@@ -66,6 +67,16 @@ public class FundCandidateVO implements Serializable {
      * 身份提示，说明判定依据或需要注意的地方
      */
     private String note;
+
+    /**
+     * 是否已写入品种注册表，已确认过的代码不再重复询问
+     */
+    private Boolean registered;
+
+    /**
+     * 该品种当前的持有状态，未注册时为 null
+     */
+    private HoldingSummaryVO holdingSummary;
 
     private static final long serialVersionUID = 1L;
 }

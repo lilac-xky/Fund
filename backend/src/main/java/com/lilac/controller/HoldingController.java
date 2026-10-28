@@ -2,11 +2,15 @@ package com.lilac.controller;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.lilac.common.DeleteRequest;
-import com.lilac.domain.dto.holding.HoldingAddRequest;
+import com.lilac.domain.dto.holding.HoldingBuyRequest;
+import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
-import com.lilac.domain.dto.holding.HoldingUpdateRequest;
+import com.lilac.domain.dto.holding.HoldingSellRequest;
 import com.lilac.domain.entity.Holding;
 import com.lilac.domain.result.Result;
+import com.lilac.domain.vo.HoldingChangeVO;
+import com.lilac.domain.vo.HoldingOverviewVO;
+import com.lilac.domain.vo.HoldingSummaryVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.mapper.HoldingMapper;
@@ -17,12 +21,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * 持仓接口
+ * 持仓接口，覆盖买入、卖出、总览、明细与变动历史
  */
 @RestController
 @RequestMapping("/holding")
@@ -43,6 +48,47 @@ public class HoldingController {
     }
 
     /**
+     * 持仓总览，按品种聚合并带出名称与最新净值
+     */
+    @GetMapping("/overview")
+    public Result<HoldingOverviewVO> overview() {
+        return Result.success(holdingService.overview());
+    }
+
+    /**
+     * 按品种汇总持有中份额与加权成本，供消歧候选回显
+     */
+    @GetMapping("/summary")
+    public Result<HoldingSummaryVO> summary(@RequestParam("varietyKey") String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
+        return Result.success(holdingService.summaryOf(varietyKey.trim()));
+    }
+
+    /**
+     * 买入入库，校验失败拒绝并指出原因
+     */
+    @PostMapping("/buy")
+    public Result<HoldingVO> buy(@RequestBody HoldingBuyRequest request) {
+        return Result.success(holdingService.buy(request));
+    }
+
+    /**
+     * 卖出扣减，按先进先出扣已有持仓
+     */
+    @PostMapping("/sell")
+    public Result<List<HoldingVO>> sell(@RequestBody HoldingSellRequest request) {
+        return Result.success(holdingService.sell(request));
+    }
+
+    /**
+     * 查询持仓变动历史，按时间倒序
+     */
+    @PostMapping("/changes")
+    public Result<List<HoldingChangeVO>> changes(@RequestBody(required = false) HoldingChangeQueryRequest request) {
+        return Result.success(holdingService.listChanges(request));
+    }
+
+    /**
      * 按主键查询单个持仓
      */
     @GetMapping("/get")
@@ -51,28 +97,6 @@ public class HoldingController {
         Holding holding = holdingMapper.selectOneById(id);
         ThrowUtils.throwIf(holding == null, HttpsCodeEnum.NOT_FOUND_ERROR);
         return Result.success(BeanUtil.copyProperties(holding, HoldingVO.class));
-    }
-
-    /**
-     * 新增持仓
-     */
-    @PostMapping("/add")
-    public Result<Boolean> add(@RequestBody HoldingAddRequest request) {
-        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR);
-        ThrowUtils.throwIf(request.getVarietyKey() == null || request.getVarietyKey().isBlank(),
-                HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
-        Holding holding = BeanUtil.copyProperties(request, Holding.class);
-        return Result.success(holdingMapper.insertSelective(holding) > 0);
-    }
-
-    /**
-     * 按主键更新持仓
-     */
-    @PostMapping("/update")
-    public Result<Boolean> update(@RequestBody HoldingUpdateRequest request) {
-        ThrowUtils.throwIf(request == null || request.getId() == null, HttpsCodeEnum.PARAMS_ERROR);
-        Holding holding = BeanUtil.copyProperties(request, Holding.class);
-        return Result.success(holdingMapper.update(holding) > 0);
     }
 
     /**

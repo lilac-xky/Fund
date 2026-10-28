@@ -35,6 +35,22 @@ CREATE TABLE IF NOT EXISTS holding (
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='持仓记录，一条记录对应一个品种的一次建仓';
 
+CREATE TABLE IF NOT EXISTS holding_change (
+    id          BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    varietyKey  VARCHAR(32)    NOT NULL COMMENT '所持品种的业务主键',
+    changeType  VARCHAR(16)    NOT NULL COMMENT '变动类型 BUY 买入 / SELL 卖出',
+    shares      DECIMAL(20, 4) NOT NULL COMMENT '本次变动份额，以正数记录',
+    unitPrice   DECIMAL(20, 4)          DEFAULT NULL COMMENT '成交单价，买入取成本价，卖出取被扣份额的加权成本',
+    afterShares DECIMAL(20, 4)          DEFAULT NULL COMMENT '变动后该品种合计份额',
+    note        VARCHAR(255)            DEFAULT NULL COMMENT '备注，买入带身份回显，卖出带扣减说明',
+    createTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    KEY idxChangeVarietyKey (varietyKey),
+    KEY idxChangeCreateTime (createTime)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='持仓变动历史，买入与卖出逐笔留存，不做覆盖与删除';
+
 CREATE TABLE IF NOT EXISTS strategy_param (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
     paramGroup  VARCHAR(16)  NOT NULL COMMENT '参数分组 DIVIDEND / GRID / INDICATOR / ALERT',
