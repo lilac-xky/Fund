@@ -1,8 +1,28 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="zh-CN">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>fund</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>基策罗盘</title>
+    <meta name="description" content="持仓基金当日预估涨跌、策略建议与晚间校准" />
+    <script>
+      // 首屏前定主题，避免浅色闪一下再变深色
+      try {
+        var savedTheme = localStorage.getItem('fund-theme')
+        if (savedTheme === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+        }
+        var savedRail = localStorage.getItem('fund-rail')
+        if (savedRail === 'collapsed') {
+          document.documentElement.dataset.rail = 'collapsed'
+        }
+      } catch (e) {
+        // localStorage 不可用时按默认浅色渲染
+      }
+    </script>
   </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

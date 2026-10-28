@@ -1,0 +1,130 @@
+/**
+ * 统一请求封装：兼容生成层的 umi 风格（data / params），统一解析 Result，失败抛出带环节与时间的错误
+ */
+import { ElMessage } from './ui/message'
+
+/** 应用上下文路径，与后端 server.servlet.context-path 保持一致 */
+const CONTEXT_PATH = '/api'
+
+/** 请求超时，毫秒；外部数据源偶发卡住时不能把页面拖死 */
+const TIMEOUT_MS = 20000
+
+/** 后端统一返回体 */
+export interface ApiResult<T> {
+  code?: number
+  msg?: string
+  data?: T
+}
+
+/** 兼容生成层的请求配置：data 作为请求体，params 作为查询串 */
+export interface RequestOptions extends Omit<RequestInit, 'body'> {
+  /** 请求体，对象会被序列化为 JSON */
+  data?: unknown
+  /** 查询参数，值为空时自动跳过 */
+  params?: Record<string, unknown>
+}
+
+/** 请求错误，带上出错环节与发生时间，页面据此显示「哪里出错、什么时候」 */
+export class RequestError extends Error {
+  /** 出错环节，如「保存参数」 */
+  readonly stage: string
+  /** 发生时间，本地时间字符串 */
+  readonly happenedAt: string
+  /** 后端返回的业务码 */
+  readonly code?: number
+
+  constructor(message: string, stage: string, code?: number) {
+    super(message)
+    this.name = 'RequestError'
+    this.stage = stage
+    this.happenedAt = formatNow()
+    this.code = code
+  }
+}
+
+/** 当前时间，格式化为 HH:mm:ss 便于在页面展示 */
+function formatNow(): string {
+  const now = new Date()
+  return [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((value) => String(value).padStart(2, '0'))
+    .join(':')
+}
+
+/** 拼出完整请求地址，已带 /api 前缀的不重复拼接 */
+function resolveUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    return url
+  }
+  const path = url.startsWith('/') ? url : `/${url}`
+  return path.startsWith(CONTEXT_PATH) ? path : `${CONTEXT_PATH}${path}`
+}
+
+/** 从返回体中取出可读的错误文案 */
+function messageOf(result: ApiResult<unknown>, stage: string): string {
+  if (result?.msg && result.msg.trim().length > 0) {
+    return result.msg
+  }
+  return `${stage}失败（业务码 ${result?.code ?? '未知'}）`
+}
+
+/**
+ * 发起请求并校验 Result，成功返回整个返回体，失败抛出 RequestError
+ *
+ * @param url 接口地址，可省略 /api 前缀
+ * @param options 请求配置，data 作为请求体、params 作为查询串
+ * @param stage 出错时展示的环节名，如「保存参数」
+ */
+export default async function request<T>(
+  url: string,
+  options: RequestOptions = {},
+  stage = '请求',
+): Promise<T> {
+  const { data, params, ...rest } = options
+  const query = new URLSearchParams()
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        query.append(key, String(value))
+      }
+    })
+  }
+  const queryString = query.toString()
+  const target = resolveUrl(url) + (queryString ? `?${queryString}` : '')
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const response = await fetch(target, {
+      ...rest,
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        ...(data !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(rest.headers ?? {}),
+      },
+      body: data === undefined ? undefined : JSON.stringify(data),
+    })
+    if (!response.ok) {
+      throw new RequestError(`服务端返回 ${response.status}`, stage, response.status)
+    }
+    const result = (await response.json()) as T
+    // 业务码 200 为成功，其余一律按失败处理
+    const code = (result as unknown as ApiResult<unknown>)?.code
+    if (code !== 200) {
+      throw new RequestError(messageOf(result as unknown as ApiResult<unknown>, stage), stage, code)
+    }
+    return result
+  } catch (error) {
+    if (error instanceof RequestError) {
+      ElMessage.error(`${error.stage}失败：${error.message}（${error.happenedAt}）`)
+      throw error
+    }
+    const aborted = error instanceof DOMException && error.name === 'AbortError'
+    const fallback = aborted ? '请求超时' : '网络不可达'
+    const wrapped = new RequestError(fallback, stage)
+    ElMessage.error(`${stage}失败：${fallback}（${wrapped.happenedAt}）`)
+    throw wrapped
+  } finally {
+    clearTimeout(timer)
+  }
+}

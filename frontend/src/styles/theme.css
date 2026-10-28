@@ -1,0 +1,247 @@
+/**
+ * 主题 token：浅色「暖纸」与深色「暖墨」两套，全站颜色只从这里取
+ *
+ * 约定：组件里不写死色值，只用 var(--xxx)；
+ * 强调色（--acc）仅用于「当前项」与「主操作」两处，四处滥用等于没有强调。
+ */
+
+@import 'tailwindcss';
+
+/* 扫描范围：Tailwind 4 按需生成，必须显式声明源文件，src/api 是生成产物不需要扫 */
+@source '../**/*.{vue,ts}';
+@source not '../api/**/*';
+
+/* ── 浅色 · 暖纸 ───────────────────────────── */
+:root,
+[data-theme='light'] {
+  /* 表面：三层，canvas → surface → sunken */
+  --canvas: #f4f1ec;
+  --rail-bg: #f8f5f0;
+  --aside-bg: #f8f5f0;
+  --s1: #fcfaf7;
+  --s2: #f8f5f0;
+  --s3: #ede8e1;
+  --s4: #e6e0d8;
+
+  /* 描边：代替分割线，靠 1px 内描边分层 */
+  --hair: rgba(31, 27, 22, 0.085);
+  --hair-2: rgba(31, 27, 22, 0.135);
+  --hair-3: rgba(31, 27, 22, 0.2);
+
+  /* 文字：暖墨四阶 */
+  --t1: #1f1b16;
+  --t2: #4a423a;
+  --t3: #7b7065;
+  --t4: #a0968a;
+
+  /* 强调：陶土红 */
+  --acc: #b4502b;
+  --acc-hover: #9e4626;
+  --acc-2: #c05a33;
+  --acc-soft: #fbeee8;
+  --acc-line: #f0d5c9;
+  --acc-glow: rgba(180, 80, 43, 0.16);
+  --acc-on: #ffffff;
+
+  /* 数据：涨用暖红、跌用墨绿，不用刺眼的纯红纯绿 */
+  --up: #ae3f1c;
+  --dn: #3f7a55;
+  --dn-soft: rgba(63, 122, 85, 0.1);
+  --warn: #9a6b16;
+
+  /* 控件 */
+  --inp-bg: #ffffff;
+  --inp-shadow: inset 0 1px 2px rgba(61, 45, 28, 0.045);
+  --btn-bg: var(--s1);
+  --btn-hover-bg: #ffffff;
+  --sw-off: #d6cfc5;
+  --track-off: #e5dfd6;
+
+  /* 容器 */
+  --topbar-bg: rgba(247, 244, 239, 0.82);
+  --pulse-bg: #f7f4ef;
+  --savebar-bg: rgba(252, 250, 247, 0.92);
+  --group-bg: var(--s1);
+  --group-hi: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --group-sh: 0 1px 3px rgba(61, 45, 28, 0.06), 0 1px 2px rgba(61, 45, 28, 0.035);
+  --sh-sm: 0 1px 2px rgba(61, 45, 28, 0.055);
+
+  /* 氛围 */
+  --atmos-a: rgba(180, 80, 43, 0.09);
+  --atmos-b: rgba(63, 122, 85, 0.07);
+  --grain-op: 0.015;
+  --grain-blend: multiply;
+
+  /* 差异色，改动对照用 */
+  --diff-del: #8b3a2a;
+  --diff-add: #2f6444;
+
+  --kbd-fg: rgba(255, 255, 255, 0.72);
+  --kbd-line: rgba(255, 255, 255, 0.3);
+}
+
+/* ── 深色 · 暖墨 ───────────────────────────── */
+[data-theme='dark'] {
+  --canvas: #12100e;
+  --rail-bg: #161311;
+  --aside-bg: #161311;
+  --s1: #191614;
+  --s2: #211d1a;
+  --s3: #2a2521;
+  --s4: #332d28;
+
+  --hair: rgba(255, 246, 235, 0.075);
+  --hair-2: rgba(255, 246, 235, 0.115);
+  --hair-3: rgba(255, 246, 235, 0.18);
+
+  --t1: #f2ede6;
+  --t2: #bcb2a6;
+  --t3: #8b8074;
+  --t4: #645b51;
+
+  --acc: #d9764c;
+  --acc-hover: #c4653d;
+  --acc-2: #e89c74;
+  --acc-soft: rgba(217, 118, 76, 0.14);
+  --acc-line: rgba(217, 118, 76, 0.26);
+  --acc-glow: rgba(217, 118, 76, 0.2);
+  --acc-on: #251008;
+
+  --up: #f07167;
+  --dn: #66b68a;
+  --dn-soft: rgba(102, 182, 138, 0.13);
+  --warn: #ddaa5e;
+
+  --inp-bg: var(--s2);
+  --inp-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) inset;
+  --btn-bg: var(--s3);
+  --btn-hover-bg: var(--s4);
+  --sw-off: #7e7468;
+  --track-off: var(--s3);
+
+  --topbar-bg: rgba(18, 16, 14, 0.82);
+  --pulse-bg: #151210;
+  --savebar-bg: rgba(18, 16, 14, 0.88);
+  --group-bg: linear-gradient(180deg, var(--s1), color-mix(in oklab, var(--s1) 93%, #000));
+  --group-hi: inset 0 1px 0 rgba(255, 246, 235, 0.045);
+  --group-sh: 0 18px 40px -28px rgba(0, 0, 0, 0.9);
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  --atmos-a: rgba(217, 118, 76, 0.13);
+  --atmos-b: rgba(102, 182, 138, 0.065);
+  --grain-op: 0.026;
+  --grain-blend: overlay;
+
+  --diff-del: #e8a08c;
+  --diff-add: #8fd4ac;
+
+  --kbd-fg: rgba(37, 16, 8, 0.66);
+  --kbd-line: rgba(37, 16, 8, 0.26);
+}
+
+/* ── 布局尺寸 ─────────────────────────────── */
+:root {
+  --topbar: 56px;
+  --pulse: 62px;
+  --rail: 228px;
+  --rail-collapsed: 66px;
+  --aside: 312px;
+  --gutter: 26px;
+}
+
+[data-rail='collapsed'] {
+  --rail: var(--rail-collapsed);
+}
+
+/* ── 侧栏：移动端转抽屉 ─────────────────────── */
+/* 断点内的 transform 用普通 CSS 写，避免 Tailwind 变体对负值断点解析不稳 */
+@media (max-width: 860px) {
+  .app-rail {
+    top: var(--topbar);
+    width: 240px;
+    transform: translateX(-100%);
+  }
+
+  [data-rail='open'] .app-rail {
+    transform: translateX(0);
+    box-shadow: 16px 0 40px -20px rgb(0 0 0 / 50%);
+  }
+}
+
+/* ── 基础重置 ─────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* 固定布局下内容不会横向溢出，禁掉横向滚动避免出现长滚动条 */
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--t1);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI',
+    'Microsoft YaHei', sans-serif;
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: -0.004em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 侧栏与保存条都是 fixed，页面本身不需要横向滚动 */
+  overflow-x: hidden;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
+}
+
+::selection {
+  background: var(--acc-line);
+  color: var(--t1);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}
+
+/* 数字等宽，避免跳动 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.02em;
+}
+
+/* 滚动条跟随主题 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hair-2);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hair-3);
+  background-clip: content-box;
+}
