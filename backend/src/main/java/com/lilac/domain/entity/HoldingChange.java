@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * 持仓变动历史，买入与卖出逐笔留存
@@ -44,4 +45,9 @@ public class HoldingChange extends BaseEntity {
      * 备注，买入带身份回显，卖出带扣减说明
      */
     private String note;
+
+    /**
+     * 业务日期，买入为建仓日期，卖出为操作当日
+     */
+    private LocalDate openDate;
 }

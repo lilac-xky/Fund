@@ -38,14 +38,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * 持仓业务实现，买入校验、卖出先进先出与变动历史留痕
  */
@@ -62,12 +61,12 @@ public class HoldingServiceImpl implements HoldingService {
     /**
      * 按需拉取净值的节流时长，分钟
      */
-    private static final long SYNC_THROTTLE_MINUTES = 10;
+    private static final long SYNC_THROTTLE_MINUTES = 30;
 
     /**
-     * 本次进程内已尝试按需拉取的基金
+     * 净值公布的期望时刻，过了该时刻交易日当日净值应已可用
      */
-    private final Set<String> recentlySynced = ConcurrentHashMap.newKeySet();
+    private static final LocalTime NET_WORTH_EXPECTED_TIME = LocalTime.of(20, 0);
 
     /**
      * 按需拉取的节流表，基金代码到下次允许拉取的时间
@@ -151,6 +150,7 @@ public class HoldingServiceImpl implements HoldingService {
 
         BigDecimal after = totalShares(varietyKey);
         saveChange(varietyKey, HoldingChangeType.BUY, request.getShares(), request.getCostPrice(), after,
+                request.getOpenDate(),
                 "身份回显：" + variety.getVarietyName() + "（" + variety.getVarietyCode() + "）");
         log.info("买入入库 varietyKey={} shares={} cost={}", varietyKey, request.getShares(), request.getCostPrice());
         return BeanUtil.copyProperties(holding, HoldingVO.class);
@@ -210,6 +210,7 @@ public class HoldingServiceImpl implements HoldingService {
         BigDecimal avgPrice = weightedCost.divide(request.getShares(), PRICE_SCALE, RoundingMode.HALF_UP);
         BigDecimal after = totalShares(varietyKey);
         saveChange(varietyKey, HoldingChangeType.SELL, request.getShares(), avgPrice, after,
+                LocalDate.now(),
                 "按先进先出扣减 " + String.join("、", deductNotes));
         log.info("卖出扣减 varietyKey={} shares={} 均价={}", varietyKey, request.getShares(), avgPrice);
         // 只返回仍持有中的记录，已清仓的留在历史里
@@ -388,7 +389,7 @@ public class HoldingServiceImpl implements HoldingService {
     }
 
     /**
-     * 读库内近期净值；库内从无该基金净值时按需拉一次上游快照落库再读，带节流避免反复打上游
+     * 读库内近期净值；落后于应达日期时先按节流拉一次增量再读，避免长时间停机后市值停在旧日期
      *
      * @param fundCode 6 位基金代码
      * @return 净值序列，上游失败返回空列表
@@ -397,24 +398,66 @@ public class HoldingServiceImpl implements HoldingService {
         LocalDate start = LocalDate.now().minusDays(NET_WORTH_LOOKBACK_DAYS);
         List<com.lilac.adapter.model.FundNetWorthPoint> points =
                 fundNetWorthService.listRange(fundCode, start, null);
-        if (!points.isEmpty() || recentlySynced.contains(fundCode)) {
-            return points;
-        }
-        // 新录入品种本地尚无净值，拉一次全量；本进程内 10 分钟只拉一次，失败也不反复重试
-        if (recentlySynced.add(fundCode)) {
-            LocalDateTime next = LocalDateTime.now().plusMinutes(SYNC_THROTTLE_MINUTES);
-            syncThrottle.put(fundCode, next);
-            try {
-                fundSnapshotService.load(fundCode, LocalDate.now());
-                log.info("持仓总览按需拉取净值 code={}", fundCode);
-            } catch (Exception e) {
-                log.warn("持仓总览按需拉取净值失败 code={}：{}", fundCode, e.getMessage());
-            }
+        // 库内没有净值是首次拉取，落后于应达日期是停机漏更，两者都触发节流刷新
+        if (points.isEmpty() || isBehindSchedule(fundCode)) {
+            refreshThrottled(fundCode);
             return fundNetWorthService.listRange(fundCode, start, null);
         }
-        // 节流期内直接放弃，等下一次总览请求
-        syncThrottle.entrySet().removeIf(entry -> entry.getValue().isBefore(LocalDateTime.now()));
         return points;
+    }
+
+    /**
+     * 判断库内最新净值是否落后于应达日期，交易日 20 点后应达当日，其余时刻应达上一交易日
+     *
+     * @param fundCode 6 位基金代码
+     * @return 落后返回 true
+     */
+    private boolean isBehindSchedule(String fundCode) {
+        LocalDate latest = fundNetWorthService.latestDate(fundCode);
+        if (latest == null) {
+            return true;
+        }
+        return expectedNetWorthDate().isAfter(latest);
+    }
+
+    /**
+     * 计算当前时刻净值应达的日期，非交易日与未过公布时刻时回退到更早的交易日
+     *
+     * @return 应达日期
+     */
+    private LocalDate expectedNetWorthDate() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate date = now.toLocalDate();
+        // 净值一般晚于 20 点公布，之前只能期望上一交易日的数据
+        if (!now.toLocalTime().isAfter(NET_WORTH_EXPECTED_TIME)) {
+            date = date.minusDays(1);
+        }
+        // 周末与节假日没有净值，一路回退到最近的交易日
+        while (date.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
+                || date.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            date = date.minusDays(1);
+        }
+        return date;
+    }
+
+    /**
+     * 按节流刷新净值增量，同一基金 30 分钟最多拉一次，失败也不反复重试
+     *
+     * @param fundCode 6 位基金代码
+     */
+    private void refreshThrottled(String fundCode) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime next = syncThrottle.get(fundCode);
+        if (next != null && next.isAfter(now)) {
+            return;
+        }
+        syncThrottle.put(fundCode, now.plusMinutes(SYNC_THROTTLE_MINUTES));
+        int added = fundSnapshotService.refreshNetWorth(fundCode);
+        if (added >= 0) {
+            log.info("持仓总览刷新净值 code={} 新增 {} 条", fundCode, added);
+        }
+        // 清掉过期节流项，避免长期驻留
+        syncThrottle.entrySet().removeIf(entry -> entry.getValue().isBefore(now));
     }
 
     /**
@@ -443,16 +486,18 @@ public class HoldingServiceImpl implements HoldingService {
      * @param shares     变动份额
      * @param unitPrice  成交单价
      * @param after      变动后合计份额
+     * @param openDate   业务日期，买入为建仓日期，卖出为操作当日
      * @param note       备注
      */
     private void saveChange(String varietyKey, HoldingChangeType type, BigDecimal shares, BigDecimal unitPrice,
-                            BigDecimal after, String note) {
+                            BigDecimal after, LocalDate openDate, String note) {
         HoldingChange change = new HoldingChange();
         change.setVarietyKey(varietyKey);
         change.setChangeType(type);
         change.setShares(shares);
         change.setUnitPrice(unitPrice);
         change.setAfterShares(after);
+        change.setOpenDate(openDate);
         change.setNote(note);
         holdingChangeMapper.insertSelective(change);
     }

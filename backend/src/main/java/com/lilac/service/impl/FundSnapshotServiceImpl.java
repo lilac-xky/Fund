@@ -9,6 +9,7 @@ import com.lilac.adapter.fund.FundSnapshotCache;
 import com.lilac.adapter.model.FundHoldingItem;
 import com.lilac.adapter.model.FundHoldingSnapshot;
 import com.lilac.adapter.model.FundPingzhongData;
+import com.lilac.adapter.model.FundPingzhongData;
 import com.lilac.adapter.model.FundReportDisclosure;
 import com.lilac.adapter.model.FundSnapshot;
 import com.lilac.adapter.model.HoldingKind;
@@ -85,6 +86,23 @@ public class FundSnapshotServiceImpl implements FundSnapshotService {
             }
             log.warn("上游取数失败，回退降级快照 code={}：{}", code, e.getMessage());
             return toVO(cached.get(), e.getMessage());
+        }
+    }
+
+    /**
+     * 只拉净值增量落库，不取持仓与披露明细，上游失败返回 -1 由调用方自行降级
+     *
+     * @param code 6 位基金代码
+     * @return 新增净值行数，上游失败返回 -1
+     */
+    @Override
+    public int refreshNetWorth(String code) {
+        try {
+            FundPingzhongData pingzhong = fundPingzhongDataAdapter.fetch(code);
+            return fundNetWorthService.saveIncremental(code, pingzhong.getNetWorthPoints());
+        } catch (BusinessException e) {
+            log.warn("净值增量刷新失败 code={}：{}", code, e.getMessage());
+            return -1;
         }
     }
 

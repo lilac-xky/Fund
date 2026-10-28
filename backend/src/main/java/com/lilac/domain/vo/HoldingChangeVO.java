@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -52,6 +53,11 @@ public class HoldingChangeVO implements Serializable {
      * 备注
      */
     private String note;
+
+    /**
+     * 业务日期，买入为建仓日期，卖出为操作当日
+     */
+    private LocalDate openDate;
 
     /**
      * 创建时间

@@ -17,4 +17,12 @@ public interface FundSnapshotService {
      * @return 净值与持仓视图
      */
     FundSnapshotVO load(String code, LocalDate today);
+
+    /**
+     * 只拉净值增量落库，不取持仓与披露明细，供持仓总览过期自愈使用
+     *
+     * @param code 6 位基金代码
+     * @return 新增净值行数，上游失败返回 -1
+     */
+    int refreshNetWorth(String code);
 }

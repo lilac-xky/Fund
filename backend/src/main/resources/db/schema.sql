@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS holding_change (
     unitPrice   DECIMAL(20, 4)          DEFAULT NULL COMMENT '成交单价，买入取成本价，卖出取被扣份额的加权成本',
     afterShares DECIMAL(20, 4)          DEFAULT NULL COMMENT '变动后该品种合计份额',
     note        VARCHAR(255)            DEFAULT NULL COMMENT '备注，买入带身份回显，卖出带扣减说明',
+    openDate    DATE                    DEFAULT NULL COMMENT '业务日期，买入为建仓日期，卖出为操作当日',
     createTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updateTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),

@@ -356,6 +356,9 @@
                 <div class="app-change__tx">
                   <b>{{ change.varietyName ?? change.varietyKey }}</b>
                   <span>{{ fmt(change.shares) }} 份 @ {{ fmt(change.unitPrice) }}</span>
+                  <span v-if="change.openDate" class="app-change__bizdate"
+                    >建仓 {{ change.openDate }}</span
+                  >
                 </div>
                 <span class="app-change__time">{{ shortTime(change.createTime) }}</span>
               </div>
@@ -1540,6 +1543,11 @@ onMounted(() => {
   display: block;
   margin-top: 2px;
   color: var(--t3);
+}
+
+.app-change__bizdate {
+  font-size: 10px;
+  color: var(--t4);
 }
 
 .app-change__note {
