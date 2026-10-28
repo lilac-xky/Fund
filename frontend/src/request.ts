@@ -22,6 +22,8 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   data?: unknown
   /** 查询参数，值为空时自动跳过 */
   params?: Record<string, unknown>
+  /** 静默模式，失败时不弹右下角提示，由调用方自行展示 */
+  silent?: boolean
 }
 
 /** 请求错误，带上出错环节与发生时间，页面据此显示「哪里出错、什么时候」 */
@@ -79,7 +81,7 @@ export default async function request<T>(
   options: RequestOptions = {},
   stage = '请求',
 ): Promise<T> {
-  const { data, params, ...rest } = options
+  const { data, params, silent, ...rest } = options
   const query = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -105,24 +107,48 @@ export default async function request<T>(
       body: data === undefined ? undefined : JSON.stringify(data),
     })
     if (!response.ok) {
-      throw new RequestError(`服务端返回 ${response.status}`, stage, response.status)
+      // 业务异常也走统一 Result 结构，非 2xx 时尽量读出 body 里的 msg，不丢后端原因
+      let businessMessage = ''
+      let businessCode: number | undefined
+      try {
+        const body = (await response.json()) as ApiResult<unknown>
+        businessMessage = body?.msg?.trim() ?? ''
+        businessCode = body?.code
+      } catch {
+        // body 不是 JSON 时按纯状态码处理
+      }
+      const detail = businessMessage || `服务端返回 ${response.status}`
+      const error = new RequestError(detail, stage, businessCode ?? response.status)
+      if (!silent) {
+        ElMessage.error(`${error.stage}失败：${error.message}（${error.happenedAt}）`)
+      }
+      throw error
     }
     const result = (await response.json()) as T
     // 业务码 200 为成功，其余一律按失败处理
     const code = (result as unknown as ApiResult<unknown>)?.code
     if (code !== 200) {
-      throw new RequestError(messageOf(result as unknown as ApiResult<unknown>, stage), stage, code)
+      const error = new RequestError(
+        messageOf(result as unknown as ApiResult<unknown>, stage),
+        stage,
+        code,
+      )
+      if (!silent) {
+        ElMessage.error(`${error.stage}失败：${error.message}（${error.happenedAt}）`)
+      }
+      throw error
     }
     return result
   } catch (error) {
     if (error instanceof RequestError) {
-      ElMessage.error(`${error.stage}失败：${error.message}（${error.happenedAt}）`)
       throw error
     }
     const aborted = error instanceof DOMException && error.name === 'AbortError'
     const fallback = aborted ? '请求超时' : '网络不可达'
     const wrapped = new RequestError(fallback, stage)
-    ElMessage.error(`${stage}失败：${fallback}（${wrapped.happenedAt}）`)
+    if (!silent) {
+      ElMessage.error(`${stage}失败：${fallback}（${wrapped.happenedAt}）`)
+    }
     throw wrapped
   } finally {
     clearTimeout(timer)

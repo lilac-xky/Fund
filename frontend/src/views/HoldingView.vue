@@ -374,6 +374,17 @@
       </div>
     </div>
 
+    <!-- 查询失败弹窗：后端原因居中展示，需要使用者确认后继续 -->
+    <div v-if="lookupError" class="app-mask" @click.self="lookupError = ''">
+      <div class="app-dialog">
+        <h3>未能带出身份</h3>
+        <p class="app-dialog__meta">{{ lookupError }}</p>
+        <div class="app-dialog__ops">
+          <AppButton variant="primary" @click="lookupError = ''">知道了</AppButton>
+        </div>
+      </div>
+    </div>
+
     <!-- 卖出弹层 -->
     <div v-if="selling" class="app-mask" @click.self="selling = null">
       <div class="app-dialog">
@@ -523,6 +534,9 @@ const categoryError = ref('')
 const indexError = ref('')
 const formError = ref('')
 const sellError = ref('')
+
+/** 查询失败弹窗文案，空字符串表示不显示 */
+const lookupError = ref('')
 
 /** 基金全集状态 */
 const catalog = ref<API.FundCatalogStatusVO>({})
@@ -676,12 +690,13 @@ async function onLookup(): Promise<void> {
   }
   looking.value = true
   entryError.value = ''
+  lookupError.value = ''
   selected.value = null
   picked.value = null
   manualCategory.value = ''
   manualIndex.value = ''
   try {
-    const result = await disambiguateApi({ code: code.value })
+    const result = await disambiguateApi({ code: code.value }, { silent: true })
     disambig.value = result.data ?? {}
     const list = disambig.value.candidates ?? []
     if (!list.some((item: API.FundCandidateVO) => item.recordable !== false)) {
@@ -689,8 +704,10 @@ async function onLookup(): Promise<void> {
         ? `该代码是股票「${disambig.value.stockHint}」，不从持仓入口录入`
         : '未找到可录入的基金或 ETF'
     }
-  } catch {
-    // request 层已弹出错误，这里保持页面可用
+  } catch (error) {
+    // 查不到代码属于使用者需要面对的结果，用居中弹窗展示后端原因而不是右下角浮层
+    lookupError.value =
+      error instanceof Error && error.message ? error.message : '查询失败，请稍后再试'
   } finally {
     looking.value = false
   }
