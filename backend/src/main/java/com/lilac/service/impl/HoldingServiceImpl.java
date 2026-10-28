@@ -25,6 +25,7 @@ import com.lilac.mapper.HoldingChangeMapper;
 import com.lilac.mapper.HoldingMapper;
 import com.lilac.mapper.VarietyMapper;
 import com.lilac.service.FundNetWorthService;
+import com.lilac.service.FundSnapshotService;
 import com.lilac.service.HoldingService;
 import com.lilac.utils.ThrowUtils;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -36,11 +37,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 持仓业务实现，买入校验、卖出先进先出与变动历史留痕
@@ -55,6 +59,21 @@ public class HoldingServiceImpl implements HoldingService {
     private static final int MONEY_SCALE = 2;
     private static final int PRICE_SCALE = 4;
 
+    /**
+     * 按需拉取净值的节流时长，分钟
+     */
+    private static final long SYNC_THROTTLE_MINUTES = 10;
+
+    /**
+     * 本次进程内已尝试按需拉取的基金
+     */
+    private final Set<String> recentlySynced = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 按需拉取的节流表，基金代码到下次允许拉取的时间
+     */
+    private final Map<String, LocalDateTime> syncThrottle = new ConcurrentHashMap<>();
+
     @Resource
     private HoldingMapper holdingMapper;
 
@@ -66,6 +85,9 @@ public class HoldingServiceImpl implements HoldingService {
 
     @Resource
     private FundNetWorthService fundNetWorthService;
+
+    @Resource
+    private FundSnapshotService fundSnapshotService;
 
     @Resource
     private MarketQuoteAdapter marketQuoteAdapter;
@@ -332,7 +354,7 @@ public class HoldingServiceImpl implements HoldingService {
     }
 
     /**
-     * 取最新价，场内 ETF 用实时行情、其余用库内最新净值
+     * 取最新价，场内 ETF 用实时行情、其余用库内最新净值；库内从无净值时先按需拉一次上游
      *
      * @param variety 品种，可为 null
      * @return 最新价，取不到返回 null
@@ -354,9 +376,7 @@ public class HoldingServiceImpl implements HoldingService {
                 log.warn("ETF 行情取数失败 code={}：{}", variety.getVarietyCode(), e.getMessage());
             }
         }
-        LocalDate start = LocalDate.now().minusDays(NET_WORTH_LOOKBACK_DAYS);
-        List<com.lilac.adapter.model.FundNetWorthPoint> points =
-                fundNetWorthService.listRange(variety.getVarietyCode(), start, null);
+        List<com.lilac.adapter.model.FundNetWorthPoint> points = netWorthPoints(variety.getVarietyCode());
         for (int i = points.size() - 1; i >= 0; i--) {
             com.lilac.adapter.model.FundNetWorthPoint point = points.get(i);
             if (point.getUnitNetWorth() != null) {
@@ -365,6 +385,36 @@ public class HoldingServiceImpl implements HoldingService {
             }
         }
         return null;
+    }
+
+    /**
+     * 读库内近期净值；库内从无该基金净值时按需拉一次上游快照落库再读，带节流避免反复打上游
+     *
+     * @param fundCode 6 位基金代码
+     * @return 净值序列，上游失败返回空列表
+     */
+    private List<com.lilac.adapter.model.FundNetWorthPoint> netWorthPoints(String fundCode) {
+        LocalDate start = LocalDate.now().minusDays(NET_WORTH_LOOKBACK_DAYS);
+        List<com.lilac.adapter.model.FundNetWorthPoint> points =
+                fundNetWorthService.listRange(fundCode, start, null);
+        if (!points.isEmpty() || recentlySynced.contains(fundCode)) {
+            return points;
+        }
+        // 新录入品种本地尚无净值，拉一次全量；本进程内 10 分钟只拉一次，失败也不反复重试
+        if (recentlySynced.add(fundCode)) {
+            LocalDateTime next = LocalDateTime.now().plusMinutes(SYNC_THROTTLE_MINUTES);
+            syncThrottle.put(fundCode, next);
+            try {
+                fundSnapshotService.load(fundCode, LocalDate.now());
+                log.info("持仓总览按需拉取净值 code={}", fundCode);
+            } catch (Exception e) {
+                log.warn("持仓总览按需拉取净值失败 code={}：{}", fundCode, e.getMessage());
+            }
+            return fundNetWorthService.listRange(fundCode, start, null);
+        }
+        // 节流期内直接放弃，等下一次总览请求
+        syncThrottle.entrySet().removeIf(entry -> entry.getValue().isBefore(LocalDateTime.now()));
+        return points;
     }
 
     /**
