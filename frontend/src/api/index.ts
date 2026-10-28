@@ -11,6 +11,7 @@ import * as marketQuoteController from "./marketQuoteController";
 import * as estimateController from "./estimateController";
 import * as estimateCalibrationController from "./estimateCalibrationController";
 import * as indexDividendController from "./indexDividendController";
+import * as dividendAdviceController from "./dividendAdviceController";
 export default {
   fundController,
   holdingController,
@@ -21,4 +22,5 @@ export default {
   estimateController,
   estimateCalibrationController,
   indexDividendController,
+  dividendAdviceController,
 };

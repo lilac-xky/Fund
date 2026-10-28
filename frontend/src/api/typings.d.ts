@@ -117,6 +117,103 @@ declare namespace API {
     id?: number;
   };
 
+  type DividendAdviceRequest = {
+    /** 品种业务主键，如 OF:090010 */
+    varietyKey?: string;
+    /** 当前持有金额，单位元；留空则用持仓份额 × 最新净值 */
+    currentAmount?: number;
+  };
+
+  type DividendAdviceVO = {
+    /** 品种业务主键 */
+    varietyKey?: string;
+    /** 6 位代码 */
+    varietyCode?: string;
+    /** 标的名称 */
+    varietyName?: string;
+    /** 跟踪指数代码 */
+    indexCode?: string;
+    /** 动作 */
+    action?: "ADD" | "REDUCE" | "HOLD" | "UNDECIDABLE";
+    /** 动作中文名，供页面与邮件回显 */
+    actionLabel?: string;
+    /** 建议买卖金额，单位元，精确到元 */
+    suggestAmount?: number;
+    /** 目标持仓金额，单位元 */
+    targetAmount?: number;
+    /** 当前持有金额，单位元 */
+    currentAmount?: number;
+    /** 减仓后的剩余金额，单位元 */
+    remainingAmount?: number;
+    /** 基准仓位金额，单位元 */
+    baseAmount?: number;
+    /** 保底分红金额，单位元 */
+    floorAmount?: number;
+    /** 使用的股息率，单位百分点 */
+    dividendYield?: number;
+    /** 股息率数据日期，页面与邮件必须显示 */
+    dataDate?: string;
+    /** 距离今天已过天数 */
+    ageDays?: number;
+    /** 股息率是否已过期 */
+    stale?: boolean;
+    /** 是否因保底分红金额放弃了减仓 */
+    floorProtected?: boolean;
+    /** 是否压制了同标的的网格提醒 */
+    gridSuppressed?: boolean;
+    /** 网格互斥说明，同一标的不出现冲突建议的口径 */
+    gridNote?: string;
+    /** 判断依据文字 */
+    remarks?: string[];
+    /** 当前金额的取数说明，手工指定与按净值推算不同 */
+    amountSource?: string;
+  };
+
+  type DividendAdvisoryVO = {
+    /** 逐只建议，按建议金额降序 */
+    items?: DividendAdviceVO[];
+    /** 无建议的品种，逐只带原因 */
+    skippedItems?: DividendAdviceVO[];
+    /** 本次纳入的品种数 */
+    requested?: number;
+    /** 给出加减仓动作的品种数 */
+    actionCount?: number;
+    /** 维持持有的品种数 */
+    holdCount?: number;
+    /** 不给动作的品种数 */
+    undecidableCount?: number;
+    /** 建议买入合计，单位元 */
+    totalAddAmount?: number;
+    /** 建议卖出合计，单位元 */
+    totalReduceAmount?: number;
+    /** 当前红利持仓合计金额，单位元 */
+    totalCurrentAmount?: number;
+    /** 参数是否可用，false 时整批不给动作 */
+    paramUsable?: boolean;
+    /** 参数问题清单 */
+    paramIssues?: string[];
+    /** 基准仓位金额，单位元 */
+    baseAmount?: number;
+    /** 保底分红金额，单位元 */
+    floorAmount?: number;
+    /** 加仓股息率阈值，单位百分点 */
+    addYield?: number;
+    /** 减仓股息率阈值，单位百分点 */
+    reduceYield?: number;
+    /** 最新股息率数据日期，页面与邮件必须显示 */
+    dataDate?: string;
+    /** 数据最旧已过天数 */
+    ageDays?: number;
+    /** 是否存在过期数据 */
+    hasStale?: boolean;
+    /** 与网格策略的互斥口径说明 */
+    gridNote?: string;
+    /** 操作提示，如无红利持仓 */
+    notice?: string;
+    /** 汇总里的动作分布说明，供邮件直接取用 */
+    summary?: string[];
+  };
+
   type DividendManualRequest = {
     /** 指数代码，如 399321 */
     indexCode?: string;
@@ -126,6 +223,32 @@ declare namespace API {
     dividendYield?: number;
     /** 指数中文全称，可空 */
     indexName?: string;
+  };
+
+  type DividendParamSaveRequest = {
+    /** 基准仓位金额，单位元 */
+    baseAmount?: number;
+    /** 保底分红金额，单位元，不得高于基准仓位 */
+    floorAmount?: number;
+    /** 加仓股息率阈值，单位百分点 */
+    addYield?: number;
+    /** 减仓股息率阈值，单位百分点，必须低于加仓阈值 */
+    reduceYield?: number;
+  };
+
+  type DividendPlanVO = {
+    /** 基准仓位金额，单位元 */
+    baseAmount?: number;
+    /** 保底分红金额，单位元 */
+    floorAmount?: number;
+    /** 加仓股息率阈值，单位百分点 */
+    addYield?: number;
+    /** 减仓股息率阈值，单位百分点 */
+    reduceYield?: number;
+    /** 参数是否齐全且自洽 */
+    usable?: boolean;
+    /** 参数问题清单，可用时为空 */
+    issues?: string[];
   };
 
   type DividendQueryRequest = {
@@ -791,6 +914,24 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: CalibrationResultVO;
+  };
+
+  type ResultDividendAdviceVO = {
+    code?: number;
+    msg?: string;
+    data?: DividendAdviceVO;
+  };
+
+  type ResultDividendAdvisoryVO = {
+    code?: number;
+    msg?: string;
+    data?: DividendAdvisoryVO;
+  };
+
+  type ResultDividendPlanVO = {
+    code?: number;
+    msg?: string;
+    data?: DividendPlanVO;
   };
 
   type ResultEstimateBatchVO = {
