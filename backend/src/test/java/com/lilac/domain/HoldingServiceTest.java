@@ -24,6 +24,8 @@ import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.VarietyType;
 import com.lilac.exception.BusinessException;
 import com.lilac.mapper.FundCatalogMapper;
+import com.lilac.mapper.HoldingChangeMapper;
+import com.lilac.mapper.HoldingMapper;
 import com.lilac.service.FundDisambiguateService;
 import com.lilac.service.HoldingService;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -60,6 +62,12 @@ class HoldingServiceTest {
     @Autowired
     private FundCatalogMapper fundCatalogMapper;
 
+    @Autowired
+    private HoldingMapper holdingMapper;
+
+    @Autowired
+    private HoldingChangeMapper holdingChangeMapper;
+
     @MockitoBean
     private ExchangeIdentityAdapter exchangeIdentityAdapter;
 
@@ -75,6 +83,9 @@ class HoldingServiceTest {
     @BeforeEach
     void setUp() {
         fundCatalogMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // 测试对持仓表的假设是「从零开始」，dev 库里手工录入的真实持仓要隔离掉
+        holdingChangeMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         insertCatalog("110022", "易方达消费行业股票", "股票型");
         insertCatalog("000216", "华安黄金ETF联接A", "指数型-其他");
         insertCatalog("510300", "沪深300ETF华泰柏瑞", "指数型-股票");

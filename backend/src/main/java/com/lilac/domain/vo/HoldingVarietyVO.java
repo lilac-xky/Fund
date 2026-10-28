@@ -86,9 +86,29 @@ public class HoldingVarietyVO implements Serializable {
     private HoldingStatus status;
 
     /**
+     * 持仓成本金额，份额乘加权成本价
+     */
+    private BigDecimal costAmount;
+
+    /**
      * 持仓市值，份额乘最新价；最新价缺失时为 null
      */
     private BigDecimal marketValue;
+
+    /**
+     * 浮盈亏，市值减成本金额；最新价缺失时为 null
+     */
+    private BigDecimal profitLoss;
+
+    /**
+     * 浮盈亏比例，单位百分点；最新价缺失时为 null
+     */
+    private BigDecimal profitRate;
+
+    /**
+     * 当日涨跌幅，单位百分点；没有可用日变动时为 null
+     */
+    private BigDecimal dailyChangePercent;
 
     private static final long serialVersionUID = 1L;
 }

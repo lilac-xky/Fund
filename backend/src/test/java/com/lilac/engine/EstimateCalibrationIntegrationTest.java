@@ -14,6 +14,7 @@ import com.lilac.domain.vo.EstimateErrorTrendVO;
 import com.lilac.mapper.EstimateSnapshotMapper;
 import com.lilac.mapper.FundCatalogMapper;
 import com.lilac.mapper.FundNetWorthMapper;
+import com.lilac.mapper.HoldingMapper;
 import com.lilac.service.EstimateCalibrationService;
 import com.lilac.service.EstimateErrorService;
 import com.lilac.service.EstimateService;
@@ -80,6 +81,9 @@ class EstimateCalibrationIntegrationTest {
     private FundCatalogMapper fundCatalogMapper;
 
     @Autowired
+    private HoldingMapper holdingMapper;
+
+    @Autowired
     private RedissonClient redissonClient;
 
     @Autowired
@@ -98,6 +102,8 @@ class EstimateCalibrationIntegrationTest {
     void setUp() {
         estimateSnapshotMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         fundCatalogMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // 未指定品种时校准会回退到全部持有中持仓，dev 库的真实持仓必须隔离
+        holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         redissonClient.getKeys().deleteByPattern("fund:estimate:*");
     }
 

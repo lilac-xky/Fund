@@ -298,6 +298,7 @@ public class HoldingServiceImpl implements HoldingService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         item.setTotalShares(shares);
         item.setAvgCostPrice(cost.divide(shares, PRICE_SCALE, RoundingMode.HALF_UP));
+        item.setCostAmount(cost.setScale(MONEY_SCALE, RoundingMode.HALF_UP));
         item.setLastOpenDate(holdings.stream().map(Holding::getOpenDate)
                 .max(LocalDate::compareTo).orElse(null));
         item.setStatus(HoldingStatus.HOLDING);
@@ -318,7 +319,14 @@ public class HoldingServiceImpl implements HoldingService {
             item.setLatestPrice(price.value);
             item.setLatestPriceDate(price.date);
             item.setPriceSource(price.source);
-            item.setMarketValue(shares.multiply(price.value).setScale(MONEY_SCALE, RoundingMode.HALF_UP));
+            BigDecimal marketValue = shares.multiply(price.value).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal profitLoss = marketValue.subtract(cost).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            item.setMarketValue(marketValue);
+            item.setProfitLoss(profitLoss);
+            item.setProfitRate(cost.signum() == 0 ? BigDecimal.ZERO
+                    : profitLoss.multiply(BigDecimal.valueOf(100))
+                            .divide(cost, 2, RoundingMode.HALF_UP));
+            item.setDailyChangePercent(price.changePercent);
         }
         return item;
     }
@@ -338,7 +346,8 @@ public class HoldingServiceImpl implements HoldingService {
                 MarketQuote quote = marketQuoteAdapter.quote(variety.getVarietyCode());
                 if (quote != null && quote.getPrice() != null) {
                     String source = Boolean.TRUE.equals(quote.getRealtime()) ? "行情价（实时）" : "行情价（上一交易日）";
-                    return new LatestPrice(quote.getPrice(), quote.getTradeDate(), source);
+                    return new LatestPrice(quote.getPrice(), quote.getTradeDate(), source,
+                            quote.getChangePercent());
                 }
             } catch (Exception e) {
                 // 行情不可用不影响总览展示，回退净值
@@ -352,7 +361,7 @@ public class HoldingServiceImpl implements HoldingService {
             com.lilac.adapter.model.FundNetWorthPoint point = points.get(i);
             if (point.getUnitNetWorth() != null) {
                 return new LatestPrice(point.getUnitNetWorth(), point.getNetWorthDate(),
-                        "净值 " + point.getNetWorthDate());
+                        "净值 " + point.getNetWorthDate(), point.getEquityReturn());
             }
         }
         return null;
@@ -450,6 +459,6 @@ public class HoldingServiceImpl implements HoldingService {
     /**
      * 最新价的内部载体
      */
-    private record LatestPrice(BigDecimal value, LocalDate date, String source) {
+    private record LatestPrice(BigDecimal value, LocalDate date, String source, BigDecimal changePercent) {
     }
 }

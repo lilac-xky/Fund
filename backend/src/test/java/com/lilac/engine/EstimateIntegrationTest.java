@@ -16,6 +16,7 @@ import com.lilac.domain.vo.HoldingItemVO;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.VarietyType;
 import com.lilac.mapper.FundCatalogMapper;
+import com.lilac.mapper.HoldingMapper;
 import com.lilac.service.EstimateService;
 import com.lilac.service.FundSnapshotService;
 import com.lilac.service.VarietyService;
@@ -62,6 +63,9 @@ class EstimateIntegrationTest {
     private FundCatalogMapper fundCatalogMapper;
 
     @Autowired
+    private HoldingMapper holdingMapper;
+
+    @Autowired
     private RedissonClient redissonClient;
 
     @MockitoBean
@@ -76,6 +80,8 @@ class EstimateIntegrationTest {
     @BeforeEach
     void setUp() {
         fundCatalogMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // 未指定品种时预预估按全部持有中持仓取数，dev 库的真实持仓必须隔离
+        holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         redissonClient.getKeys().deleteByPattern("fund:estimate:*");
     }
 

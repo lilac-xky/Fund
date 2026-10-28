@@ -172,6 +172,8 @@ class DataLayerIntegrationTest {
     @Test
     @DisplayName("持仓逻辑删除保留原始行")
     void holdingLogicDeleteKeepsRow() {
+        // dev 库可能有手工录入的真实持仓，断言只针对本用例插入的这一行
+        holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         Holding holding = new Holding();
         holding.setVarietyKey("OF:000001");
         holding.setShares(new BigDecimal("1234.5678"));
