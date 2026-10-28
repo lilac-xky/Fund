@@ -340,6 +340,51 @@ class EstimateCalibrationIntegrationTest {
     }
 
     /**
+     * 留存的行情日期早于校准日时不产出误差，避免拿昨日行情算出的预估去比今日净值
+     */
+    @Test
+    @DisplayName("行情日期早于校准日时跳过不产出假误差")
+    void staleQuoteDateGoesToGap() {
+        saveVariety("OF:990001", VarietyType.OF, "990001", "招商中证白酒指数A", FundCategory.STOCK);
+        saveNetWorth("990001", DAY2, "0.50", "0.60");
+        // 留存记在 DAY2，但行情还停在 DAY1，说明开盘前跑过一次
+        saveSnapshot("OF:990001", DAY2, "STOCK", "INDEX_ONLY", "A", "0.50", null, null, null);
+        EstimateSnapshot row = estimateSnapshotMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(EstimateSnapshot::getVarietyKey, "OF:990001")
+                .eq(EstimateSnapshot::getTradeDate, DAY2));
+        row.setQuoteDate(DAY1);
+        estimateSnapshotMapper.update(row);
+
+        CalibrationResultVO result = calibrationService.calibrate(requestOf(DAY2));
+
+        assertThat(result.getCalibratedCount()).isZero();
+        assertThat(result.getGaps().get(0).getReason())
+                .contains("行情日期").contains("不对应");
+        assertThat(estimateErrorService.listEstimateError(new EstimateErrorQueryRequest())).isEmpty();
+    }
+
+    /**
+     * 行情日期与校准日一致时正常校准，不做无谓拦截
+     */
+    @Test
+    @DisplayName("行情日期对齐时正常校准")
+    void alignedQuoteDateStillCalibrates() {
+        saveVariety("OF:990001", VarietyType.OF, "990001", "招商中证白酒指数A", FundCategory.STOCK);
+        saveNetWorth("990001", DAY2, "0.50", "0.60");
+        saveSnapshot("OF:990001", DAY2, "STOCK", "INDEX_ONLY", "A", "0.50", null, null, null);
+        EstimateSnapshot row = estimateSnapshotMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(EstimateSnapshot::getVarietyKey, "OF:990001")
+                .eq(EstimateSnapshot::getTradeDate, DAY2));
+        row.setQuoteDate(DAY2);
+        estimateSnapshotMapper.update(row);
+
+        CalibrationResultVO result = calibrationService.calibrate(requestOf(DAY2));
+
+        assertThat(result.getCalibratedCount()).isEqualTo(1);
+        assertThat(result.getItems().get(0).getErrorValue()).isEqualByComparingTo("-0.100000");
+    }
+
+    /**
      * 白天跑一次预估后当日留存即可被晚间校准读到，形成闭环
      */
     @Test
