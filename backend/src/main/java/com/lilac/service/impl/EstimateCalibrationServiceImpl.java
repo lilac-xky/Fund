@@ -85,6 +85,9 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
     @Resource
     private EstimateThresholds thresholds;
 
+    @Resource
+    private com.lilac.setting.SettingOverrideResolver settingOverrideResolver;
+
     /**
      * 执行某一交易日的晚间校准，同一交易日重复执行只覆盖不重复累计
      *
@@ -252,7 +255,7 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
         }
         EstimateCalibrationVerdict verdict = calibrationJudge.judge(category, snapshot.getDirection(),
                 snapshot.getEstimatedChange(), actual, snapshot.getIntervalLow(), snapshot.getIntervalHigh(),
-                thresholds);
+                settingOverrideResolver.effective(thresholds));
         CalibrationItemVO item = new CalibrationItemVO();
         item.setVarietyKey(variety.getVarietyKey());
         item.setVarietyCode(variety.getVarietyCode());
