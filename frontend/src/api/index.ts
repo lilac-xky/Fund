@@ -12,6 +12,8 @@ import * as estimateController from "./estimateController";
 import * as estimateCalibrationController from "./estimateCalibrationController";
 import * as indexDividendController from "./indexDividendController";
 import * as dividendAdviceController from "./dividendAdviceController";
+import * as mailController from "./mailController";
+import * as taskController from "./taskController";
 export default {
   fundController,
   holdingController,
@@ -23,4 +25,6 @@ export default {
   estimateCalibrationController,
   indexDividendController,
   dividendAdviceController,
+  mailController,
+  taskController,
 };

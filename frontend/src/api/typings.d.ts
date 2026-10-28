@@ -798,6 +798,22 @@ declare namespace API {
     message?: string;
   };
 
+  type MailPreviewVO = {
+    /** 邮件主题 */
+    subject?: string;
+    /** HTML 正文 */
+    html?: string;
+    /** 纯文本兜底正文 */
+    text?: string;
+  };
+
+  type MailStatusVO = {
+    /** 是否具备发送条件 */
+    ready?: boolean;
+    /** 状态说明，未就绪时逐项列出缺什么 */
+    note?: string;
+  };
+
   type MarketBarVO = {
     /** 交易日 */
     date?: string;
@@ -860,6 +876,10 @@ declare namespace API {
     equityReturn?: number;
   };
 
+  type overviewParams = {
+    tradeDate?: string;
+  };
+
   type ParamQueryRequest = {
     /** 参数分组 */
     paramGroup?: "DIVIDEND" | "GRID" | "INDICATOR" | "ALERT";
@@ -876,6 +896,21 @@ declare namespace API {
     paramValue?: string;
     /** 参数说明 */
     paramDesc?: string;
+  };
+
+  type PointOutcome = {
+    /** 产出是否成功 */
+    success?: boolean;
+    /** 产出摘要，成功时写进页面提示 */
+    detail?: string;
+    /** 内容留存路径，邮件等有正文的时点填写，相对 data 目录 */
+    contentPath?: string;
+    /** 产出失败的说明 */
+    failReason?: string;
+  };
+
+  type previewParams = {
+    tradeDate?: string;
   };
 
   type QuoteBatchRequest = {
@@ -902,6 +937,10 @@ declare namespace API {
     dataDate?: string;
     /** 是否处于交易时段，false 时数据为上一交易日 */
     tradingHours?: boolean;
+  };
+
+  type resendParams = {
+    tradeDate?: string;
   };
 
   type ResultBoolean = {
@@ -1002,6 +1041,12 @@ declare namespace API {
     data?: IndexDividendRefreshVO;
   };
 
+  type ResultInteger = {
+    code?: number;
+    msg?: string;
+    data?: number;
+  };
+
   type ResultListEstimateErrorTrendVO = {
     code?: number;
     msg?: string;
@@ -1038,6 +1083,12 @@ declare namespace API {
     data?: MarketHistoryVO[];
   };
 
+  type ResultListSendRecordVO = {
+    code?: number;
+    msg?: string;
+    data?: SendRecordVO[];
+  };
+
   type ResultListStrategyParamVO = {
     code?: number;
     msg?: string;
@@ -1050,10 +1101,28 @@ declare namespace API {
     data?: VarietyVO[];
   };
 
+  type ResultMailPreviewVO = {
+    code?: number;
+    msg?: string;
+    data?: MailPreviewVO;
+  };
+
+  type ResultMailStatusVO = {
+    code?: number;
+    msg?: string;
+    data?: MailStatusVO;
+  };
+
   type ResultMarketQuoteVO = {
     code?: number;
     msg?: string;
     data?: MarketQuoteVO;
+  };
+
+  type ResultPointOutcome = {
+    code?: number;
+    msg?: string;
+    data?: PointOutcome;
   };
 
   type ResultQuoteBatchVO = {
@@ -1069,10 +1138,54 @@ declare namespace API {
     data?: StrategyParamVO;
   };
 
+  type ResultString = {
+    code?: number;
+    msg?: string;
+    data?: string;
+  };
+
+  type ResultTaskOverviewVO = {
+    code?: number;
+    msg?: string;
+    data?: TaskOverviewVO;
+  };
+
   type ResultVarietyVO = {
     code?: number;
     msg?: string;
     data?: VarietyVO;
+  };
+
+  type SendRecordQueryRequest = {
+    /** 发送日期 */
+    sendDate?: string;
+    /** 发送时点 */
+    sendPoint?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    /** 区间起始日，含 */
+    startDate?: string;
+    /** 区间截止日，含 */
+    endDate?: string;
+  };
+
+  type SendRecordVO = {
+    /** 主键 */
+    id?: number;
+    /** 发送日期 */
+    sendDate?: string;
+    /** 发送时点 */
+    sendPoint?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    /** 发送状态 */
+    status?: "PENDING" | "SENT" | "FAILED" | "RESENT";
+    /** 实际发送时间 */
+    sentTime?: string;
+    /** 失败原因 */
+    failReason?: string;
+    /** 邮件内容留存路径 */
+    contentPath?: string;
+    /** 创建时间 */
+    createTime?: string;
+    /** 更新时间 */
+    updateTime?: string;
   };
 
   type singleParams = {
@@ -1108,9 +1221,65 @@ declare namespace API {
     tradeDate?: string;
   };
 
+  type TaskOverviewVO = {
+    /** 统计日期 */
+    tradeDate?: string;
+    /** 是否交易日 */
+    tradingDay?: boolean;
+    /** 非交易日原因，交易日为空 */
+    tradingDayNote?: string;
+    /** 逐时点状态，按应发时刻排序 */
+    items?: TaskPointStatusVO[];
+    /** 已成功（含已补发）的时点数 */
+    sentCount?: number;
+    /** 失败的时点数 */
+    failedCount?: number;
+    /** 已过应发时刻仍未成功的时点数 */
+    overdueCount?: number;
+    /** 是否刚检测到时钟跳变 */
+    clockJump?: boolean;
+    /** 最近一次跳变的偏差秒数 */
+    clockJumpSeconds?: number;
+    /** 整体提示，可直接显示在页面顶部 */
+    notice?: string;
+  };
+
+  type TaskPointStatusVO = {
+    /** 时点 */
+    point?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    /** 时点中文名 */
+    pointLabel?: string;
+    /** 应发时刻 */
+    dueTime?: string;
+    /** 留痕状态，无记录时为空 */
+    status?: "PENDING" | "SENT" | "FAILED" | "RESENT";
+    /** 状态中文名，无记录时显示未发送 */
+    statusLabel?: string;
+    /** 实际发送时间 */
+    sentTime?: string;
+    /** 失败原因 */
+    failReason?: string;
+    /** 邮件内容留存路径 */
+    contentPath?: string;
+    /** 是否已过应发时刻仍未成功 */
+    overdue?: boolean;
+    /** 一句话说明，含应发时刻与状态 */
+    summary?: string;
+  };
+
   type trendParams = {
     varietyKey: string;
     days?: number;
+  };
+
+  type triggerParams = {
+    /**  MORNING :早盘，约 9:30
+NOON :午盘，约 11:30 至 13:00
+PRE_CLOSE :收盘前 30 分钟，约 14:30
+EVENING :晚间净值校准，约 20:00 至 22:00 */
+    point: string;
+    tradeDate?: string;
+    resend?: boolean;
   };
 
   type VarietyQueryRequest = {
