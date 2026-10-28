@@ -1,1500 +1,1590 @@
 declare namespace API {
   type CalibrationGapVO = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 未能校准的原因 */
-    reason?: string;
-  };
+    reason?: string
+  }
 
   type CalibrationItemVO = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 基金类型中文名 */
-    categoryLabel?: string;
+    categoryLabel?: string
     /** 交易日 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 当时输出档位 */
-    outputTier?: "A" | "B" | "C";
+    outputTier?: 'A' | 'B' | 'C'
     /** 当时给出的预估涨跌幅，百分点；B、C 档为 null */
-    estimatedChange?: number;
+    estimatedChange?: number
     /** 当日实际涨跌幅，百分点 */
-    actualChange?: number;
+    actualChange?: number
     /** 误差，预估减实际，百分点 */
-    errorValue?: number;
+    errorValue?: number
     /** 本次判定所用阈值，百分点；混合型为 null */
-    thresholdValue?: number;
+    thresholdValue?: number
     /** 是否超阈值 */
-    overThreshold?: boolean;
+    overThreshold?: boolean
     /** 方向是否命中，混合型才有 */
-    directionHit?: boolean;
+    directionHit?: boolean
     /** 实际值是否落在区间内，混合型才有 */
-    inInterval?: boolean;
+    inInterval?: boolean
     /** 当时区间下限，百分点 */
-    intervalLow?: number;
+    intervalLow?: number
     /** 当时区间上限，百分点 */
-    intervalHigh?: number;
+    intervalHigh?: number
     /** 当时区间宽度，百分点 */
-    intervalWidth?: number;
+    intervalWidth?: number
     /** 校准后的滚动档位 */
-    rollingTier?: "A" | "B" | "C";
+    rollingTier?: 'A' | 'B' | 'C'
     /** 滚动窗口内绝对误差的中位数，百分点 */
-    medianAbsError?: number;
+    medianAbsError?: number
     /** 滚动窗口内的方向准确率 */
-    directionAccuracy?: number;
+    directionAccuracy?: number
     /** 滚动窗口内的区间覆盖率 */
-    intervalCoverage?: number;
+    intervalCoverage?: number
     /** 连续超阈值期数 */
-    consecutiveOverCount?: number;
+    consecutiveOverCount?: number
     /** 是否建议停用该基金预估 */
-    suggestSuspend?: boolean;
+    suggestSuspend?: boolean
     /** 黄金 β，非黄金为 null */
-    beta?: number;
+    beta?: number
     /** 黄金 AR(1) 系数，非黄金为 null */
-    rho?: number;
+    rho?: number
     /** 黄金残差 P90，百分点 */
-    residualP90?: number;
+    residualP90?: number
     /** 当时持仓截止日 */
-    holdingCutoffDate?: string;
+    holdingCutoffDate?: string
     /** 当时持仓披露日 */
-    holdingDisclosureDate?: string;
+    holdingDisclosureDate?: string
     /** 预估来源，SNAPSHOT 或 RECOMPUTED */
-    estimateSource?: string;
+    estimateSource?: string
     /** 本条的说明文字，每条一句 */
-    remarks?: string[];
-  };
+    remarks?: string[]
+  }
 
   type CalibrationRequest = {
     /** 待校准交易日，为空时取当日 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 指定基金，为空时按全部持有中的持仓 */
-    varietyKeys?: string[];
+    varietyKeys?: string[]
     /** 是否在预估留存缺失时用当日行情重算，默认 false 只报缺口 */
-    recompute?: boolean;
-  };
+    recompute?: boolean
+  }
 
   type CalibrationResultVO = {
     /** 校准交易日 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 逐只对照结果 */
-    items?: CalibrationItemVO[];
+    items?: CalibrationItemVO[]
     /** 超阈值的基金，从 items 中筛出便于页面直接标红 */
-    overThresholdItems?: CalibrationItemVO[];
+    overThresholdItems?: CalibrationItemVO[]
     /** 建议停用的基金 */
-    suspensionHints?: CalibrationItemVO[];
+    suspensionHints?: CalibrationItemVO[]
     /** 未能校准的基金，如当日预估缺失或净值尚未公布 */
-    gaps?: CalibrationGapVO[];
+    gaps?: CalibrationGapVO[]
     /** 校准只数 */
-    calibratedCount?: number;
+    calibratedCount?: number
     /** 超阈值只数 */
-    overThresholdCount?: number;
+    overThresholdCount?: number
     /** 未能校准只数 */
-    gapCount?: number;
+    gapCount?: number
     /** 净利润落库条数，含覆盖写 */
-    writtenCount?: number;
+    writtenCount?: number
     /** 本次说明，如「当日预估缺失已跳过 2 只」 */
-    notice?: string;
-  };
+    notice?: string
+  }
 
   type DeleteRequest = {
     /** id */
-    id?: number;
-  };
+    id?: number
+  }
 
   type DividendAdviceRequest = {
     /** 品种业务主键，如 OF:090010 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 当前持有金额，单位元；留空则用持仓份额 × 最新净值 */
-    currentAmount?: number;
-  };
+    currentAmount?: number
+  }
 
   type DividendAdviceVO = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 跟踪指数代码 */
-    indexCode?: string;
+    indexCode?: string
     /** 动作 */
-    action?: "ADD" | "REDUCE" | "HOLD" | "UNDECIDABLE";
+    action?: 'ADD' | 'REDUCE' | 'HOLD' | 'UNDECIDABLE'
     /** 动作中文名，供页面与邮件回显 */
-    actionLabel?: string;
+    actionLabel?: string
     /** 建议买卖金额，单位元，精确到元 */
-    suggestAmount?: number;
+    suggestAmount?: number
     /** 目标持仓金额，单位元 */
-    targetAmount?: number;
+    targetAmount?: number
     /** 当前持有金额，单位元 */
-    currentAmount?: number;
+    currentAmount?: number
     /** 减仓后的剩余金额，单位元 */
-    remainingAmount?: number;
+    remainingAmount?: number
     /** 基准仓位金额，单位元 */
-    baseAmount?: number;
+    baseAmount?: number
     /** 保底分红金额，单位元 */
-    floorAmount?: number;
+    floorAmount?: number
     /** 使用的股息率，单位百分点 */
-    dividendYield?: number;
+    dividendYield?: number
     /** 股息率数据日期，页面与邮件必须显示 */
-    dataDate?: string;
+    dataDate?: string
     /** 距离今天已过天数 */
-    ageDays?: number;
+    ageDays?: number
     /** 股息率是否已过期 */
-    stale?: boolean;
+    stale?: boolean
     /** 是否因保底分红金额放弃了减仓 */
-    floorProtected?: boolean;
+    floorProtected?: boolean
     /** 是否压制了同标的的网格提醒 */
-    gridSuppressed?: boolean;
+    gridSuppressed?: boolean
     /** 网格互斥说明，同一标的不出现冲突建议的口径 */
-    gridNote?: string;
+    gridNote?: string
     /** 判断依据文字 */
-    remarks?: string[];
+    remarks?: string[]
     /** 当前金额的取数说明，手工指定与按净值推算不同 */
-    amountSource?: string;
-  };
+    amountSource?: string
+  }
 
   type DividendAdvisoryVO = {
     /** 逐只建议，按建议金额降序 */
-    items?: DividendAdviceVO[];
+    items?: DividendAdviceVO[]
     /** 无建议的品种，逐只带原因 */
-    skippedItems?: DividendAdviceVO[];
+    skippedItems?: DividendAdviceVO[]
     /** 本次纳入的品种数 */
-    requested?: number;
+    requested?: number
     /** 给出加减仓动作的品种数 */
-    actionCount?: number;
+    actionCount?: number
     /** 维持持有的品种数 */
-    holdCount?: number;
+    holdCount?: number
     /** 不给动作的品种数 */
-    undecidableCount?: number;
+    undecidableCount?: number
     /** 建议买入合计，单位元 */
-    totalAddAmount?: number;
+    totalAddAmount?: number
     /** 建议卖出合计，单位元 */
-    totalReduceAmount?: number;
+    totalReduceAmount?: number
     /** 当前红利持仓合计金额，单位元 */
-    totalCurrentAmount?: number;
+    totalCurrentAmount?: number
     /** 参数是否可用，false 时整批不给动作 */
-    paramUsable?: boolean;
+    paramUsable?: boolean
     /** 参数问题清单 */
-    paramIssues?: string[];
+    paramIssues?: string[]
     /** 基准仓位金额，单位元 */
-    baseAmount?: number;
+    baseAmount?: number
     /** 保底分红金额，单位元 */
-    floorAmount?: number;
+    floorAmount?: number
     /** 加仓股息率阈值，单位百分点 */
-    addYield?: number;
+    addYield?: number
     /** 减仓股息率阈值，单位百分点 */
-    reduceYield?: number;
+    reduceYield?: number
     /** 最新股息率数据日期，页面与邮件必须显示 */
-    dataDate?: string;
+    dataDate?: string
     /** 数据最旧已过天数 */
-    ageDays?: number;
+    ageDays?: number
     /** 是否存在过期数据 */
-    hasStale?: boolean;
+    hasStale?: boolean
     /** 与网格策略的互斥口径说明 */
-    gridNote?: string;
+    gridNote?: string
     /** 操作提示，如无红利持仓 */
-    notice?: string;
+    notice?: string
     /** 汇总里的动作分布说明，供邮件直接取用 */
-    summary?: string[];
-  };
+    summary?: string[]
+  }
 
   type DividendManualRequest = {
     /** 指数代码，如 399321 */
-    indexCode?: string;
+    indexCode?: string
     /** 数据日期，必须由使用者填真实日期，不允许默认今天 */
-    dataDate?: string;
+    dataDate?: string
     /** 股息率，单位百分点，如 4.08 表示 4.08% */
-    dividendYield?: number;
+    dividendYield?: number
     /** 指数中文全称，可空 */
-    indexName?: string;
-  };
+    indexName?: string
+  }
 
   type DividendParamSaveRequest = {
     /** 基准仓位金额，单位元 */
-    baseAmount?: number;
+    baseAmount?: number
     /** 保底分红金额，单位元，不得高于基准仓位 */
-    floorAmount?: number;
+    floorAmount?: number
     /** 加仓股息率阈值，单位百分点 */
-    addYield?: number;
+    addYield?: number
     /** 减仓股息率阈值，单位百分点，必须低于加仓阈值 */
-    reduceYield?: number;
-  };
+    reduceYield?: number
+  }
 
   type DividendPlanVO = {
     /** 基准仓位金额，单位元 */
-    baseAmount?: number;
+    baseAmount?: number
     /** 保底分红金额，单位元 */
-    floorAmount?: number;
+    floorAmount?: number
     /** 加仓股息率阈值，单位百分点 */
-    addYield?: number;
+    addYield?: number
     /** 减仓股息率阈值，单位百分点 */
-    reduceYield?: number;
+    reduceYield?: number
     /** 参数是否齐全且自洽 */
-    usable?: boolean;
+    usable?: boolean
     /** 参数问题清单，可用时为空 */
-    issues?: string[];
-  };
+    issues?: string[]
+  }
 
   type DividendQueryRequest = {
     /** 指数代码 */
-    indexCode?: string;
+    indexCode?: string
     /** 基金业务主键，传入时按其跟踪指数查询 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 返回的最近期数，为空时取默认值 */
-    limit?: number;
-  };
+    limit?: number
+  }
 
   type EstimateBatchRequest = {
     /** 品种业务主键列表，为空时按全部 HOLDING 状态的持仓预估 */
-    varietyKeys?: string[];
+    varietyKeys?: string[]
     /** 是否跳过缓存强制重算 */
-    refresh?: boolean;
-  };
+    refresh?: boolean
+  }
 
   type EstimateBatchVO = {
     /** 可预估的基金，按预估涨跌幅降序 */
-    items?: EstimateVO[];
+    items?: EstimateVO[]
     /** 不可预估的基金，逐只带出原因 */
-    unavailableItems?: EstimateVO[];
+    unavailableItems?: EstimateVO[]
     /** 本次预估的基金数 */
-    requested?: number;
+    requested?: number
     /** 可预估的基金数 */
-    estimableCount?: number;
+    estimableCount?: number
     /** 不可预估的基金数 */
-    unavailableCount?: number;
+    unavailableCount?: number
     /** 整体预估涨跌幅，按持仓等权平均，百分点；只统计可预估且为 A 档的基金 */
-    overallChange?: number;
+    overallChange?: number
     /** 参与整体统计的基金数 */
-    overallCount?: number;
+    overallCount?: number
     /** 行情数据日期 */
-    dataDate?: string;
+    dataDate?: string
     /** 是否处于交易时段 */
-    tradingHours?: boolean;
+    tradingHours?: boolean
     /** 是否有基金走了降级缓存 */
-    degraded?: boolean;
+    degraded?: boolean
     /** 混合型基金数，页面据此提示「仅方向参考」 */
-    mixedCount?: number;
+    mixedCount?: number
     /** 整体涨跌的口径说明，只统计 A 档时给出提示 */
-    overallNote?: string;
+    overallNote?: string
     /** 操作提示，如超上限已分批 */
-    notice?: string;
-  };
+    notice?: string
+  }
 
   type EstimateErrorQueryRequest = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 区间起始日，含 */
-    startDate?: string;
+    startDate?: string
     /** 区间截止日，含 */
-    endDate?: string;
+    endDate?: string
     /** 是否超阈值 */
-    overThreshold?: boolean;
-  };
+    overThreshold?: boolean
+  }
 
   type EstimateErrorTrendVO = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 基金类型中文名 */
-    categoryLabel?: string;
+    categoryLabel?: string
     /** 滚动窗口内的样本数 */
-    sampleCount?: number;
+    sampleCount?: number
     /** 滚动窗口内绝对误差的中位数，百分点 */
-    medianAbsError?: number;
+    medianAbsError?: number
     /** 滚动窗口内的平均绝对误差，百分点 */
-    mae?: number;
+    mae?: number
     /** 滚动窗口内的方向准确率 */
-    directionAccuracy?: number;
+    directionAccuracy?: number
     /** 滚动窗口内的区间覆盖率，混合型才有 */
-    intervalCoverage?: number;
+    intervalCoverage?: number
     /** 最近一次滚动判定的档位 */
-    rollingTier?: "A" | "B" | "C";
+    rollingTier?: 'A' | 'B' | 'C'
     /** 最近一次校准的交易日 */
-    latestTradeDate?: string;
+    latestTradeDate?: string
     /** 连续超阈值期数 */
-    consecutiveOverCount?: number;
+    consecutiveOverCount?: number
     /** 是否建议停用该基金预估 */
-    suggestSuspend?: boolean;
+    suggestSuspend?: boolean
     /** 逐日误差序列，按交易日升序 */
-    series?: EstimateErrorVO[];
-  };
+    series?: EstimateErrorVO[]
+  }
 
   type EstimateErrorVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 交易日 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 预估涨跌幅 */
-    estimatedChange?: number;
+    estimatedChange?: number
     /** 实际涨跌幅 */
-    actualChange?: number;
+    actualChange?: number
     /** 误差 */
-    errorValue?: number;
+    errorValue?: number
     /** 是否超阈值 */
-    overThreshold?: boolean;
+    overThreshold?: boolean
     /** 本次判定所用阈值，百分点；混合型不参与点估计判定，为 null */
-    thresholdValue?: number;
+    thresholdValue?: number
     /** 方向是否命中，混合型统计用 */
-    directionHit?: boolean;
+    directionHit?: boolean
     /** 实际值是否落在所给区间内，混合型统计用 */
-    inInterval?: boolean;
+    inInterval?: boolean
     /** 所给区间宽度，百分点 */
-    intervalWidth?: number;
+    intervalWidth?: number
     /** 重仓股披露期 */
-    disclosurePeriod?: string;
+    disclosurePeriod?: string
     /** 当时持仓截止日 */
-    holdingCutoffDate?: string;
+    holdingCutoffDate?: string
     /** 当时持仓披露日 */
-    holdingDisclosureDate?: string;
+    holdingDisclosureDate?: string
     /** 当时输出档位 */
-    outputTier?: string;
+    outputTier?: string
     /** 预估来源，SNAPSHOT 取当日留存、RECOMPUTED 事后重算 */
-    estimateSource?: string;
+    estimateSource?: string
     /** 创建时间 */
-    createTime?: string;
+    createTime?: string
     /** 更新时间 */
-    updateTime?: string;
-  };
+    updateTime?: string
+  }
 
   type EstimateVO = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 基金类型中文名 */
-    categoryLabel?: string;
+    categoryLabel?: string
     /** 本次走的分支 */
-    branch?:
-      | "INDEX_ONLY"
-      | "STOCK_WEIGHTED"
-      | "GOLD_PROXY"
-      | "BOND_PROXY"
-      | "UNAVAILABLE";
+    branch?: 'INDEX_ONLY' | 'STOCK_WEIGHTED' | 'GOLD_PROXY' | 'BOND_PROXY' | 'UNAVAILABLE'
     /** 分支中文名 */
-    branchLabel?: string;
+    branchLabel?: string
     /** 输出档位 */
-    tier?: "A" | "B" | "C";
+    tier?: 'A' | 'B' | 'C'
     /** 档位中文名 */
-    tierLabel?: string;
+    tierLabel?: string
     /** 可信度 */
-    confidence?: "HIGH" | "MEDIUM" | "LOW";
+    confidence?: 'HIGH' | 'MEDIUM' | 'LOW'
     /** 可信度中文名 */
-    confidenceLabel?: string;
+    confidenceLabel?: string
     /** 预估涨跌幅，百分点；仅 A 档有值，B 档与 C 档为 null */
-    estimatedChange?: number;
+    estimatedChange?: number
     /** 涨跌方向，B 档与部分 C 档使用 */
-    direction?: "UP" | "DOWN" | "FLAT";
+    direction?: 'UP' | 'DOWN' | 'FLAT'
     /** 方向中文名 */
-    directionLabel?: string;
+    directionLabel?: string
     /** 区间下限，百分点，仅 B 档 */
-    intervalLow?: number;
+    intervalLow?: number
     /** 区间上限，百分点，仅 B 档 */
-    intervalHigh?: number;
+    intervalHigh?: number
     /** 参与加权的覆盖率，百分点 */
-    coverage?: number;
+    coverage?: number
     /** 持仓报告期 */
-    holdingPeriod?: string;
+    holdingPeriod?: string
     /** 持仓截止日 */
-    holdingCutoffDate?: string;
+    holdingCutoffDate?: string
     /** 持仓披露日 */
-    holdingDisclosureDate?: string;
+    holdingDisclosureDate?: string
     /** 净值数据日期 */
-    netWorthDate?: string;
+    netWorthDate?: string
     /** 行情数据日期 */
-    quoteDate?: string;
+    quoteDate?: string
     /** 行情是否来自交易时段内 */
-    realtime?: boolean;
+    realtime?: boolean
     /** 代理标的完整代码 */
-    proxySymbol?: string;
+    proxySymbol?: string
     /** 黄金 β */
-    beta?: number;
+    beta?: number
     /** 黄金 AR(1) 系数 */
-    rho?: number;
+    rho?: number
     /** 黄金残差 P90，百分点；供 β+AR(1) 估计的交叉校验与校准留存 */
-    residualP90?: number;
+    residualP90?: number
     /** 是否来自降级缓存 */
-    degraded?: boolean;
+    degraded?: boolean
     /** 是否可预估 */
-    estimable?: boolean;
+    estimable?: boolean
     /** 不可预估原因，可预估时为 null */
-    unavailableReason?: string;
+    unavailableReason?: string
     /** 不可预估细节，如停牌标的名单 */
-    unavailableDetail?: string;
+    unavailableDetail?: string
     /** 同屏说明文字，每条一句 */
-    remarks?: string[];
-  };
+    remarks?: string[]
+  }
 
   type ForexRateVO = {
     /** 汇率对，如 HKDCNY */
-    pair?: string;
+    pair?: string
     /** 最新汇率 */
-    rate?: number;
+    rate?: number
     /** 上一有效交易日的汇率 */
-    previousRate?: number;
+    previousRate?: number
     /** 当日变动，小数形式 */
-    changeRate?: number;
+    changeRate?: number
     /** 汇率数据日期 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 取数来源 */
-    source?: string;
+    source?: string
     /** 是否可用 */
-    usable?: boolean;
-  };
+    usable?: boolean
+  }
 
   type FundCandidateVO = {
     /** 业务主键，如 OF:000001 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 品种类型 */
-    varietyType?: "OF" | "ETF" | "IDX";
+    varietyType?: 'OF' | 'ETF' | 'IDX'
     /** 品种类型中文名 */
-    varietyTypeLabel?: string;
+    varietyTypeLabel?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 基金类型中文名 */
-    categoryLabel?: string;
+    categoryLabel?: string
     /** 类型是否已确定，false 表示须使用者手动指定 */
-    confirmed?: boolean;
+    confirmed?: boolean
     /** 跟踪指数代码，红利基金用于查股息率 */
-    trackIndexCode?: string;
+    trackIndexCode?: string
     /** 是否可从持仓入口录入，指数与股票为 false */
-    recordable?: boolean;
+    recordable?: boolean
     /** 身份提示，说明判定依据或需要注意的地方 */
-    note?: string;
-  };
+    note?: string
+    /** 是否已写入品种注册表，已确认过的代码不再重复询问 */
+    registered?: boolean
+    holdingSummary?: HoldingSummaryVO
+  }
 
   type FundCatalogStatusVO = {
     /** 缓存总条数 */
-    total?: number;
+    total?: number
     /** 最近一次同步时间 */
-    syncTime?: string;
+    syncTime?: string
     /** 是否已过期，过期时下次消歧会触发同步 */
-    stale?: boolean;
+    stale?: boolean
     /** 允许的最大缓存天数 */
-    maxAgeDays?: number;
-  };
+    maxAgeDays?: number
+  }
 
   type FundCatalogSyncVO = {
     /** 同步后的总条数 */
-    total?: number;
+    total?: number
     /** 同步完成时间 */
-    syncTime?: string;
+    syncTime?: string
     /** 同步耗时毫秒 */
-    costMs?: number;
-  };
+    costMs?: number
+  }
 
   type FundConfirmRequest = {
     /** 6 位代码 */
-    code?: string;
+    code?: string
     /** 品种类型，只能是场外基金或场内 ETF */
-    varietyType?: "OF" | "ETF" | "IDX";
+    varietyType?: 'OF' | 'ETF' | 'IDX'
     /** 基金类型，自动判定为待确认时必填 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 跟踪指数代码，红利基金必填以取股息率 */
-    trackIndexCode?: string;
-  };
+    trackIndexCode?: string
+  }
 
   type FundDisambiguateRequest = {
     /** 6 位基金或在市代码 */
-    code?: string;
-  };
+    code?: string
+  }
 
   type FundDisambiguateVO = {
     /** 查询的 6 位代码 */
-    code?: string;
+    code?: string
     /** 是否命中任何候选 */
-    exists?: boolean;
+    exists?: boolean
     /** 候选列表，按场外基金、场内 ETF、指数顺序 */
-    candidates?: FundCandidateVO[];
+    candidates?: FundCandidateVO[]
     /** 名称相近的其他份额，A/C 类并列展示供核对 */
-    relatedShareClasses?: FundCandidateVO[];
+    relatedShareClasses?: FundCandidateVO[]
     /** 同码股票提示，股票不从持仓入口录入 */
-    stockHint?: string;
+    stockHint?: string
     /** 是否存在类型待确认的候选 */
-    needConfirm?: boolean;
+    needConfirm?: boolean
     /** 是否降级，指数校验失败时为 true */
-    degraded?: boolean;
+    degraded?: boolean
     /** 基金全集缓存的数据时间 */
-    catalogUpdatedAt?: string;
-  };
+    catalogUpdatedAt?: string
+  }
 
   type FundSnapshotVO = {
     /** 6 位基金代码 */
-    code?: string;
+    code?: string
     /** 基金简称 */
-    name?: string;
+    name?: string
     /** 净值数据日期 */
-    netWorthDate?: string;
+    netWorthDate?: string
     /** 持仓截止日 */
-    holdingCutoffDate?: string;
+    holdingCutoffDate?: string
     /** 持仓披露日 */
-    holdingDisclosureDate?: string;
+    holdingDisclosureDate?: string
     /** 季末仓位报告期截止日，无股票持仓时用它表示数据的报告期 */
-    allocationReportDate?: string;
+    allocationReportDate?: string
     /** 报告期，如 2026Q2 */
-    holdingPeriod?: string;
+    holdingPeriod?: string
     /** 重仓股列表，按权重降序 */
-    stockHoldings?: HoldingItemVO[];
+    stockHoldings?: HoldingItemVO[]
     /** 债券持仓列表 */
-    bondHoldings?: HoldingItemVO[];
+    bondHoldings?: HoldingItemVO[]
     /** 重仓股合计占比，单位百分点；季报只有前十大时明显低于股票仓位 */
-    totalStockWeight?: number;
+    totalStockWeight?: number
     /** 债券持仓合计占比，单位百分点 */
-    totalBondWeight?: number;
+    totalBondWeight?: number
     /** 是否全量披露 */
-    fullDisclosure?: boolean;
+    fullDisclosure?: boolean
     /** 季末股票占净比 */
-    stockRatio?: number;
+    stockRatio?: number
     /** 季末债券占净比 */
-    bondRatio?: number;
+    bondRatio?: number
     /** 季末现金占净比 */
-    cashRatio?: number;
+    cashRatio?: number
     /** 是否可用于当日预估 */
-    estimable?: boolean;
+    estimable?: boolean
     /** 不可预估的具体原因，可预估时为 null */
-    unavailableReason?: string;
+    unavailableReason?: string
     /** 是否走了降级缓存 */
-    degraded?: boolean;
+    degraded?: boolean
     /** 降级时的数据截止时间 */
-    dataCutoffDate?: string;
+    dataCutoffDate?: string
     /** 净值序列，按日期升序 */
-    netWorthPoints?: NetWorthPointVO[];
-  };
+    netWorthPoints?: NetWorthPointVO[]
+  }
 
   type getByIdParams = {
-    id?: number;
-  };
+    id?: number
+  }
 
   type getByIdParams = {
-    id?: number;
-  };
+    id?: number
+  }
 
   type getByIdParams = {
-    id?: number;
-  };
+    id?: number
+  }
 
   type goldBetaParams = {
-    varietyKey?: string;
-    startDate?: string;
-    endDate?: string;
-  };
+    varietyKey?: string
+    startDate?: string
+    endDate?: string
+  }
 
   type GoldBetaRecordVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 记录日 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 对黄金 ETF 的滚动 β */
-    beta?: number;
+    beta?: number
     /** 回归截距，百分点 */
-    alpha?: number;
+    alpha?: number
     /** AR(1) 误差系数 ρ */
-    rho?: number;
+    rho?: number
     /** 残差绝对值的 P90，百分点 */
-    residualP90?: number;
+    residualP90?: number
     /** 参与估计的配对样本数 */
-    samples?: number;
+    samples?: number
     /** 是否因样本不足退化为代理直取 */
-    fallback?: boolean;
+    fallback?: boolean
     /** 写入时间 */
-    createTime?: string;
-  };
+    createTime?: string
+  }
 
   type historyParams = {
-    codes: string[];
-    limit?: number;
-  };
+    codes: string[]
+    limit?: number
+  }
 
   type HoldingAddRequest = {
     /** 所持品种的业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 持有份额 */
-    shares?: number;
+    shares?: number
     /** 成本价 */
-    costPrice?: number;
+    costPrice?: number
     /** 建仓日期 */
-    openDate?: string;
+    openDate?: string
     /** 持仓状态 */
-    status?: "HOLDING" | "CLOSED";
-  };
+    status?: 'HOLDING' | 'CLOSED'
+  }
+
+  type HoldingBuyRequest = {
+    /** 所持品种的业务主键，如 OF:000001 */
+    varietyKey?: string
+    /** 买入份额，必须为正数 */
+    shares?: number
+    /** 买入成本价，必须为正数 */
+    costPrice?: number
+    /** 建仓日期，为空时取当日 */
+    openDate?: string
+  }
+
+  type HoldingChangeQueryRequest = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 变动类型 */
+    changeType?: 'BUY' | 'SELL'
+    /** 返回条数上限，为空时取默认值 */
+    limit?: number
+  }
+
+  type HoldingChangeVO = {
+    /** 主键 */
+    id?: number
+    /** 所持品种的业务主键 */
+    varietyKey?: string
+    /** 品种名称，关联品种注册表带出，便于逐笔核对 */
+    varietyName?: string
+    /** 变动类型 */
+    changeType?: 'BUY' | 'SELL'
+    /** 变动份额，正数 */
+    shares?: number
+    /** 成交单价 */
+    unitPrice?: number
+    /** 变动后合计份额 */
+    afterShares?: number
+    /** 备注 */
+    note?: string
+    /** 创建时间 */
+    createTime?: string
+  }
 
   type HoldingItemVO = {
     /** 证券代码 */
-    code?: string;
+    code?: string
     /** 证券名称 */
-    name?: string;
+    name?: string
     /** 占净值比例，单位百分点 */
-    weight?: number;
-  };
+    weight?: number
+  }
+
+  type HoldingOverviewVO = {
+    /** 持仓品种数，与 PRD 的 30 只上限对应 */
+    varietyCount?: number
+    /** 逐品种聚合行 */
+    items?: HoldingVarietyVO[]
+    /** 持仓市值合计，单位元；净值或行情缺失的品种按 0 计 */
+    totalMarketValue?: number
+    /** 汇总说明，如部分品种净值缺失 */
+    notice?: string
+  }
 
   type HoldingQueryRequest = {
     /** 品种业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 持仓状态 */
-    status?: "HOLDING" | "CLOSED";
-  };
+    status?: 'HOLDING' | 'CLOSED'
+  }
+
+  type HoldingSellRequest = {
+    /** 所持品种的业务主键，如 OF:000001 */
+    varietyKey?: string
+    /** 卖出份额，必须为正数且不超过当前持有合计 */
+    shares?: number
+  }
+
+  type HoldingSummaryVO = {
+    /** 是否已有持有中持仓 */
+    holding?: boolean
+    /** 合计持有份额，无持仓为 null */
+    totalShares?: number
+    /** 加权平均成本价，无持仓为 null */
+    avgCostPrice?: number
+  }
 
   type HoldingUpdateRequest = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 持有份额 */
-    shares?: number;
+    shares?: number
     /** 成本价 */
-    costPrice?: number;
+    costPrice?: number
     /** 建仓日期 */
-    openDate?: string;
+    openDate?: string
     /** 持仓状态 */
-    status?: "HOLDING" | "CLOSED";
-  };
+    status?: 'HOLDING' | 'CLOSED'
+  }
+
+  type HoldingVarietyVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 品种类型 */
+    varietyType?: 'OF' | 'ETF' | 'IDX'
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型，UNKNOWN 表示待确认 */
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 类型是否已确认 */
+    confirmed?: boolean
+    /** 合计持有份额，同一品种多条持仓合并 */
+    totalShares?: number
+    /** 加权平均成本价，按份额加权 */
+    avgCostPrice?: number
+    /** 最新单位净值，场内 ETF 用最新行情价；取不到为 null */
+    latestPrice?: number
+    /** 最新净值或行情的日期 */
+    latestPriceDate?: string
+    /** 最新价的取数说明，如「净值 2026-10-27」或「行情价（实时）」 */
+    priceSource?: string
+    /** 最新一条持仓记录的建仓日期 */
+    lastOpenDate?: string
+    /** 持仓状态，全部记录 CLOSED 时为 CLOSED */
+    status?: 'HOLDING' | 'CLOSED'
+    /** 持仓成本金额，份额乘加权成本价 */
+    costAmount?: number
+    /** 持仓市值，份额乘最新价；最新价缺失时为 null */
+    marketValue?: number
+    /** 浮盈亏，市值减成本金额；最新价缺失时为 null */
+    profitLoss?: number
+    /** 浮盈亏比例，单位百分点；最新价缺失时为 null */
+    profitRate?: number
+    /** 当日涨跌幅，单位百分点；没有可用日变动时为 null */
+    dailyChangePercent?: number
+  }
 
   type HoldingVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 所持品种的业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 持有份额 */
-    shares?: number;
+    shares?: number
     /** 成本价 */
-    costPrice?: number;
+    costPrice?: number
     /** 建仓日期 */
-    openDate?: string;
+    openDate?: string
     /** 持仓状态 */
-    status?: "HOLDING" | "CLOSED";
+    status?: 'HOLDING' | 'CLOSED'
     /** 创建时间 */
-    createTime?: string;
+    createTime?: string
     /** 更新时间 */
-    updateTime?: string;
-  };
+    updateTime?: string
+  }
 
   type IndexDividendOverviewVO = {
     /** 指数代码 */
-    indexCode?: string;
+    indexCode?: string
     /** 指数中文全称 */
-    indexName?: string;
+    indexName?: string
     /** 最新数据日期，页面与邮件必须显示 */
-    dataDate?: string;
+    dataDate?: string
     /** 最新股息率，单位百分点 */
-    dividendYield?: number;
+    dividendYield?: number
     /** 数据来源，取最新一期 */
-    sourceLabel?: string;
+    sourceLabel?: string
     /** 距今已过天数 */
-    ageDays?: number;
+    ageDays?: number
     /** 是否已过期，过期时不得据此给出加减仓动作 */
-    stale?: boolean;
+    stale?: boolean
     /** 过期说明，未过期时为 null */
-    staleReason?: string;
+    staleReason?: string
     /** 自动抓取是否可用，国证系列为 false */
-    autoAvailable?: boolean;
+    autoAvailable?: boolean
     /** 关联的基金代码列表，即跟踪该指数的持仓 */
-    fundCodes?: string[];
+    fundCodes?: string[]
     /** 近期序列，按日期降序 */
-    history?: IndexDividendVO[];
-  };
+    history?: IndexDividendVO[]
+  }
 
   type IndexDividendRefreshVO = {
     /** 刷新日期 */
-    refreshDate?: string;
+    refreshDate?: string
     /** 成功写入的指数数量 */
-    savedCount?: number;
+    savedCount?: number
     /** 自动抓取不可用、需要手工覆盖的指数数量 */
-    manualRequiredCount?: number;
+    manualRequiredCount?: number
     /** 明细，逐只带结果与原因 */
-    items?: Item[];
-  };
+    items?: Item[]
+  }
 
   type IndexDividendVO = {
     /** 指数代码 */
-    indexCode?: string;
+    indexCode?: string
     /** 指数中文全称 */
-    indexName?: string;
+    indexName?: string
     /** 数据日期 */
-    dataDate?: string;
+    dataDate?: string
     /** 股息率，单位百分点 */
-    dividendYield?: number;
+    dividendYield?: number
     /** 股息率1（总股本） */
-    dividendYield1?: number;
+    dividendYield1?: number
     /** 股息率2（计算用股本） */
-    dividendYield2?: number;
+    dividendYield2?: number
     /** 数据来源 */
-    source?: "AUTO" | "MANUAL";
+    source?: 'AUTO' | 'MANUAL'
     /** 数据来源中文名 */
-    sourceLabel?: string;
-  };
+    sourceLabel?: string
+  }
 
   type Item = {
     /** 指数代码 */
-    indexCode?: string;
+    indexCode?: string
     /** 指数中文全称 */
-    indexName?: string;
+    indexName?: string
     /** 数据日期 */
-    dataDate?: string;
+    dataDate?: string
     /** 股息率，单位百分点 */
-    dividendYield?: number;
+    dividendYield?: number
     /** 是否写入成功 */
-    saved?: boolean;
+    saved?: boolean
     /** 是否需要手工覆盖，自动抓取取不到时为 true */
-    manualRequired?: boolean;
+    manualRequired?: boolean
     /** 结果说明，失败与跳过时给出原因 */
-    message?: string;
-  };
+    message?: string
+  }
 
   type MailPreviewVO = {
     /** 邮件主题 */
-    subject?: string;
+    subject?: string
     /** HTML 正文 */
-    html?: string;
+    html?: string
     /** 纯文本兜底正文 */
-    text?: string;
-  };
+    text?: string
+  }
 
   type MailSettingSaveRequest = {
     /** 收件地址，多个用逗号分隔 */
-    recipients?: string;
+    recipients?: string
     /** SMTP 主机 */
-    host?: string;
+    host?: string
     /** SMTP 端口，465 走 SSL、587 走 STARTTLS */
-    port?: string;
+    port?: string
     /** SMTP 账号 */
-    username?: string;
+    username?: string
     /** 发件地址，留空时取账号 */
-    from?: string;
+    from?: string
     /** 授权码，留空表示不改；写入后任何接口都不回显 */
-    password?: string;
+    password?: string
     /** 是否清除已保存的授权码，为 true 时忽略 password */
-    clearPassword?: boolean;
-  };
+    clearPassword?: boolean
+  }
 
   type MailSettingVO = {
     /** 收件地址，多个用逗号分隔 */
-    recipients?: string;
+    recipients?: string
     /** SMTP 主机 */
-    host?: string;
+    host?: string
     /** SMTP 端口 */
-    port?: string;
+    port?: string
     /** SMTP 账号 */
-    username?: string;
+    username?: string
     /** 发件地址 */
-    from?: string;
+    from?: string
     /** 授权码是否已配置，只回布尔值 */
-    passwordConfigured?: boolean;
+    passwordConfigured?: boolean
     /** 通道是否具备发送条件 */
-    ready?: boolean;
+    ready?: boolean
     /** 状态说明，未就绪时逐项列出缺什么 */
-    note?: string;
-    /** 密钥文件路径，便于使用者知道去哪里改，本身不是密钥 */
-    secretsFile?: string;
-  };
+    note?: string
+    /** 当前配置是否可以进行连接测试 */
+    testable?: boolean
+    /** 最近一次连接测试结果 */
+    testNote?: string
+  }
 
   type MailStatusVO = {
     /** 是否具备发送条件 */
-    ready?: boolean;
+    ready?: boolean
     /** 状态说明，未就绪时逐项列出缺什么 */
-    note?: string;
-  };
+    note?: string
+    /** 当前配置是否可以进行连接测试 */
+    testable?: boolean
+  }
+
+  type MailTestVO = {
+    /** 连接测试是否成功 */
+    ok?: boolean
+    /** 测试结果说明 */
+    message?: string
+  }
 
   type MapString = {
-    key?: string;
-  };
+    key?: string
+  }
 
   type MarketBarVO = {
     /** 交易日 */
-    date?: string;
+    date?: string
     /** 收盘价 */
-    close?: number;
-  };
+    close?: number
+  }
 
   type MarketHistoryVO = {
     /** 带交易所前缀的完整代码 */
-    symbol?: string;
+    symbol?: string
     /** 日线，按日期升序 */
-    bars?: MarketBarVO[];
+    bars?: MarketBarVO[]
     /** 根数 */
-    size?: number;
+    size?: number
     /** 最新交易日 */
-    latestDate?: string;
+    latestDate?: string
     /** 最新收盘价 */
-    latestClose?: number;
+    latestClose?: number
     /** 是否前复权口径 */
-    adjusted?: boolean;
+    adjusted?: boolean
     /** 取数来源 */
-    source?: string;
-  };
+    source?: string
+  }
 
   type MarketQuoteVO = {
     /** 带交易所前缀的完整代码 */
-    symbol?: string;
+    symbol?: string
     /** 标的名称 */
-    name?: string;
+    name?: string
     /** 最新价 */
-    price?: number;
+    price?: number
     /** 昨收 */
-    previousClose?: number;
+    previousClose?: number
     /** 当日涨跌幅，单位百分点 */
-    changePercent?: number;
+    changePercent?: number
     /** 数据日期 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 行情时间 */
-    quoteTime?: string;
+    quoteTime?: string
     /** 是否交易时段内的实时数据，false 表示上一交易日 */
-    realtime?: boolean;
+    realtime?: boolean
     /** 可用性状态 */
-    status?: "OK" | "SUSPENDED" | "NO_DATA" | "UNAVAILABLE";
+    status?: 'OK' | 'SUSPENDED' | 'NO_DATA' | 'UNAVAILABLE'
     /** 是否可用于预估 */
-    usable?: boolean;
+    usable?: boolean
     /** 不可用原因 */
-    unavailableReason?: string;
+    unavailableReason?: string
     /** 取数来源 */
-    source?: string;
+    source?: string
     /** 是否前复权口径 */
-    adjusted?: boolean;
-  };
+    adjusted?: boolean
+  }
 
   type NetWorthPointVO = {
     /** 净值日期 */
-    netWorthDate?: string;
+    netWorthDate?: string
     /** 单位净值 */
-    unitNetWorth?: number;
+    unitNetWorth?: number
     /** 当日净值回报，单位百分点 */
-    equityReturn?: number;
-  };
+    equityReturn?: number
+  }
 
   type overviewParams = {
-    tradeDate?: string;
-  };
+    tradeDate?: string
+  }
 
   type ParamQueryRequest = {
     /** 参数分组 */
-    paramGroup?: "DIVIDEND" | "GRID" | "INDICATOR" | "ALERT";
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
     /** 参数名 */
-    paramKey?: string;
-  };
+    paramKey?: string
+  }
 
   type ParamSaveRequest = {
     /** 参数分组 */
-    paramGroup?: "DIVIDEND" | "GRID" | "INDICATOR" | "ALERT";
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
     /** 参数名，组内唯一 */
-    paramKey?: string;
+    paramKey?: string
     /** 参数值 */
-    paramValue?: string;
+    paramValue?: string
     /** 参数说明 */
-    paramDesc?: string;
-  };
+    paramDesc?: string
+  }
 
   type PointOutcome = {
     /** 产出是否成功 */
-    success?: boolean;
+    success?: boolean
     /** 产出摘要，成功时写进页面提示 */
-    detail?: string;
+    detail?: string
     /** 内容留存路径，邮件等有正文的时点填写，相对 data 目录 */
-    contentPath?: string;
+    contentPath?: string
     /** 产出失败的说明 */
-    failReason?: string;
-  };
+    failReason?: string
+  }
 
   type previewParams = {
-    tradeDate?: string;
-  };
+    tradeDate?: string
+  }
 
   type QuoteBatchRequest = {
     /** 标的代码列表，可带 sh/sz/bj/hk 前缀，不带时按号段推断 */
-    codes?: string[];
+    codes?: string[]
     /** 日线根数，只在查历史时使用，不传取配置默认值 */
-    historyLimit?: number;
-  };
+    historyLimit?: number
+  }
 
   type QuoteBatchVO = {
     /** 逐只行情，按请求顺序 */
-    quotes?: MarketQuoteVO[];
+    quotes?: MarketQuoteVO[]
     /** 请求的标的数 */
-    requested?: number;
+    requested?: number
     /** 可用于预估的标的数 */
-    usableCount?: number;
+    usableCount?: number
     /** 停牌的标的数 */
-    suspendedCount?: number;
+    suspendedCount?: number
     /** 无行情的标的数，含 920xxx 北交所 */
-    noDataCount?: number;
+    noDataCount?: number
     /** 本次是否有标的走了备用源 */
-    fallbackUsed?: boolean;
+    fallbackUsed?: boolean
     /** 数据日期，取可用标的中最新的交易日 */
-    dataDate?: string;
+    dataDate?: string
     /** 是否处于交易时段，false 时数据为上一交易日 */
-    tradingHours?: boolean;
-  };
+    tradingHours?: boolean
+  }
 
   type resendParams = {
-    tradeDate?: string;
-  };
+    tradeDate?: string
+  }
 
   type resetParams = {
-    group: string;
-  };
+    group: string
+  }
 
   type ResultBoolean = {
-    code?: number;
-    msg?: string;
-    data?: boolean;
-  };
+    code?: number
+    msg?: string
+    data?: boolean
+  }
 
   type ResultCalibrationResultVO = {
-    code?: number;
-    msg?: string;
-    data?: CalibrationResultVO;
-  };
+    code?: number
+    msg?: string
+    data?: CalibrationResultVO
+  }
 
   type ResultDividendAdviceVO = {
-    code?: number;
-    msg?: string;
-    data?: DividendAdviceVO;
-  };
+    code?: number
+    msg?: string
+    data?: DividendAdviceVO
+  }
 
   type ResultDividendAdvisoryVO = {
-    code?: number;
-    msg?: string;
-    data?: DividendAdvisoryVO;
-  };
+    code?: number
+    msg?: string
+    data?: DividendAdvisoryVO
+  }
 
   type ResultDividendPlanVO = {
-    code?: number;
-    msg?: string;
-    data?: DividendPlanVO;
-  };
+    code?: number
+    msg?: string
+    data?: DividendPlanVO
+  }
 
   type ResultEstimateBatchVO = {
-    code?: number;
-    msg?: string;
-    data?: EstimateBatchVO;
-  };
+    code?: number
+    msg?: string
+    data?: EstimateBatchVO
+  }
 
   type ResultEstimateErrorTrendVO = {
-    code?: number;
-    msg?: string;
-    data?: EstimateErrorTrendVO;
-  };
+    code?: number
+    msg?: string
+    data?: EstimateErrorTrendVO
+  }
 
   type ResultEstimateVO = {
-    code?: number;
-    msg?: string;
-    data?: EstimateVO;
-  };
+    code?: number
+    msg?: string
+    data?: EstimateVO
+  }
 
   type ResultForexRateVO = {
-    code?: number;
-    msg?: string;
-    data?: ForexRateVO;
-  };
+    code?: number
+    msg?: string
+    data?: ForexRateVO
+  }
 
   type ResultFundCatalogStatusVO = {
-    code?: number;
-    msg?: string;
-    data?: FundCatalogStatusVO;
-  };
+    code?: number
+    msg?: string
+    data?: FundCatalogStatusVO
+  }
 
   type ResultFundCatalogSyncVO = {
-    code?: number;
-    msg?: string;
-    data?: FundCatalogSyncVO;
-  };
+    code?: number
+    msg?: string
+    data?: FundCatalogSyncVO
+  }
 
   type ResultFundDisambiguateVO = {
-    code?: number;
-    msg?: string;
-    data?: FundDisambiguateVO;
-  };
+    code?: number
+    msg?: string
+    data?: FundDisambiguateVO
+  }
 
   type ResultFundSnapshotVO = {
-    code?: number;
-    msg?: string;
-    data?: FundSnapshotVO;
-  };
+    code?: number
+    msg?: string
+    data?: FundSnapshotVO
+  }
+
+  type ResultHoldingOverviewVO = {
+    code?: number
+    msg?: string
+    data?: HoldingOverviewVO
+  }
+
+  type ResultHoldingSummaryVO = {
+    code?: number
+    msg?: string
+    data?: HoldingSummaryVO
+  }
 
   type ResultHoldingVO = {
-    code?: number;
-    msg?: string;
+    code?: number
+    msg?: string
     /** 持仓视图对象 */
-    data?: HoldingVO;
-  };
+    data?: HoldingVO
+  }
 
   type ResultIndexDividendOverviewVO = {
-    code?: number;
-    msg?: string;
+    code?: number
+    msg?: string
     /** 指数股息率总览，把最新值与数据日期、是否过期一起返回 */
-    data?: IndexDividendOverviewVO;
-  };
+    data?: IndexDividendOverviewVO
+  }
 
   type ResultIndexDividendRefreshVO = {
-    code?: number;
-    msg?: string;
-    data?: IndexDividendRefreshVO;
-  };
+    code?: number
+    msg?: string
+    data?: IndexDividendRefreshVO
+  }
 
   type ResultInteger = {
-    code?: number;
-    msg?: string;
-    data?: number;
-  };
+    code?: number
+    msg?: string
+    data?: number
+  }
 
   type ResultListEstimateErrorTrendVO = {
-    code?: number;
-    msg?: string;
-    data?: EstimateErrorTrendVO[];
-  };
+    code?: number
+    msg?: string
+    data?: EstimateErrorTrendVO[]
+  }
 
   type ResultListEstimateErrorVO = {
-    code?: number;
-    msg?: string;
-    data?: EstimateErrorVO[];
-  };
+    code?: number
+    msg?: string
+    data?: EstimateErrorVO[]
+  }
 
   type ResultListGoldBetaRecordVO = {
-    code?: number;
-    msg?: string;
-    data?: GoldBetaRecordVO[];
-  };
+    code?: number
+    msg?: string
+    data?: GoldBetaRecordVO[]
+  }
+
+  type ResultListHoldingChangeVO = {
+    code?: number
+    msg?: string
+    data?: HoldingChangeVO[]
+  }
 
   type ResultListHoldingVO = {
-    code?: number;
-    msg?: string;
-    data?: HoldingVO[];
-  };
+    code?: number
+    msg?: string
+    data?: HoldingVO[]
+  }
 
   type ResultListIndexDividendOverviewVO = {
-    code?: number;
-    msg?: string;
-    data?: IndexDividendOverviewVO[];
-  };
+    code?: number
+    msg?: string
+    data?: IndexDividendOverviewVO[]
+  }
 
   type ResultListMarketHistoryVO = {
-    code?: number;
-    msg?: string;
-    data?: MarketHistoryVO[];
-  };
+    code?: number
+    msg?: string
+    data?: MarketHistoryVO[]
+  }
 
   type ResultListSendRecordVO = {
-    code?: number;
-    msg?: string;
-    data?: SendRecordVO[];
-  };
+    code?: number
+    msg?: string
+    data?: SendRecordVO[]
+  }
 
   type ResultListStrategyParamVO = {
-    code?: number;
-    msg?: string;
-    data?: StrategyParamVO[];
-  };
+    code?: number
+    msg?: string
+    data?: StrategyParamVO[]
+  }
 
   type ResultListVarietyVO = {
-    code?: number;
-    msg?: string;
-    data?: VarietyVO[];
-  };
+    code?: number
+    msg?: string
+    data?: VarietyVO[]
+  }
 
   type ResultMailPreviewVO = {
-    code?: number;
-    msg?: string;
-    data?: MailPreviewVO;
-  };
+    code?: number
+    msg?: string
+    data?: MailPreviewVO
+  }
 
   type ResultMailSettingVO = {
-    code?: number;
-    msg?: string;
-    data?: MailSettingVO;
-  };
+    code?: number
+    msg?: string
+    data?: MailSettingVO
+  }
 
   type ResultMailStatusVO = {
-    code?: number;
-    msg?: string;
-    data?: MailStatusVO;
-  };
+    code?: number
+    msg?: string
+    data?: MailStatusVO
+  }
+
+  type ResultMailTestVO = {
+    code?: number
+    msg?: string
+    data?: MailTestVO
+  }
 
   type ResultMarketQuoteVO = {
-    code?: number;
-    msg?: string;
-    data?: MarketQuoteVO;
-  };
+    code?: number
+    msg?: string
+    data?: MarketQuoteVO
+  }
 
   type ResultPointOutcome = {
-    code?: number;
-    msg?: string;
-    data?: PointOutcome;
-  };
+    code?: number
+    msg?: string
+    data?: PointOutcome
+  }
 
   type ResultQuoteBatchVO = {
-    code?: number;
-    msg?: string;
-    data?: QuoteBatchVO;
-  };
+    code?: number
+    msg?: string
+    data?: QuoteBatchVO
+  }
 
   type ResultSettingOverviewVO = {
-    code?: number;
-    msg?: string;
-    data?: SettingOverviewVO;
-  };
+    code?: number
+    msg?: string
+    data?: SettingOverviewVO
+  }
 
   type ResultSettingSaveVO = {
-    code?: number;
-    msg?: string;
-    data?: SettingSaveVO;
-  };
+    code?: number
+    msg?: string
+    data?: SettingSaveVO
+  }
 
   type ResultStrategyParamVO = {
-    code?: number;
-    msg?: string;
+    code?: number
+    msg?: string
     /** 策略参数视图对象 */
-    data?: StrategyParamVO;
-  };
+    data?: StrategyParamVO
+  }
 
   type ResultString = {
-    code?: number;
-    msg?: string;
-    data?: string;
-  };
+    code?: number
+    msg?: string
+    data?: string
+  }
 
   type ResultTaskOverviewVO = {
-    code?: number;
-    msg?: string;
-    data?: TaskOverviewVO;
-  };
+    code?: number
+    msg?: string
+    data?: TaskOverviewVO
+  }
 
   type ResultVarietyVO = {
-    code?: number;
-    msg?: string;
-    data?: VarietyVO;
-  };
+    code?: number
+    msg?: string
+    data?: VarietyVO
+  }
 
   type SendRecordQueryRequest = {
     /** 发送日期 */
-    sendDate?: string;
+    sendDate?: string
     /** 发送时点 */
-    sendPoint?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    sendPoint?: 'MORNING' | 'NOON' | 'PRE_CLOSE' | 'EVENING'
     /** 区间起始日，含 */
-    startDate?: string;
+    startDate?: string
     /** 区间截止日，含 */
-    endDate?: string;
-  };
+    endDate?: string
+  }
 
   type SendRecordVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 发送日期 */
-    sendDate?: string;
+    sendDate?: string
     /** 发送时点 */
-    sendPoint?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    sendPoint?: 'MORNING' | 'NOON' | 'PRE_CLOSE' | 'EVENING'
     /** 发送状态 */
-    status?: "PENDING" | "SENT" | "FAILED" | "RESENT";
+    status?: 'PENDING' | 'SENT' | 'FAILED' | 'RESENT'
     /** 实际发送时间 */
-    sentTime?: string;
+    sentTime?: string
     /** 失败原因 */
-    failReason?: string;
+    failReason?: string
     /** 邮件内容留存路径 */
-    contentPath?: string;
+    contentPath?: string
     /** 创建时间 */
-    createTime?: string;
+    createTime?: string
     /** 更新时间 */
-    updateTime?: string;
-  };
+    updateTime?: string
+  }
 
   type SettingBatchSaveRequest = {
     /** 待保存的分组列表 */
-    groups?: SettingGroupSaveRequest[];
-  };
+    groups?: SettingGroupSaveRequest[]
+  }
 
   type SettingFieldError = {
     /** 分组，与 ParamGroup 同名 */
-    group?: string;
+    group?: string
     /** 字段名，与参数键同名 */
-    field?: string;
+    field?: string
     /** 字段中文名，用于拼提示语 */
-    label?: string;
+    label?: string
     /** 错误原因，直接展示给使用者 */
-    message?: string;
-  };
+    message?: string
+  }
 
   type SettingGroupSaveRequest = {
     /** 分组，与 ParamGroup 同名 */
-    group?: string;
+    group?: string
     /** 参数键到参数值的映射，未出现的键保持原值不动 */
-    values?: MapString;
-  };
+    values?: MapString
+  }
 
   type SettingGroupVO = {
     /** 分组，与 ParamGroup 同名 */
-    group?: string;
+    group?: string
     /** 分组中文名 */
-    label?: string;
+    label?: string
     /** 分组说明，一句话 */
-    description?: string;
+    description?: string
     /** 分组内的字段 */
-    items?: SettingItemVO[];
-  };
+    items?: SettingItemVO[]
+  }
 
   type SettingItemVO = {
     /** 分组，与 ParamGroup 同名 */
-    group?: string;
+    group?: string
     /** 参数键 */
-    key?: string;
+    key?: string
     /** 字段中文名 */
-    label?: string;
+    label?: string
     /** 字段说明，一句话 */
-    description?: string;
+    description?: string
     /** 当前值，库里没有时取默认值，都没有则为 null */
-    value?: string;
+    value?: string
     /** 内置默认值，用于「恢复默认」与提示 */
-    defaultValue?: string;
+    defaultValue?: string
     /** 单位，如 元 / % / 日 */
-    unit?: string;
+    unit?: string
     /** 控件类型，TEXT / DECIMAL / INTEGER / BOOLEAN */
-    type?: string;
+    type?: string
     /** 当前值是否来自库，false 表示仍在用默认值 */
-    customized?: boolean;
-  };
+    customized?: boolean
+  }
 
   type SettingOverviewVO = {
     /** 参数分组，按固定顺序排列 */
-    groups?: SettingGroupVO[];
-    mailStatus?: MailStatusVO;
+    groups?: SettingGroupVO[]
+    mailStatus?: MailStatusVO
     /** 生效说明，告诉使用者改完何时能用上 */
-    effectiveNote?: string;
+    effectiveNote?: string
     /** 当前是否存在校验问题，存在时页面可直接提示 */
-    hasIssues?: boolean;
-  };
+    hasIssues?: boolean
+  }
 
   type SettingSaveVO = {
     /** 是否保存成功 */
-    ok?: boolean;
+    ok?: boolean
     /** 成功时写入的参数条数 */
-    savedCount?: number;
+    savedCount?: number
     /** 失败时的字段级错误，页面据此逐项标红 */
-    errors?: SettingFieldError[];
+    errors?: SettingFieldError[]
     /** 汇总说明，成功与失败都有一句，便于底部保存条展示 */
-    message?: string;
+    message?: string
     /** 本次保存后新生效的时间点说明，如「下一个时点 20:00 生效」 */
-    effectiveNote?: string;
-  };
+    effectiveNote?: string
+  }
 
   type singleParams = {
-    code: string;
-  };
+    code: string
+  }
 
   type singleParams = {
-    varietyKey: string;
-  };
+    varietyKey: string
+  }
 
   type snapshotParams = {
-    code: string;
-  };
+    code: string
+  }
 
   type StrategyParamVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 参数分组 */
-    paramGroup?: "DIVIDEND" | "GRID" | "INDICATOR" | "ALERT";
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
     /** 参数名 */
-    paramKey?: string;
+    paramKey?: string
     /** 参数值 */
-    paramValue?: string;
+    paramValue?: string
     /** 参数说明 */
-    paramDesc?: string;
+    paramDesc?: string
     /** 创建时间 */
-    createTime?: string;
+    createTime?: string
     /** 更新时间 */
-    updateTime?: string;
-  };
+    updateTime?: string
+  }
+
+  type summaryParams = {
+    varietyKey: string
+  }
 
   type suspendHintsParams = {
-    tradeDate?: string;
-  };
+    tradeDate?: string
+  }
 
   type TaskOverviewVO = {
     /** 统计日期 */
-    tradeDate?: string;
+    tradeDate?: string
     /** 是否交易日 */
-    tradingDay?: boolean;
+    tradingDay?: boolean
     /** 非交易日原因，交易日为空 */
-    tradingDayNote?: string;
+    tradingDayNote?: string
     /** 逐时点状态，按应发时刻排序 */
-    items?: TaskPointStatusVO[];
+    items?: TaskPointStatusVO[]
     /** 已成功（含已补发）的时点数 */
-    sentCount?: number;
+    sentCount?: number
     /** 失败的时点数 */
-    failedCount?: number;
+    failedCount?: number
     /** 已过应发时刻仍未成功的时点数 */
-    overdueCount?: number;
+    overdueCount?: number
     /** 是否刚检测到时钟跳变 */
-    clockJump?: boolean;
+    clockJump?: boolean
     /** 最近一次跳变的偏差秒数 */
-    clockJumpSeconds?: number;
+    clockJumpSeconds?: number
     /** 整体提示，可直接显示在页面顶部 */
-    notice?: string;
-  };
+    notice?: string
+  }
 
   type TaskPointStatusVO = {
     /** 时点 */
-    point?: "MORNING" | "NOON" | "PRE_CLOSE" | "EVENING";
+    point?: 'MORNING' | 'NOON' | 'PRE_CLOSE' | 'EVENING'
     /** 时点中文名 */
-    pointLabel?: string;
+    pointLabel?: string
     /** 应发时刻 */
-    dueTime?: string;
+    dueTime?: string
     /** 留痕状态，无记录时为空 */
-    status?: "PENDING" | "SENT" | "FAILED" | "RESENT";
+    status?: 'PENDING' | 'SENT' | 'FAILED' | 'RESENT'
     /** 状态中文名，无记录时显示未发送 */
-    statusLabel?: string;
+    statusLabel?: string
     /** 实际发送时间 */
-    sentTime?: string;
+    sentTime?: string
     /** 失败原因 */
-    failReason?: string;
+    failReason?: string
     /** 邮件内容留存路径 */
-    contentPath?: string;
+    contentPath?: string
     /** 是否已过应发时刻仍未成功 */
-    overdue?: boolean;
+    overdue?: boolean
     /** 一句话说明，含应发时刻与状态 */
-    summary?: string;
-  };
+    summary?: string
+  }
 
   type trendParams = {
-    varietyKey: string;
-    days?: number;
-  };
+    varietyKey: string
+    days?: number
+  }
 
   type triggerParams = {
     /**  MORNING :早盘，约 9:30
 NOON :午盘，约 11:30 至 13:00
 PRE_CLOSE :收盘前 30 分钟，约 14:30
 EVENING :晚间净值校准，约 20:00 至 22:00 */
-    point: string;
-    tradeDate?: string;
-    resend?: boolean;
-  };
+    point: string
+    tradeDate?: string
+    resend?: boolean
+  }
 
   type VarietyQueryRequest = {
     /** 业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 品种类型 */
-    varietyType?: "OF" | "ETF" | "IDX";
+    varietyType?: 'OF' | 'ETF' | 'IDX'
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 是否已确认类型 */
-    confirmed?: boolean;
-  };
+    confirmed?: boolean
+  }
 
   type VarietySaveRequest = {
     /** 业务主键，形如 OF:000001 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 代码所属品种类型 */
-    varietyType?: "OF" | "ETF" | "IDX";
+    varietyType?: 'OF' | 'ETF' | 'IDX'
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 跟踪指数代码 */
-    trackIndexCode?: string;
+    trackIndexCode?: string
     /** 类型是否已确认 */
-    confirmed?: boolean;
-  };
+    confirmed?: boolean
+  }
 
   type VarietyVO = {
     /** 主键 */
-    id?: number;
+    id?: number
     /** 业务主键 */
-    varietyKey?: string;
+    varietyKey?: string
     /** 品种类型 */
-    varietyType?: "OF" | "ETF" | "IDX";
+    varietyType?: 'OF' | 'ETF' | 'IDX'
     /** 6 位代码 */
-    varietyCode?: string;
+    varietyCode?: string
     /** 标的名称 */
-    varietyName?: string;
+    varietyName?: string
     /** 基金类型 */
-    category?:
-      | "STOCK"
-      | "MIXED"
-      | "BOND"
-      | "GOLD"
-      | "DIVIDEND"
-      | "ETF"
-      | "UNKNOWN";
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 跟踪指数代码 */
-    trackIndexCode?: string;
+    trackIndexCode?: string
     /** 类型是否已确认 */
-    confirmed?: boolean;
+    confirmed?: boolean
     /** 创建时间 */
-    createTime?: string;
+    createTime?: string
     /** 更新时间 */
-    updateTime?: string;
-  };
+    updateTime?: string
+  }
 }

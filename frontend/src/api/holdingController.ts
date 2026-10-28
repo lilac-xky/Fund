@@ -1,78 +1,128 @@
 // @ts-ignore
 /* eslint-disable */
-import request from "@/request";
+import request from '@/request'
 
 /** 新增持仓 POST /api/holding/add */
-export async function add(
-  body: API.HoldingAddRequest,
-  options?: { [key: string]: any }
-) {
-  return request<API.ResultBoolean>("/api/holding/add", {
-    method: "POST",
+export async function add(body: API.HoldingAddRequest, options?: { [key: string]: any }) {
+  return request<API.ResultBoolean>('/api/holding/add', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     data: body,
     ...(options || {}),
-  });
+  })
+}
+
+/** 买入入库，校验失败拒绝并指出原因 POST /api/holding/buy */
+export async function buy(body: API.HoldingBuyRequest, options?: { [key: string]: any }) {
+  return request<API.ResultHoldingVO>('/api/holding/buy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 查询持仓变动历史，按时间倒序 POST /api/holding/changes */
+export async function changes(
+  body: API.HoldingChangeQueryRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultListHoldingChangeVO>('/api/holding/changes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
 }
 
 /** 按主键逻辑删除持仓 POST /api/holding/delete */
-export async function deleteUsingPost(
-  body: API.DeleteRequest,
-  options?: { [key: string]: any }
-) {
-  return request<API.ResultBoolean>("/api/holding/delete", {
-    method: "POST",
+export async function deleteUsingPost(body: API.DeleteRequest, options?: { [key: string]: any }) {
+  return request<API.ResultBoolean>('/api/holding/delete', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     data: body,
     ...(options || {}),
-  });
+  })
 }
 
 /** 按主键查询单个持仓 GET /api/holding/get */
 export async function getById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getByIdParams,
-  options?: { [key: string]: any }
+  options?: { [key: string]: any },
 ) {
-  return request<API.ResultHoldingVO>("/api/holding/get", {
-    method: "GET",
+  return request<API.ResultHoldingVO>('/api/holding/get', {
+    method: 'GET',
     params: {
       ...params,
     },
     ...(options || {}),
-  });
+  })
 }
 
 /** 统一查询持仓，各条件为空时不过滤 POST /api/holding/list */
-export async function list(
-  body: API.HoldingQueryRequest,
-  options?: { [key: string]: any }
-) {
-  return request<API.ResultListHoldingVO>("/api/holding/list", {
-    method: "POST",
+export async function list(body: API.HoldingQueryRequest, options?: { [key: string]: any }) {
+  return request<API.ResultListHoldingVO>('/api/holding/list', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     data: body,
     ...(options || {}),
-  });
+  })
+}
+
+/** 持仓总览，按品种聚合并带出名称与最新净值 GET /api/holding/overview */
+export async function overview(options?: { [key: string]: any }) {
+  return request<API.ResultHoldingOverviewVO>('/api/holding/overview', {
+    method: 'GET',
+    ...(options || {}),
+  })
+}
+
+/** 卖出扣减，按先进先出扣已有持仓 POST /api/holding/sell */
+export async function sell(body: API.HoldingSellRequest, options?: { [key: string]: any }) {
+  return request<API.ResultListHoldingVO>('/api/holding/sell', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 按品种汇总持有中份额与加权成本，供消歧候选回显 GET /api/holding/summary */
+export async function summary(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.summaryParams,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultHoldingSummaryVO>('/api/holding/summary', {
+    method: 'GET',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
 }
 
 /** 按主键更新持仓 POST /api/holding/update */
-export async function update(
-  body: API.HoldingUpdateRequest,
-  options?: { [key: string]: any }
-) {
-  return request<API.ResultBoolean>("/api/holding/update", {
-    method: "POST",
+export async function update(body: API.HoldingUpdateRequest, options?: { [key: string]: any }) {
+  return request<API.ResultBoolean>('/api/holding/update', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     data: body,
     ...(options || {}),
-  });
+  })
 }
