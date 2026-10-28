@@ -117,6 +117,26 @@ declare namespace API {
     id?: number;
   };
 
+  type DividendManualRequest = {
+    /** 指数代码，如 399321 */
+    indexCode?: string;
+    /** 数据日期，必须由使用者填真实日期，不允许默认今天 */
+    dataDate?: string;
+    /** 股息率，单位百分点，如 4.08 表示 4.08% */
+    dividendYield?: number;
+    /** 指数中文全称，可空 */
+    indexName?: string;
+  };
+
+  type DividendQueryRequest = {
+    /** 指数代码 */
+    indexCode?: string;
+    /** 基金业务主键，传入时按其跟踪指数查询 */
+    varietyKey?: string;
+    /** 返回的最近期数，为空时取默认值 */
+    limit?: number;
+  };
+
   type EstimateBatchRequest = {
     /** 品种业务主键列表，为空时按全部 HOLDING 状态的持仓预估 */
     varietyKeys?: string[];
@@ -583,6 +603,78 @@ declare namespace API {
     updateTime?: string;
   };
 
+  type IndexDividendOverviewVO = {
+    /** 指数代码 */
+    indexCode?: string;
+    /** 指数中文全称 */
+    indexName?: string;
+    /** 最新数据日期，页面与邮件必须显示 */
+    dataDate?: string;
+    /** 最新股息率，单位百分点 */
+    dividendYield?: number;
+    /** 数据来源，取最新一期 */
+    sourceLabel?: string;
+    /** 距今已过天数 */
+    ageDays?: number;
+    /** 是否已过期，过期时不得据此给出加减仓动作 */
+    stale?: boolean;
+    /** 过期说明，未过期时为 null */
+    staleReason?: string;
+    /** 自动抓取是否可用，国证系列为 false */
+    autoAvailable?: boolean;
+    /** 关联的基金代码列表，即跟踪该指数的持仓 */
+    fundCodes?: string[];
+    /** 近期序列，按日期降序 */
+    history?: IndexDividendVO[];
+  };
+
+  type IndexDividendRefreshVO = {
+    /** 刷新日期 */
+    refreshDate?: string;
+    /** 成功写入的指数数量 */
+    savedCount?: number;
+    /** 自动抓取不可用、需要手工覆盖的指数数量 */
+    manualRequiredCount?: number;
+    /** 明细，逐只带结果与原因 */
+    items?: Item[];
+  };
+
+  type IndexDividendVO = {
+    /** 指数代码 */
+    indexCode?: string;
+    /** 指数中文全称 */
+    indexName?: string;
+    /** 数据日期 */
+    dataDate?: string;
+    /** 股息率，单位百分点 */
+    dividendYield?: number;
+    /** 股息率1（总股本） */
+    dividendYield1?: number;
+    /** 股息率2（计算用股本） */
+    dividendYield2?: number;
+    /** 数据来源 */
+    source?: "AUTO" | "MANUAL";
+    /** 数据来源中文名 */
+    sourceLabel?: string;
+  };
+
+  type Item = {
+    /** 指数代码 */
+    indexCode?: string;
+    /** 指数中文全称 */
+    indexName?: string;
+    /** 数据日期 */
+    dataDate?: string;
+    /** 股息率，单位百分点 */
+    dividendYield?: number;
+    /** 是否写入成功 */
+    saved?: boolean;
+    /** 是否需要手工覆盖，自动抓取取不到时为 true */
+    manualRequired?: boolean;
+    /** 结果说明，失败与跳过时给出原因 */
+    message?: string;
+  };
+
   type MarketBarVO = {
     /** 交易日 */
     date?: string;
@@ -756,6 +848,19 @@ declare namespace API {
     data?: HoldingVO;
   };
 
+  type ResultIndexDividendOverviewVO = {
+    code?: number;
+    msg?: string;
+    /** 指数股息率总览，把最新值与数据日期、是否过期一起返回 */
+    data?: IndexDividendOverviewVO;
+  };
+
+  type ResultIndexDividendRefreshVO = {
+    code?: number;
+    msg?: string;
+    data?: IndexDividendRefreshVO;
+  };
+
   type ResultListEstimateErrorTrendVO = {
     code?: number;
     msg?: string;
@@ -778,6 +883,12 @@ declare namespace API {
     code?: number;
     msg?: string;
     data?: HoldingVO[];
+  };
+
+  type ResultListIndexDividendOverviewVO = {
+    code?: number;
+    msg?: string;
+    data?: IndexDividendOverviewVO[];
   };
 
   type ResultListMarketHistoryVO = {

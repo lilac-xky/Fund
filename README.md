@@ -12,7 +12,7 @@
 | 技术方案 | 已定案（`docs/02-tech/TECH-PRD.md` v0.4） |
 | 排期 | 30 条 issue / 184 小时（`docs/03-plan/`） |
 | 探针 | ISSUE-001 已完成，结论见 `docs/04-research/` |
-| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口）；ISSUE-005 历史净值与重仓股已落地（第 7 张表 `fund_net_worth` + `GET /fund/snapshot`）；ISSUE-006 盘中行情已落地（腾讯/新浪多源回退 + Redis 缓存 + 4 个 `/quote` 接口）；ISSUE-007 预估引擎已落地（4 条分支 + A/B/C 档位 + 不可预估分支 + 2 个 `/estimate` 接口）；ISSUE-008 晚间校准已落地（第 8、9 张表 `estimate_snapshot` / `estimate_gold_beta` + 误差历史扩列 + 滚动档位 + 5 个 `/estimate/calibration` 接口） |
+| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口）；ISSUE-005 历史净值与重仓股已落地（第 7 张表 `fund_net_worth` + `GET /fund/snapshot`）；ISSUE-006 盘中行情已落地（腾讯/新浪多源回退 + Redis 缓存 + 4 个 `/quote` 接口）；ISSUE-007 预估引擎已落地（4 条分支 + A/B/C 档位 + 不可预估分支 + 2 个 `/estimate` 接口）；ISSUE-008 晚间校准已落地（第 8、9 张表 `estimate_snapshot` / `estimate_gold_beta` + 误差历史扩列 + 滚动档位 + 5 个 `/estimate/calibration` 接口）；ISSUE-009 中证股息率已落地（第 10 张表 `index_dividend` + HSSF 解析老式 `.xls` + 手工覆盖 + 3 个 `/dividend` 接口） |
 
 ## 这个工具做什么
 
@@ -39,7 +39,7 @@
 | 存储 | MySQL / MariaDB + Redis | MySQL 存业务数据，Redis 存当日行情缓存与断网降级快照 |
 | 会话 | Spring Session Data Redis + Redisson 3.50 | 登录态共享，分布式锁 |
 | 前端 | Vue 3.5 + Vite 8 + Pinia + Vue Router | 前后端分离，后端只出 JSON |
-| 工具库 | Hutool 5.8、FastJSON 1.2 | |
+| 工具库 | Hutool 5.8、FastJSON 1.2、Apache POI 5.5（仅 `poi`，解析中证老式 `.xls`） | |
 | 部署 | 宝塔面板托管 jar + Nginx 反代 + HTTPS | 单机单应用，不引入容器 |
 
 > 技术选型的完整理由与取舍见 `docs/02-tech/TECH-PRD.md` 第二部分与 `docs/02-tech/decisions.md`。
@@ -52,7 +52,7 @@ fund/
 │   ├── pom.xml
 │   └── src/main/
 │       ├── java/com/lilac/
-│       │   ├── adapter/          # 外部数据源适配器（基金全集、身份回显、净值与持仓、盘中行情、HTTP 封装）
+│       │   ├── adapter/          # 外部数据源适配器（基金全集、身份回显、净值与持仓、盘中行情、中证股息率、HTTP 封装）
 │       │   ├── common/           # 通用请求对象（分页、删除）
 │       │   ├── config/           # MyBatis-Flex 全局配置、Redis key 规范、data 目录配置
 │       │   ├── domain/
@@ -68,7 +68,7 @@ fund/
 │       │   ├── utils/            # 工具类（ThrowUtils 等）
 │       │   └── BackendApplication.java
 │       └── resources/
-│           ├── db/schema.sql     # 九张业务表结构，启动时自动执行
+│           ├── db/schema.sql     # 十张业务表结构，启动时自动执行
 │           └── application.yml   # application-dev.yml 为本地连接配置（不进 Git）
 ├── frontend/                     # Vue 3 前端
 │   ├── src/
@@ -109,7 +109,7 @@ java -jar target/backend-0.0.1-SNAPSHOT.jar
 
 数据库与 Redis 连接信息在 `backend/src/main/resources/application-dev.yml`，该文件**已被 `.gitignore` 排除**，请勿提交。
 
-九张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。其中 `fund_catalog` 是基金全集缓存，首次录入前调 `POST /api/fund/catalog/sync` 拉取（约 2.8 万条），也可等首次消歧时自动触发；`fund_net_worth` 是历史净值序列，调 `GET /api/fund/snapshot?code=` 时按需落库。这两张表都可从上游重建。`estimate_snapshot` 与 `estimate_gold_beta` 是 ISSUE-008 新增的两张表，分别存当日预估留存与黄金 β 记录，**不可从上游重建，须优先备份**；`estimate_error` 在旧库上会自动补列（`SchemaColumnUpgrader`）。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
+十张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。其中 `fund_catalog` 是基金全集缓存，首次录入前调 `POST /api/fund/catalog/sync` 拉取（约 2.8 万条），也可等首次消歧时自动触发；`fund_net_worth` 是历史净值序列，调 `GET /api/fund/snapshot?code=` 时按需落库。这两张表都可从上游重建。`estimate_snapshot` 与 `estimate_gold_beta` 是 ISSUE-008 新增的两张表，分别存当日预估留存与黄金 β 记录，**不可从上游重建，须优先备份**；`estimate_error` 在旧库上会自动补列（`SchemaColumnUpgrader`）。`index_dividend` 是 ISSUE-009 新增的指数股息率表，调 `POST /api/dividend/refresh` 从中证官网抓取，国证系列（`399321`）与深证红利（`399324`）官网不提供，走 `POST /api/dividend/manual` 手工录入。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
 
 ### 前端
 
@@ -172,7 +172,7 @@ docs/06-features/web/ISSUE-015-早午盘总览页.md
 | 排期 | [`docs/03-plan/ROADMAP.md`](docs/03-plan/ROADMAP.md)、[`docs/03-plan/ISSUES.md`](docs/03-plan/ISSUES.md) |
 | 研究 | [`docs/04-research/`](docs/04-research/) |
 | 规范 | [`docs/05-conventions/README.md`](docs/05-conventions/README.md) |
-| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md)、[`docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md`](docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md)、[`docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md`](docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md)、[`docs/06-features/engine/ISSUE-007-预估引擎.md`](docs/06-features/engine/ISSUE-007-预估引擎.md)、[`docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md`](docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md) |
+| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md)、[`docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md`](docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md)、[`docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md`](docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md)、[`docs/06-features/engine/ISSUE-007-预估引擎.md`](docs/06-features/engine/ISSUE-007-预估引擎.md)、[`docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md`](docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md)、[`docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md`](docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md) |
 
 ## 与 TECH-PRD 的偏差（待裁定）
 
