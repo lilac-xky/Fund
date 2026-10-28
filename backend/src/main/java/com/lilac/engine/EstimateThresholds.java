@@ -20,6 +20,36 @@ public class EstimateThresholds {
     private BigDecimal aMaeLimit = new BigDecimal("0.3");
 
     /**
+     * 股票型、场内 ETF、红利、黄金的误差阈值，百分点
+     */
+    @Value("${fund.estimate.tier.stock-error-threshold:0.3}")
+    private BigDecimal stockErrorThreshold = new BigDecimal("0.3");
+
+    /**
+     * 债券型的误差阈值，百分点；债券日波动本身极小，套用 0.3 会让阈值失去意义
+     */
+    @Value("${fund.estimate.tier.bond-error-threshold:0.10}")
+    private BigDecimal bondErrorThreshold = new BigDecimal("0.10");
+
+    /**
+     * 判定方向命中时的涨跌下限，百分点；两侧都超过该值才比较方向
+     */
+    @Value("${fund.estimate.tier.direction-floor:0.05}")
+    private BigDecimal directionFloor = new BigDecimal("0.05");
+
+    /**
+     * 混合型区间覆盖率下限，实际值落在区间内的比例
+     */
+    @Value("${fund.estimate.tier.interval-coverage-min:0.80}")
+    private BigDecimal intervalCoverageMin = new BigDecimal("0.80");
+
+    /**
+     * 连续超阈值多少期后给出「建议停用该基金预估」提示
+     */
+    @Value("${fund.estimate.tier.suspend-consecutive-days:3}")
+    private int suspendConsecutiveDays = 3;
+
+    /**
      * B 档要求的方向准确率下限
      */
     @Value("${fund.estimate.tier.b-direction-accuracy:0.85}")
@@ -132,4 +162,10 @@ public class EstimateThresholds {
      */
     @Value("${fund.estimate.cache-ttl-seconds:1800}")
     private long cacheTtlSeconds = 1800;
+
+    /**
+     * 取实际净值时的回溯天数，覆盖最近一个交易日的净值公布延迟
+     */
+    @Value("${fund.estimate.calibration.actual-lookback-days:10}")
+    private int actualLookbackDays = 10;
 }

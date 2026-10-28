@@ -49,22 +49,77 @@ CREATE TABLE IF NOT EXISTS strategy_param (
   DEFAULT CHARSET = utf8mb4 COMMENT ='策略参数，按分组加参数名存放，值统一为字符串';
 
 CREATE TABLE IF NOT EXISTS estimate_error (
-    id               BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
-    varietyKey       VARCHAR(32)    NOT NULL COMMENT '对应品种的业务主键',
-    tradeDate        DATE           NOT NULL COMMENT '交易日',
-    estimatedChange  DECIMAL(12, 6) NOT NULL COMMENT '预估涨跌幅，单位百分点',
-    actualChange     DECIMAL(12, 6) NOT NULL COMMENT '实际涨跌幅，单位百分点',
-    errorValue       DECIMAL(12, 6) NOT NULL COMMENT '误差，预估减实际，单位百分点',
-    overThreshold    TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '是否超过该类型阈值',
-    disclosurePeriod VARCHAR(16)             DEFAULT NULL COMMENT '重仓股披露期，如 2026Q2',
-    outputTier       VARCHAR(4)              DEFAULT NULL COMMENT '当时输出档位 A / B / C',
-    createTime       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updateTime       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    id                    BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    varietyKey            VARCHAR(32)    NOT NULL COMMENT '对应品种的业务主键',
+    tradeDate             DATE           NOT NULL COMMENT '交易日',
+    estimatedChange       DECIMAL(12, 6)          DEFAULT NULL COMMENT '预估涨跌幅，单位百分点；混合型只给方向与区间时为 null',
+    actualChange          DECIMAL(12, 6) NOT NULL COMMENT '实际涨跌幅，单位百分点',
+    errorValue            DECIMAL(12, 6)          DEFAULT NULL COMMENT '误差，预估减实际，单位百分点；无点估计时为 null',
+    overThreshold         TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '是否超过该类型阈值，混合型为方向未命中或落在区间外',
+    thresholdValue        DECIMAL(12, 6)          DEFAULT NULL COMMENT '本次判定所用阈值，百分点；混合型为 null',
+    directionHit          TINYINT(1)              DEFAULT NULL COMMENT '方向是否命中，混合型统计用',
+    inInterval            TINYINT(1)              DEFAULT NULL COMMENT '实际值是否落在所给区间内，混合型统计用',
+    intervalWidth         DECIMAL(12, 6)          DEFAULT NULL COMMENT '所给区间宽度，百分点，混合型统计用',
+    disclosurePeriod      VARCHAR(16)             DEFAULT NULL COMMENT '重仓股披露期，如 2026Q2',
+    holdingCutoffDate     DATE                    DEFAULT NULL COMMENT '当时持仓截止日',
+    holdingDisclosureDate DATE                    DEFAULT NULL COMMENT '当时持仓披露日',
+    outputTier            VARCHAR(4)              DEFAULT NULL COMMENT '当时输出档位 A / B / C',
+    estimateSource        VARCHAR(16)             DEFAULT NULL COMMENT '预估来源 SNAPSHOT / RECOMPUTED',
+    createTime            DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime            DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY ukErrorVarietyDate (varietyKey, tradeDate),
     KEY idxErrorTradeDate (tradeDate)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='误差历史，每个交易日预估与实际净值的对照结果';
+
+CREATE TABLE IF NOT EXISTS estimate_snapshot (
+    id                    BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    varietyKey            VARCHAR(32)    NOT NULL COMMENT '对应品种的业务主键',
+    tradeDate             DATE           NOT NULL COMMENT '预估所属交易日',
+    category              VARCHAR(16)             DEFAULT NULL COMMENT '当时基金类型',
+    branch                VARCHAR(24)             DEFAULT NULL COMMENT '当时走的预估分支',
+    outputTier            VARCHAR(4)              DEFAULT NULL COMMENT '当时输出档位 A / B / C',
+    estimatedChange       DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时输出的点估计，百分点；B、C 档为 null',
+    direction             VARCHAR(8)              DEFAULT NULL COMMENT '当时输出的方向 UP / DOWN / FLAT',
+    intervalLow           DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时区间下限，百分点',
+    intervalHigh          DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时区间上限，百分点',
+    coverage              DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时持仓覆盖率，百分点',
+    evaluable             TINYINT(1)     NOT NULL DEFAULT 1 COMMENT '当时是否给出了可对照输出',
+    unavailableReason     VARCHAR(255)            DEFAULT NULL COMMENT '当时不可预估的原因',
+    holdingPeriod         VARCHAR(16)             DEFAULT NULL COMMENT '当时持仓报告期',
+    holdingCutoffDate     DATE                    DEFAULT NULL COMMENT '当时持仓截止日',
+    holdingDisclosureDate DATE                    DEFAULT NULL COMMENT '当时持仓披露日',
+    beta                  DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时黄金 β',
+    rho                   DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时黄金 AR(1) 系数',
+    residualP90           DECIMAL(12, 6)          DEFAULT NULL COMMENT '当时黄金残差 P90，百分点',
+    quoteDate             DATE                    DEFAULT NULL COMMENT '当时行情数据日期',
+    dataCutoffDate        DATE                    DEFAULT NULL COMMENT '当时数据截止日期',
+    createTime            DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime            DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY ukSnapshotVarietyDate (varietyKey, tradeDate),
+    KEY idxSnapshotTradeDate (tradeDate)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='当日预估留存，供晚间校准与误差追溯，不可从上游重建';
+
+CREATE TABLE IF NOT EXISTS estimate_gold_beta (
+    id          BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    varietyKey  VARCHAR(32)    NOT NULL COMMENT '对应品种的业务主键',
+    tradeDate   DATE           NOT NULL COMMENT '记录日，与校准日一致',
+    beta        DECIMAL(12, 6) NOT NULL COMMENT '对黄金 ETF 的滚动 β',
+    alpha       DECIMAL(12, 6)          DEFAULT NULL COMMENT '回归截距，百分点',
+    rho         DECIMAL(12, 6)          DEFAULT NULL COMMENT 'AR(1) 误差系数 ρ',
+    residualP90 DECIMAL(12, 6)          DEFAULT NULL COMMENT '回归残差绝对值的 P90，百分点',
+    samples     INT                     DEFAULT NULL COMMENT '参与估计的配对样本数',
+    fallback    TINYINT(1)     NOT NULL DEFAULT 0 COMMENT '是否因样本不足退化为代理直取',
+    createTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY ukGoldBetaVarietyDate (varietyKey, tradeDate),
+    KEY idxGoldBetaTradeDate (tradeDate)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='黄金 β 记录，供 β+AR(1) 估计复用与交叉校验';
 
 CREATE TABLE IF NOT EXISTS send_record (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',

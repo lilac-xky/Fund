@@ -75,8 +75,18 @@ fund:
     # 单次预估的持仓上限，超限分批并提示，不静默丢弃；PRD 第 9 节上限为 30 只
     max-items: 30
     tier:
-      # A 档点估计的 MAE 上限，百分点
+      # A 档点估计的中位绝对误差上限，百分点
       a-mae-limit: 0.3
+      # 股票型、场内 ETF、红利、黄金的误差阈值，百分点
+      stock-error-threshold: 0.3
+      # 债券型的误差阈值，百分点；债券日波动本身极小，套用 0.3 阈值会失去意义
+      bond-error-threshold: 0.10
+      # 方向命中判定的涨跌下限，百分点；两侧都超过该值才比较方向
+      direction-floor: 0.05
+      # 混合型区间覆盖率下限，实际值落在区间内的比例
+      interval-coverage-min: 0.80
+      # 连续超阈值多少期后给出「建议停用该基金预估」提示
+      suspend-consecutive-days: 3
       # B 档要求的方向准确率下限
       b-direction-accuracy: 0.85
       # B 档要求的区间宽与波动之比上限，超过说明区间没有信息量
@@ -99,6 +109,9 @@ fund:
     max-excluded-weight: 30
     # 预估结果缓存保留时间，秒
     cache-ttl-seconds: 1800
+    calibration:
+      # 取当日实际净值时的回溯天数，覆盖净值公布延迟
+      actual-lookback-days: 10
     gold:
       # 黄金代理标的，华安黄金 ETF
       proxy-code: "518880"
