@@ -20,7 +20,7 @@ public class StartupSelfCheck implements ApplicationRunner {
 
     private static final List<String> REQUIRED_TABLES = List.of("variety", "holding", "strategy_param",
             "estimate_error", "estimate_snapshot", "estimate_gold_beta", "send_record", "fund_catalog",
-            "fund_net_worth");
+            "fund_net_worth", "index_dividend");
 
     @Resource
     private JdbcTemplate jdbcTemplate;

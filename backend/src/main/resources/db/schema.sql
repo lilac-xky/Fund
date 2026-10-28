@@ -162,3 +162,20 @@ CREATE TABLE IF NOT EXISTS fund_net_worth (
     KEY idxNetWorthDate (netWorthDate)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='基金历史净值序列，供指标计算与晚间校准复用，可从上游重建';
+
+CREATE TABLE IF NOT EXISTS index_dividend (
+    id             BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    indexCode      VARCHAR(16)    NOT NULL COMMENT '指数代码，如 000922',
+    indexName      VARCHAR(128)            DEFAULT NULL COMMENT '指数中文全称',
+    dataDate       DATE           NOT NULL COMMENT '股息率数据日期，页面与邮件必须显示，过期不参与加减仓建议',
+    dividendYield  DECIMAL(12, 6)          DEFAULT NULL COMMENT '策略使用的股息率，单位百分点，优先计算用股本口径',
+    dividendYield1 DECIMAL(12, 6)          DEFAULT NULL COMMENT '股息率1（总股本），单位百分点',
+    dividendYield2 DECIMAL(12, 6)          DEFAULT NULL COMMENT '股息率2（计算用股本），单位百分点',
+    source         VARCHAR(16)    NOT NULL COMMENT '数据来源 AUTO 自动抓取 / MANUAL 手工覆盖',
+    createTime     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime     DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY ukDividendIndexDate (indexCode, dataDate),
+    KEY idxDividendDataDate (dataDate)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='指数股息率，按指数与数据日期唯一，手工覆盖同一日期时替换自动抓取';

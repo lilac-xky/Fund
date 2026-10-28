@@ -21,7 +21,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class HttpFetcher implements TextFetcher {
+public class HttpFetcher implements TextFetcher, BinaryFetcher {
 
     private final HttpClient httpClient;
     private final String userAgent;
@@ -86,6 +86,37 @@ public class HttpFetcher implements TextFetcher {
         // fundf10 系列接口不带 Referer 会返回 404，调用方按需通过 headers 补
         headers.forEach(builder::header);
         return send(builder.build(), charset);
+    }
+
+    /**
+     * 取回原始字节与状态码，非 2xx 不抛异常而由调用方判定，只有网络失败才抛
+     *
+     * @param url     请求地址
+     * @param headers 附加请求头
+     * @return 二进制响应
+     */
+    @Override
+    public BinaryResponse fetch(String url, Map<String, String> headers) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
+                .timeout(readTimeout)
+                .header("User-Agent", userAgent)
+                .header("Accept", "*/*")
+                .GET();
+        headers.forEach(builder::header);
+        long start = System.currentTimeMillis();
+        try {
+            HttpResponse<byte[]> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            log.info("外部请求 {} 状态 {} 耗时 {}ms 字节 {}",
+                    url, response.statusCode(), System.currentTimeMillis() - start, response.body().length);
+            return new BinaryResponse(response.statusCode(), response.body(),
+                    response.headers().firstValue("content-type").orElse(""));
+        } catch (IOException e) {
+            log.warn("外部请求失败 {}：{}", url, e.getMessage());
+            throw new BusinessException(HttpsCodeEnum.OPERATION_ERROR, "外部数据源请求失败，请稍后重试");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(HttpsCodeEnum.OPERATION_ERROR, "外部数据源请求被中断");
+        }
     }
 
     /**

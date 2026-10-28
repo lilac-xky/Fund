@@ -71,6 +71,11 @@ fund:
       cache-ttl-seconds: 300
       # 历史日线默认返回根数，供滚动收益与 β 估计复用
       history-limit: 60
+    csindex:
+      # 中证指数官网估值文件，老式 .xls，只含中证与部分深证系列，国证系列返回 404
+      indicator-url: "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/{code}indicator.xls"
+      # 股息率超过该天数即标为数据过期，过期不得参与加减仓建议；股息率是慢变量，按周频抓取
+      stale-days: 7
   estimate:
     # 单次预估的持仓上限，超限分批并提示，不静默丢弃；PRD 第 9 节上限为 30 只
     max-items: 30
