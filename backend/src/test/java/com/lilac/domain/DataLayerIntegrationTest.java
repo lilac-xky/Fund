@@ -18,11 +18,13 @@ import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.ParamGroup;
 import com.lilac.enums.VarietyType;
 import com.lilac.mapper.HoldingMapper;
+import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.EstimateErrorService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.StrategyParamService;
 import com.lilac.service.VarietyService;
 import com.mybatisflex.core.logicdelete.LogicDeleteManager;
+import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +58,9 @@ class DataLayerIntegrationTest {
 
     @Autowired
     private HoldingMapper holdingMapper;
+
+    @Autowired
+    private StrategyParamMapper strategyParamMapper;
 
     /**
      * 同一代码的场外基金与指数可以同时存在且互不覆盖
@@ -198,6 +203,10 @@ class DataLayerIntegrationTest {
     @Test
     @DisplayName("策略参数分组内参数名唯一")
     void strategyParamUniqueWithinGroup() {
+        // 页面真实保存的参数会留在 dev 库，先清空本分组避免既有数据干扰计数
+        strategyParamMapper.deleteByQuery(QueryWrapper.create()
+                .eq("paramGroup", ParamGroup.DIVIDEND.name()));
+
         ParamSaveRequest baseAmount = new ParamSaveRequest();
         baseAmount.setParamGroup(ParamGroup.DIVIDEND);
         baseAmount.setParamKey("baseAmount");
@@ -222,7 +231,12 @@ class DataLayerIntegrationTest {
         ParamQueryRequest byGroup = new ParamQueryRequest();
         byGroup.setParamGroup(ParamGroup.DIVIDEND);
         assertThat(strategyParamService.listParam(byGroup)).hasSize(1);
-        assertThat(strategyParamService.listParam(new ParamQueryRequest())).hasSize(1);
+        // 全表查询会带回页面真实保存的其他分组参数，这里只断言包含本条且无重复键
+        List<StrategyParamVO> all = strategyParamService.listParam(new ParamQueryRequest());
+        assertThat(all).anyMatch(row -> row.getParamGroup() == ParamGroup.DIVIDEND
+                && "baseAmount".equals(row.getParamKey()) && "120000".equals(row.getParamValue()));
+        assertThat(all.size()).isEqualTo(all.stream()
+                .map(row -> row.getParamGroup() + ":" + row.getParamKey()).distinct().count());
     }
 
     /**
