@@ -131,9 +131,10 @@ public class EstimateServiceImpl implements EstimateService {
         ThrowUtils.throwIf(varietyKeys.isEmpty(), HttpsCodeEnum.NOT_FOUND_ERROR,
                 "尚未录入持仓，请先录入品种与持仓");
         EstimateBatchVO result = estimateInChunks(varietyKeys, today);
-        // 白天真正输出的结果必须留档，否则晚间校准拿不到「当时说的是什么」
-        retainSnapshots(result, result.getDataDate() == null ? today : result.getDataDate());
-        estimateCache.save(result, result.getDataDate() == null ? today : result.getDataDate());
+        // 留存与缓存都按「行情所属交易日」记账，否则开盘前跑一次会拿昨日行情覆盖昨日留档
+        LocalDate dataDate = result.getDataDate() == null ? today : result.getDataDate();
+        retainSnapshots(result, dataDate);
+        estimateCache.save(result, dataDate);
         return result;
     }
 

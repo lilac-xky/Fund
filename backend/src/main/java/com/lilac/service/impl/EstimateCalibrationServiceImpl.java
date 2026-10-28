@@ -112,6 +112,12 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
                 gaps.add(gap(variety, "当日预估留存缺失，无法核对，请确认白天已跑过预估"));
                 continue;
             }
+            String misaligned = alignmentIssue(snapshot, tradeDate);
+            if (misaligned != null) {
+                // 留存写于交易日之后，说明预估用的行情与当日净值不对应，宁可报缺口也不产出假误差
+                gaps.add(gap(variety, misaligned));
+                continue;
+            }
             CalibrationItemVO item = calibrateOne(variety, snapshot, actual);
             if (item == null) {
                 gaps.add(gap(variety, "当时未给出任何可对照输出，不参与误差统计"));
@@ -212,6 +218,23 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
             }
         }
         return hints;
+    }
+
+    /**
+     * 检查留存的行情日期是否与待校准交易日对得上，返回 null 表示可以校准
+     *
+     * @param snapshot  当日预估留存，已按交易日筛出
+     * @param tradeDate 待校准交易日
+     * @return 不对齐的原因，对齐时返回 null
+     */
+    private String alignmentIssue(EstimateSnapshotVO snapshot, LocalDate tradeDate) {
+        LocalDate quoteDate = snapshot.getQuoteDate();
+        if (quoteDate != null && quoteDate.isBefore(tradeDate)) {
+            // 行情停在更早的交易日，预估算的是那天的涨跌，拿它比当日净值必然是假误差
+            return "留存行情日期为 " + quoteDate + "，早于校准日 " + tradeDate
+                    + "（行情未更新），预估与当日净值不对应，已跳过";
+        }
+        return null;
     }
 
     /**
