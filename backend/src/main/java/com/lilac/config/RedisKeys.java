@@ -35,7 +35,27 @@ public final class RedisKeys {
      */
     public static final long FALLBACK_TTL_SECONDS = 72 * 60 * 60L;
 
+    /**
+     * 当日预估结果前缀，结构 fund:estimate:{日期}
+     */
+    public static final String ESTIMATE = "fund:estimate:";
+
+    /**
+     * 当日预估结果保留时间，秒，供页面与邮件共用同一份结果
+     */
+    public static final long ESTIMATE_TTL_SECONDS = 30 * 60L;
+
     private RedisKeys() {
+    }
+
+    /**
+     * 拼接当日预估结果 key
+     *
+     * @param tradeDate 数据日期，如 2026-10-28
+     * @return 缓存 key
+     */
+    public static String estimateKey(String tradeDate) {
+        return ESTIMATE + tradeDate;
     }
 
     /**

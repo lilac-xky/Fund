@@ -71,3 +71,50 @@ fund:
       cache-ttl-seconds: 300
       # 历史日线默认返回根数，供滚动收益与 β 估计复用
       history-limit: 60
+  estimate:
+    # 单次预估的持仓上限，超限分批并提示，不静默丢弃；PRD 第 9 节上限为 30 只
+    max-items: 30
+    tier:
+      # A 档点估计的 MAE 上限，百分点
+      a-mae-limit: 0.3
+      # B 档要求的方向准确率下限
+      b-direction-accuracy: 0.85
+      # B 档要求的区间宽与波动之比上限，超过说明区间没有信息量
+      b-width-ratio: 1.0
+    history:
+      # 档位判定的长窗口，交易日
+      window: 60
+      # 与长窗口交叉校验的短窗口，交易日
+      short-window: 20
+      # 不足该样本数时按类型给默认档，不凭少量样本定档
+      min-samples: 20
+    interval:
+      # 区间半宽的 sigma 倍数，1.64 对应正态下约 90% 覆盖率
+      sigma-factor: 1.64
+      # 无历史误差时的默认误差标准差，百分点
+      default-sigma: 0.3
+    # 有效持仓覆盖率下限，百分点
+    min-coverage: 10
+    # 允许被剔除的持仓权重上限，百分点；超过说明数据不足，不出数
+    max-excluded-weight: 30
+    # 预估结果缓存保留时间，秒
+    cache-ttl-seconds: 1800
+    gold:
+      # 黄金代理标的，华安黄金 ETF
+      proxy-code: "518880"
+      # β 滚动窗口，交易日；实测 20 日窗口两只联接基金分别为 0.9134 / 0.9008
+      window: 20
+      # β 估计最少配对样本，不足时退化为直取代理
+      min-pairs: 10
+    bond:
+      # 债券代理标的，国泰上证 5 年期国债 ETF
+      proxy-code: "511010"
+    confidence:
+      # 高可信度要求的覆盖率下限，百分点
+      high-coverage: 85
+      # 高可信度允许的历史 MAE，百分点
+      high-mae: 0.2
+      # 中可信度要求的覆盖率下限，百分点
+      medium-coverage: 60
+      # 中可信度允许的历史 MAE，百分点
+      medium-mae: 0.35
