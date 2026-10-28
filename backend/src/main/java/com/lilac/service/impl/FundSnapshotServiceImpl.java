@@ -203,6 +203,8 @@ public class FundSnapshotServiceImpl implements FundSnapshotService {
             vo.setStockRatio(snapshot.getAssetAllocation().getStockRatio());
             vo.setBondRatio(snapshot.getAssetAllocation().getBondRatio());
             vo.setCashRatio(snapshot.getAssetAllocation().getCashRatio());
+            // 黄金与债券这类无股票持仓的基金，报告期只能由季末仓位给出
+            vo.setAllocationReportDate(snapshot.getAssetAllocation().getReportDate());
         }
         vo.setEstimable(snapshot.estimable());
         vo.setUnavailableReason(unavailableReason(snapshot));

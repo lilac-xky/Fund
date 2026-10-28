@@ -39,6 +39,11 @@ public class FundSnapshotVO implements Serializable {
     private LocalDate holdingDisclosureDate;
 
     /**
+     * 季末仓位报告期截止日，无股票持仓时用它表示数据的报告期
+     */
+    private LocalDate allocationReportDate;
+
+    /**
      * 报告期，如 2026Q2
      */
     private String holdingPeriod;
