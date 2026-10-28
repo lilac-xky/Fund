@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,6 +29,11 @@ public class FundCatalogServiceImpl implements FundCatalogService {
     private static final int BATCH_SIZE = 1000;
     private static final int NAME_SEARCH_LIMIT = 20;
     private static final String ALWAYS_TRUE_CONDITION = "1 = 1";
+
+    /**
+     * 全集未命中代码时补同步的当日节流标记
+     */
+    private volatile LocalDate lastMissingCodeSyncDate;
 
     @Resource
     private FundCatalogMapper fundCatalogMapper;
@@ -77,6 +83,30 @@ public class FundCatalogServiceImpl implements FundCatalogService {
             // 上游不可用时保留旧缓存，让消歧降级继续可用
             log.warn("基金全集同步失败，沿用旧缓存：{}", e.getMessage());
             return cachedResult(current);
+        }
+    }
+
+    /**
+     * 缓存未过期但查不到代码时补一次同步，当日已补过则跳过，用于兜住全集滞后的新发基金
+     *
+     * @return 本次是否真正执行了同步
+     */
+    @Override
+    public boolean syncForMissingCode() {
+        LocalDate today = LocalDate.now();
+        if (today.equals(lastMissingCodeSyncDate)) {
+            return false;
+        }
+        // 先占位再同步，并发请求同一天只放行一个
+        lastMissingCodeSyncDate = today;
+        try {
+            sync();
+            return true;
+        } catch (BusinessException e) {
+            // 同步失败释放占位，下次未命中还能再试
+            lastMissingCodeSyncDate = null;
+            log.warn("全集补同步失败，沿用旧缓存：{}", e.getMessage());
+            return false;
         }
     }
 

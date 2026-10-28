@@ -5,6 +5,7 @@ import com.lilac.adapter.eastmoney.ExchangeIdentityAdapter;
 import com.lilac.adapter.fund.DividendIndexRegistry;
 import com.lilac.adapter.fund.FundCategoryResolver;
 import com.lilac.adapter.fund.FundDetailAdapter;
+import com.lilac.adapter.fund.FundPingzhongDataAdapter;
 import com.lilac.adapter.model.ExchangeIdentity;
 import com.lilac.adapter.model.ExchangeKind;
 import com.lilac.domain.dto.fund.FundConfirmRequest;
@@ -62,6 +63,9 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
     private FundDetailAdapter fundDetailAdapter;
 
     @Resource
+    private FundPingzhongDataAdapter fundPingzhongDataAdapter;
+
+    @Resource
     private FundCategoryResolver fundCategoryResolver;
 
     @Resource
@@ -84,8 +88,12 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
 
         // 全集过期时先同步，同步失败沿用旧缓存
         fundCatalogService.syncIfStale();
-        FundCatalogStatusVO status = fundCatalogService.status();
         FundCatalog catalog = fundCatalogService.findByCode(code);
+        // 缓存未过期但查不到，可能是全集滞后于新发基金，当日补一次同步再查
+        if (catalog == null && fundCatalogService.syncForMissingCode()) {
+            catalog = fundCatalogService.findByCode(code);
+        }
+        FundCatalogStatusVO status = fundCatalogService.status();
 
         List<ExchangeIdentity> identities;
         boolean degraded = false;
@@ -151,11 +159,17 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
                 "指数不从持仓入口录入");
 
         FundCatalog catalog = fundCatalogService.findByCode(code);
-        ThrowUtils.throwIf(catalog == null, HttpsCodeEnum.NOT_FOUND_ERROR,
-                "未找到代码 " + code + " 对应的基金，请先刷新基金全集");
+        if (catalog == null && fundCatalogService.syncForMissingCode()) {
+            catalog = fundCatalogService.findByCode(code);
+        }
+        // 全集确实未收录时用 pingzhongdata 兜底取名，新发基金不必等全集刷新
+        String fundName = catalog == null ? fetchNameFromUpstream(code) : catalog.getFundName();
+        String fundType = catalog == null ? null : catalog.getFundType();
+        ThrowUtils.throwIf(fundName == null, HttpsCodeEnum.NOT_FOUND_ERROR,
+                "未找到代码 " + code + " 对应的基金，请核对代码");
 
         boolean exchangeTraded = request.getVarietyType() == VarietyType.ETF;
-        FundCategory inferred = fundCategoryResolver.resolve(catalog.getFundType(), catalog.getFundName(), exchangeTraded);
+        FundCategory inferred = fundCategoryResolver.resolve(fundType, fundName, exchangeTraded);
         FundCategory category = request.getCategory() == null ? inferred : request.getCategory();
         // 自动判定不出类型时不给默认值，避免把黄金当普通股票型静默使用
         ThrowUtils.throwIf(category == FundCategory.UNKNOWN, HttpsCodeEnum.PARAMS_ERROR, "该基金类型无法自动判定，请手动指定");
@@ -165,7 +179,7 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         saveRequest.setVarietyKey(request.getVarietyType().name() + ":" + code);
         saveRequest.setVarietyType(request.getVarietyType());
         saveRequest.setVarietyCode(code);
-        saveRequest.setVarietyName(catalog.getFundName());
+        saveRequest.setVarietyName(fundName);
         saveRequest.setCategory(category);
         saveRequest.setTrackIndexCode(trackIndexCode);
         saveRequest.setConfirmed(Boolean.TRUE);
@@ -174,6 +188,28 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         Variety saved = varietyMapper.selectOneByQuery(QueryWrapper.create()
                 .eq(Variety::getVarietyKey, saveRequest.getVarietyKey()));
         return BeanUtil.copyProperties(saved, VarietyVO.class);
+    }
+
+    /**
+     * 全集未收录时从 pingzhongdata 取基金简称，代码无效或上游失败返回 null 由上层拒绝
+     *
+     * @param code 6 位基金代码
+     * @return 基金简称，取不到返回 null
+     */
+    private String fetchNameFromUpstream(String code) {
+        try {
+            String name = fundPingzhongDataAdapter.fetch(code).getName();
+            ThrowUtils.throwIf(name == null || name.isBlank(), HttpsCodeEnum.NOT_FOUND_ERROR,
+                    "未找到代码 " + code + " 对应的基金，请核对代码");
+            return name;
+        } catch (BusinessException e) {
+            // 代码确实不存在时原样抛出，上游结构问题则降级拒绝录入
+            if (Integer.valueOf(HttpsCodeEnum.NOT_FOUND_ERROR.getCode()).equals(e.getCode())) {
+                throw e;
+            }
+            log.warn("上游取名失败 code={}：{}", code, e.getMessage());
+            return null;
+        }
     }
 
     /**

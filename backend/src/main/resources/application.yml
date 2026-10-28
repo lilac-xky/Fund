@@ -68,7 +68,7 @@ fund:
     enabled: true
     # 主机、账号、收件人与授权码统一写在 config/secrets.env（不进 Git），本文件只留非身份项
     # 密钥文件的键优先于这里的同名兜底值；接口只回「是否就绪」，不回显任何值
-    secrets-file: "config/secrets.env"
+    secrets-file: "backend/config/secrets.env"
     # 端口兜底值，密钥文件的 SMTP_PORT 优先；587 走 STARTTLS、465 走 SSL
     port: 587
     # 连接与读取超时，毫秒；邮件服务不可用时要快速失败，不能拖住收盘前时点

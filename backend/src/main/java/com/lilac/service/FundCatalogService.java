@@ -26,6 +26,13 @@ public interface FundCatalogService {
     FundCatalogSyncVO syncIfStale();
 
     /**
+     * 缓存未过期但查不到代码时补一次同步，当日已补过则跳过，用于兜住全集滞后的新发基金
+     *
+     * @return 本次是否真正执行了同步
+     */
+    boolean syncForMissingCode();
+
+    /**
      * 查询缓存状态
      *
      * @return 缓存状态
