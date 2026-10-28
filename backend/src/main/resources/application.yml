@@ -12,6 +12,12 @@ spring:
       mode: always
       schema-locations: classpath:db/schema.sql
       continue-on-error: false
+  task:
+    scheduling:
+      # 定时产出要取行情与发邮件，单线程会拖住后续时点，故给足线程并按任务名排查日志
+      pool:
+        size: 4
+      thread-name-prefix: fund-task-
 server:
   servlet:
     context-path: /api
@@ -28,6 +34,52 @@ fund:
   data:
     # 复盘 CSV、操作日志、未送达邮件留存的本地根目录
     root: data
+  task:
+    # 总开关，关掉后既不按时点触发也不启动补跑；手动触发接口不受影响
+    enabled: true
+    # 调度时区，服务器时区与使用者所在地不一致时靠它对齐
+    zone: Asia/Shanghai
+    # 补跑时效，分钟；过了这个窗口的漏跑不再补发，避免收盘后补一封过期提醒
+    catch-up-window-minutes: 120
+    # 时钟跳变阈值，秒；墙钟与单调时钟偏差超过它即判为跳变
+    clock-jump-threshold-seconds: 300
+    # 跳变保护时长，分钟；跳变后这段时间内的时点一律跳过并留痕
+    clock-jump-guard-minutes: 10
+    # 巡检 cron，补齐定时器漏掉的时点；重启跨过时点由它和启动补跑兜住
+    sweep-cron: "0 5 * * * *"
+    # 额外节假日清单，周末由代码判断，其余休市日在此补充
+    holidays: []
+    points:
+      MORNING:
+        cron: "0 30 9 * * MON-FRI"
+        time: "09:30"
+      NOON:
+        cron: "0 30 11 * * MON-FRI"
+        time: "11:30"
+      PRE_CLOSE:
+        # 收盘前 30 分钟，这一封漏发会直接影响当日下单
+        cron: "0 30 14 * * MON-FRI"
+        time: "14:30"
+      EVENING:
+        cron: "0 0 20 * * MON-FRI"
+        time: "20:00"
+  mail:
+    # 邮件开关，关闭时不发送也不留存，收盘前时点会记为失败
+    enabled: true
+    # 收件地址，留空时邮件通道视为未就绪，页面会提示缺项
+    recipients: []
+    # 发件地址，留空时取 SMTP 账号
+    from: ""
+    # SMTP 主机，如 smtp.qq.com / smtp.163.com；留空时 /mail/status 会提示未配置
+    host: ""
+    # 465 走 SSL，587 走 STARTTLS
+    port: 465
+    # SMTP 账号；授权码不在这里，见下一条
+    username: ""
+    # 授权码只从密钥文件读，键名 SMTP_PASSWORD；该文件不进 Git，接口也不回显
+    secrets-file: "config/secrets.env"
+    # 连接与读取超时，毫秒；邮件服务不可用时要快速失败，不能拖住收盘前时点
+    timeout-millis: 10000
   adapter:
     http:
       # 东财等公开源对无 UA 的请求直接拒绝，统一带浏览器 UA
