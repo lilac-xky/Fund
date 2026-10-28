@@ -12,6 +12,9 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 邮件内容留存，发送失败时把正文落到 data/mail，下次成功发送时读出来附在补发段
@@ -22,6 +25,16 @@ public class MailArchive {
 
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("HHmmss");
     private static final DateTimeFormatter META_STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * 失败件在文件名里的标记，补发只看这一种
+     */
+    private static final String FAILED_TAG = "-failed-";
+
+    /**
+     * 已补发标记文件的后缀，避免同一封失败件被反复补发
+     */
+    private static final String RESENT_MARK = ".resent";
 
     @Value("${fund.data.root:data}")
     private String dataRoot;
@@ -58,36 +71,70 @@ public class MailArchive {
     }
 
     /**
-     * 列出此前未送达的纯文本正文，供下次成功发送时附带补发
+     * 取待补发的失败件，含当天失败（改好口令后当天就补发是验收要求），已补发过的不再重复
      *
-     * @param beforeDate 只取该日期之前的留存，避免把今天的算成历史
-     * @param limit      最多取几封，过多会把邮件撑爆
-     * @return 未送达内容，每项为「日期 + 正文摘要」
+     * @param tradeDate 本次发送的交易日，晚于该日期的留存不计入
+     * @param limit     最多取几封，过多会把邮件撑爆
+     * @return 待补发项，每项带日期、主题与文件
      */
-    public java.util.List<String> pendingResend(LocalDate beforeDate, int limit) {
-        java.util.List<String> items = new java.util.ArrayList<>();
+    public List<Pending> pendingResend(LocalDate tradeDate, int limit) {
+        List<Pending> items = new ArrayList<>();
         try {
             Path dir = mailDir();
             if (!Files.isDirectory(dir)) {
                 return items;
             }
             try (var stream = Files.list(dir)) {
-                java.util.List<Path> files = stream
+                List<Path> files = stream
                         .filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().endsWith(".txt"))
-                        .filter(path -> isBefore(path, beforeDate))
-                        .sorted(java.util.Comparator.comparing(path ->
-                                path.getFileName().toString(), java.util.Comparator.reverseOrder()))
+                        .filter(this::isPendingFailure)
+                        .filter(path -> !isAfter(path, tradeDate))
+                        .sorted(Comparator.comparing(path -> path.getFileName().toString(),
+                                Comparator.reverseOrder()))
                         .limit(Math.max(1, limit))
                         .toList();
                 for (Path file : files) {
-                    items.add(summaryOf(file));
+                    items.add(new Pending(file, summaryOf(file)));
                 }
             }
         } catch (IOException | RuntimeException e) {
             log.warn("读取未送达内容失败：{}", e.getMessage());
         }
         return items;
+    }
+
+    /**
+     * 把失败件标记为已补发，下次不再重复列出
+     *
+     * @param pending 已补发的失败件
+     * @return 是否全部标记成功
+     */
+    public boolean markResent(List<Pending> pending) {
+        boolean all = true;
+        for (Pending item : pending) {
+            try {
+                Path mark = item.getFile().resolveSibling(item.getFile().getFileName() + RESENT_MARK);
+                Files.writeString(mark, LocalDateTime.now().format(META_STAMP), StandardCharsets.UTF_8);
+            } catch (IOException | RuntimeException e) {
+                all = false;
+                log.warn("补发标记写入失败 {}：{}", item.getFile().getFileName(), e.getMessage());
+            }
+        }
+        return all;
+    }
+
+    /**
+     * 判断一份留存是否为待补发的失败件，成功件与已标记的不算
+     *
+     * @param file 留存文件
+     * @return 待补发返回 true
+     */
+    private boolean isPendingFailure(Path file) {
+        String name = file.getFileName().toString();
+        if (!name.endsWith(".txt") || !name.contains(FAILED_TAG)) {
+            return false;
+        }
+        return !Files.exists(file.resolveSibling(name + RESENT_MARK));
     }
 
     /**
@@ -100,30 +147,30 @@ public class MailArchive {
     }
 
     /**
-     * 判断留存文件是否早于指定日期，文件名以交易日开头
+     * 判断留存文件是否晚于指定日期，晚于当天的不该算进本次补发
      *
-     * @param file 留存文件
+     * @param file 留存文件，文件名以交易日开头
      * @param date 基准日期
-     * @return 早于返回 true
+     * @return 晚于返回 true
      */
-    private boolean isBefore(Path file, LocalDate date) {
+    private boolean isAfter(Path file, LocalDate date) {
         String name = file.getFileName().toString();
         try {
-            return LocalDate.parse(name.substring(0, 10)).isBefore(date);
+            return LocalDate.parse(name.substring(0, 10)).isAfter(date);
         } catch (RuntimeException e) {
-            return false;
+            return true;
         }
     }
 
     /**
-     * 摘出留存文件的首行与主题，供补发段直接展示
+     * 摘出留存文件的日期与主题，供补发段直接展示
      *
      * @param file 留存文件
      * @return 摘要
      */
     private String summaryOf(Path file) {
         try {
-            java.util.List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
             String subject = lines.stream().filter(line -> line.startsWith("主题："))
                     .findFirst().map(line -> line.substring(3)).orElse("（无主题记录）");
             return file.getFileName().toString().substring(0, 10) + " " + subject;
@@ -141,5 +188,43 @@ public class MailArchive {
     private String relativeOf(Path file) {
         Path root = Paths.get(dataRoot).toAbsolutePath().normalize();
         return root.relativize(file).toString().replace('\\', '/');
+    }
+
+    /**
+     * 一份待补发的失败件
+     */
+    public static class Pending {
+
+        private final Path file;
+        private final String summary;
+
+        /**
+         * 记录文件与摘要
+         *
+         * @param file    留存文件
+         * @param summary 摘要
+         */
+        Pending(Path file, String summary) {
+            this.file = file;
+            this.summary = summary;
+        }
+
+        /**
+         * 取留存文件
+         *
+         * @return 文件
+         */
+        public Path getFile() {
+            return file;
+        }
+
+        /**
+         * 取摘要文字
+         *
+         * @return 摘要
+         */
+        public String getSummary() {
+            return summary;
+        }
     }
 }

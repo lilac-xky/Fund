@@ -71,19 +71,24 @@ public class CloseReminderMailService implements CloseReminderPort {
         }
         SmtpSettingsResolver.SmtpSettings settings = settingsResolver.resolve();
         MailContent content = contentBuilder.build(tradeDate, estimateOf());
-        List<String> pending = resend ? archive.pendingResend(tradeDate, RESEND_LIMIT) : List.of();
-        String subject = renderer.subject(content, resend);
+        List<MailArchive.Pending> pending = resend ? archive.pendingResend(tradeDate, RESEND_LIMIT) : List.of();
+        // 只有真的带上了未送达内容才自称补发，否则主题会出现没有实际补发内容的「【补发】」
+        boolean withResend = !pending.isEmpty();
+        String subject = renderer.subject(content, withResend);
         String html = renderer.html(content);
         String text = renderer.text(content);
-        if (!pending.isEmpty()) {
-            text = text + System.lineSeparator() + resendText(pending);
-            html = html.replace("</div></body></html>", resendHtml(pending) + "</div></body></html>");
+        if (withResend) {
+            List<String> summaries = pending.stream().map(MailArchive.Pending::getSummary).toList();
+            text = text + System.lineSeparator() + resendText(summaries);
+            html = html.replace("</div></body></html>", resendHtml(summaries) + "</div></body></html>");
         }
         try {
             if (!settings.complete()) {
                 throw new IllegalStateException("SMTP 参数不完整：" + String.join("；", settings.getMissing()));
             }
             mailSender.send(settings, subject, html, text);
+            // 发出去之后才标记，发送失败时这些失败件要留到下次继续补
+            archive.markResent(pending);
             log.info("收盘前提醒已发送 {} 收件人 {} 个 补发 {} 封", tradeDate, settings.getRecipients().size(),
                     pending.size());
         } catch (RuntimeException e) {

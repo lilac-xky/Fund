@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 邮件参数，收件人、发件人与 SMTP 服务器在此，授权码单独放 secrets.env 不进配置文件
+ * 邮件参数，只留非身份项；账号、收件人与授权码统一放 secrets.env，不进需要提交的配置文件
  */
 @Data
 @Component
@@ -21,27 +21,27 @@ public class MailProperties {
     private boolean enabled = true;
 
     /**
-     * 收件地址，可多个
+     * 收件地址兜底值，留空时以密钥文件的 SMTP_RECIPIENTS 为准
      */
     private List<String> recipients = new ArrayList<>();
 
     /**
-     * 发件地址，为空时取 SMTP 账号
+     * 发件地址兜底值，留空时以密钥文件为准，再为空则取账号
      */
     private String from;
 
     /**
-     * SMTP 主机
+     * SMTP 主机兜底值，留空时以密钥文件的 SMTP_HOST 为准
      */
     private String host;
 
     /**
-     * SMTP 端口，465 走 SSL、587 走 STARTTLS
+     * SMTP 端口兜底值，密钥文件的 SMTP_PORT 优先；587 走 STARTTLS、465 走 SSL
      */
-    private int port = 465;
+    private int port = 587;
 
     /**
-     * SMTP 账号
+     * SMTP 账号兜底值，留空时以密钥文件的 SMTP_USERNAME 为准
      */
     private String username;
 

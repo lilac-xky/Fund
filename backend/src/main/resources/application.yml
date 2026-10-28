@@ -66,18 +66,11 @@ fund:
   mail:
     # 邮件开关，关闭时不发送也不留存，收盘前时点会记为失败
     enabled: true
-    # 收件地址，留空时邮件通道视为未就绪，页面会提示缺项
-    recipients: []
-    # 发件地址，留空时取 SMTP 账号
-    from: ""
-    # SMTP 主机，如 smtp.qq.com / smtp.163.com；留空时 /mail/status 会提示未配置
-    host: ""
-    # 465 走 SSL，587 走 STARTTLS
-    port: 465
-    # SMTP 账号；授权码不在这里，见下一条
-    username: ""
-    # 授权码只从密钥文件读，键名 SMTP_PASSWORD；该文件不进 Git，接口也不回显
+    # 主机、账号、收件人与授权码统一写在 config/secrets.env（不进 Git），本文件只留非身份项
+    # 密钥文件的键优先于这里的同名兜底值；接口只回「是否就绪」，不回显任何值
     secrets-file: "config/secrets.env"
+    # 端口兜底值，密钥文件的 SMTP_PORT 优先；587 走 STARTTLS、465 走 SSL
+    port: 587
     # 连接与读取超时，毫秒；邮件服务不可用时要快速失败，不能拖住收盘前时点
     timeout-millis: 10000
   adapter:

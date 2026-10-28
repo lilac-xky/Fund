@@ -82,8 +82,12 @@ public class SmtpMailSender {
         properties.put("mail.smtp.timeout", String.valueOf(mailProperties.getTimeoutMillis()));
         properties.put("mail.smtp.connectiontimeout", String.valueOf(mailProperties.getTimeoutMillis()));
         properties.put("mail.smtp.writetimeout", String.valueOf(mailProperties.getTimeoutMillis()));
+        // 465 直连 TLS，587 必须先升级到 TLS 再认证，否则服务端会以明文拒绝
         properties.put("mail.smtp.ssl.enable", String.valueOf(ssl));
         properties.put("mail.smtp.starttls.enable", String.valueOf(!ssl));
+        properties.put("mail.smtp.starttls.required", String.valueOf(!ssl));
+        // 部分云主机默认协议过旧，显式钉到 TLS 1.2 以免握手被拒
+        properties.put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3");
         return properties;
     }
 }

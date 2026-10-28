@@ -111,7 +111,7 @@ java -jar target/backend-0.0.1-SNAPSHOT.jar
 
 十张业务表由 `backend/src/main/resources/db/schema.sql` 在启动时自动创建（`spring.sql.init.mode=always`，脚本全部 `IF NOT EXISTS`），无需手工建表。其中 `fund_catalog` 是基金全集缓存，首次录入前调 `POST /api/fund/catalog/sync` 拉取（约 2.8 万条），也可等首次消歧时自动触发；`fund_net_worth` 是历史净值序列，调 `GET /api/fund/snapshot?code=` 时按需落库。三张表都可从上游重建。`estimate_snapshot` 与 `estimate_gold_beta` 是 ISSUE-008 新增的两张表，分别存当日预估留存与黄金 β 记录，**不可从上游重建，须优先备份**；`estimate_error` 在旧库上会自动补列（`SchemaColumnUpgrader`）。`index_dividend` 是 ISSUE-009 新增的指数股息率表，调 `POST /api/dividend/refresh` 从中证官网抓取，国证系列（`399321`）与深证红利（`399324`）官网不提供，走 `POST /api/dividend/manual` 手工录入。ISSUE-010 未新增表：红利参数写入 `strategy_param` 的 `DIVIDEND` 分组（`baseAmount`/`floorAmount`/`addYield`/`reduceYield`），可通过 `POST /api/dividend/advice/plan/save` 保存，`POST /api/dividend/advice/list` 返回逐只加减仓建议。ISSUE-011 同样未新增表：复用 `send_record` 记录四个时点的发送留痕，`GET /api/task/overview` 查当日状态，`POST /api/task/trigger` 手动补发；启动补跑与每小时巡检共同兜住重启漏跑。ISSUE-012 新增邮件链路：`spring-boot-starter-mail` + HTML/纯文本双版正文，失败正文留在 `data/mail/`，`GET /api/mail/status` 查通道是否就绪、`POST /api/mail/resend` 触发补发。应用启动后 `backend/data/` 下会生成 `report/`、`op-log/`、`mail/` 三个子目录。
 
-邮件授权码不放配置文件也不进数据库，只写在 `backend/config/secrets.env`（键名 `SMTP_PASSWORD`），该文件已被 `.gitignore` 排除；模板见 `backend/config/secrets.env.example`。SMTP 主机、账号与收件人在 `application.yml` 的 `fund.mail` 下填写，任何接口都不会回显授权码。
+邮件的主机、账号、收件人与授权码**全部只写在 `backend/config/secrets.env`**，该文件已被 `.gitignore` 排除，模板见 `backend/config/secrets.env.example`（键名 `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_RECIPIENTS` / `SMTP_PASSWORD`）。`application.yml` 只保留开关、密钥文件路径、端口兜底与超时，**不含任何邮箱地址**，因此可以直接提交；任何接口都不会回显这些值，`GET /api/mail/status` 只回「是否就绪 + 缺哪项」。foxmail / QQ 邮箱用 `smtp.qq.com` + `587`（STARTTLS）。
 
 ### 前端
 

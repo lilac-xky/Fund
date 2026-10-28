@@ -23,37 +23,37 @@ public class SecretsLoader {
      * 读密钥文件为键值表，文件不存在或读不到时返回空表，由调用方给出「未配置」结论
      *
      * @param file 密钥文件路径
-     * @return 键值表
+     * @return 键值
      */
-    public Map<String, String> load(String file) {
-        Map<String, String> secrets = new LinkedHashMap<>();
+    public Secrets loadAll(String file) {
+        Map<String, String> values = new LinkedHashMap<>();
         if (file == null || file.isBlank()) {
-            return secrets;
+            return new Secrets(values);
         }
         Path path = Paths.get(file).toAbsolutePath().normalize();
         if (!Files.isRegularFile(path)) {
             log.info("密钥文件不存在，按未配置处理：{}", path);
-            return secrets;
+            return new Secrets(values);
         }
         try {
             List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
             for (String line : lines) {
-                putLine(secrets, line);
+                putLine(values, line);
             }
         } catch (IOException e) {
             // 只吐路径与异常类型，异常消息里可能带内容片段
             log.warn("密钥文件读取失败 {}：{}", path, e.getClass().getSimpleName());
         }
-        return secrets;
+        return new Secrets(values);
     }
 
     /**
-     * 解析一行 KEY=VALUE，注释与空行跳过
+     * 解析一行 KEY=VALUE，注释与空行跳过，值两侧引号去掉
      *
-     * @param secrets 键值表
-     * @param line    原始行
+     * @param values 键值表
+     * @param line   原始行
      */
-    private void putLine(Map<String, String> secrets, String line) {
+    private void putLine(Map<String, String> values, String line) {
         if (line == null) {
             return;
         }
@@ -67,11 +67,46 @@ public class SecretsLoader {
         }
         String key = trimmed.substring(0, index).trim();
         String value = trimmed.substring(index + 1).trim();
-        // 值两侧允许带引号，去掉后才是真正的授权码
         if (value.length() >= 2 && (value.startsWith("\"") && value.endsWith("\"")
                 || value.startsWith("'") && value.endsWith("'"))) {
             value = value.substring(1, value.length() - 1);
         }
-        secrets.put(key, value);
+        values.put(key, value);
+    }
+
+    /**
+     * 密钥键值只读视图，避免调用方拿到原始 Map 后随手打印
+     */
+    public static class Secrets {
+
+        private final Map<String, String> values;
+
+        /**
+         * 包装键值表
+         *
+         * @param values 键值表
+         */
+        Secrets(Map<String, String> values) {
+            this.values = values;
+        }
+
+        /**
+         * 按键取值
+         *
+         * @param key 键名
+         * @return 值，不存在返回 null
+         */
+        public String get(String key) {
+            return values.get(key);
+        }
+
+        /**
+         * 判断是否没有任何键，供测试与诊断使用
+         *
+         * @return 空返回 true
+         */
+        public boolean isEmpty() {
+            return values.isEmpty();
+        }
     }
 }

@@ -32,6 +32,8 @@ class CloseReminderMailServiceTest {
 
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 10, 30);
 
+    private static final String MISSING_SECRETS = "target/absent-test-secrets.env";
+
     @Autowired
     private CloseReminderMailService mailService;
 
@@ -54,12 +56,14 @@ class CloseReminderMailServiceTest {
     private MailContentBuilder mailContentBuilder;
 
     /**
-     * 清掉持仓与留痕，并让内容装配返回一份空持仓模型
+     * 清掉持仓与留痕、把密钥文件指到不存在的位置，并让内容装配返回一份空持仓模型
      */
     @BeforeEach
     void setUp() {
         holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         sendRecordMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // 用例不能读开发者本机的真实授权码，否则「未配置」断言会随环境变化
+        mailProperties.setSecretsFile(MISSING_SECRETS);
         MailContent empty = new MailContent();
         empty.setTradeDate(TRADE_DATE);
         Mockito.when(mailContentBuilder.build(ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(empty);
