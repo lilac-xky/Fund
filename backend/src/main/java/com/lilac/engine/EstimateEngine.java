@@ -49,6 +49,8 @@ public class EstimateEngine {
     private static final String GOLD_DIRECT = "黄金 β 样本不足，已退化为代理直取";
     private static final String INTERVAL_CROSS_ZERO = "预估区间跨零，方向本身不确定，仅供参考";
     private static final String LOW_COVERAGE_NOTE = "持仓覆盖率偏低，预估误差可能放大";
+    private static final String LINK_FUND_KEYWORD = "联接";
+    private static final String LINK_FUND_NOTE = "ETF 联接基金按所跟踪指数估算，个股权重未参与加权";
 
     private final HoldingWeightCalculator holdingWeightCalculator;
     private final TierResolver tierResolver;
@@ -111,6 +113,17 @@ public class EstimateEngine {
     }
 
     /**
+     * 该基金是否按 ETF 联接处理，联接基金的季报不披露个股，只能按指数估算
+     *
+     * @param context 预估输入
+     * @return 联接基金返回 true
+     */
+    private boolean isLinkFund(EstimateContext context) {
+        String name = context.getVariety().getVarietyName();
+        return name != null && name.contains(LINK_FUND_KEYWORD);
+    }
+
+    /**
      * 判断走哪条分支：场内 ETF 与被动指数型指数直取，黄金走 β 分支，债券走代理，其余持仓加权
      *
      * @param context  预估输入
@@ -128,8 +141,12 @@ public class EstimateEngine {
             return EstimateBranch.INDEX_ONLY;
         }
         String rawType = context.getRawFundType() == null ? "" : context.getRawFundType();
-        // 被动指数型走指数直取，红利按 ISSUE-001 实测仍用全量持仓加权更稳
-        if (rawType.startsWith("指数型") && category != FundCategory.DIVIDEND
+        boolean passive = rawType.startsWith("指数型");
+        // ETF 联接的季报里只有那只 ETF 与现金，个股权重合计不到 1%，持仓加权必然判覆盖率不足
+        boolean linkFund = isLinkFund(context);
+        // 红利按 ISSUE-001 实测用全量持仓加权更稳，但联接基金没有可加权的个股，只能走指数直取
+        boolean dividendByIndex = category == FundCategory.DIVIDEND && linkFund;
+        if (passive && (category != FundCategory.DIVIDEND || dividendByIndex)
                 && context.getProxySymbol() != null) {
             return EstimateBranch.INDEX_ONLY;
         }
@@ -161,6 +178,10 @@ public class EstimateEngine {
         fillAllocationDate(context, outcome);
         fillPointOrTier(outcome, scale(quote.getChangePercent()), stats);
         outcome.getRemarks().add(extraNote);
+        // 联接基金必须说明个股没有参与加权，否则使用者会以为这只数是用重仓股算的
+        if (isLinkFund(context)) {
+            outcome.getRemarks().add(LINK_FUND_NOTE);
+        }
     }
 
     /**

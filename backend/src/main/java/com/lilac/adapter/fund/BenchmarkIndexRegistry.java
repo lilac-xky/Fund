@@ -13,7 +13,10 @@ public final class BenchmarkIndexRegistry {
     static {
         // 顺序敏感：先长后短，避免「沪深300」被更短的词抢走
         INDEX_BY_NAME.put("中证红利低波动100", "930955");
+        INDEX_BY_NAME.put("红利低波100", "930955");
         INDEX_BY_NAME.put("中证红利低波动", "H30269");
+        // 「红利低波」是上面那条的简称，必须排在「中证红利」之前，否则会被判成中证红利
+        INDEX_BY_NAME.put("红利低波", "H30269");
         INDEX_BY_NAME.put("中证主要消费", "000932");
         INDEX_BY_NAME.put("中证医药卫生", "000933");
         INDEX_BY_NAME.put("全指医药", "000991");

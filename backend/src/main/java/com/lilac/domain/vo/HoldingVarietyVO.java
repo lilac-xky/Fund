@@ -110,5 +110,15 @@ public class HoldingVarietyVO implements Serializable {
      */
     private BigDecimal dailyChangePercent;
 
+    /**
+     * 持仓期间累计的现金分红金额，单位元；无累计净值数据时为 null
+     */
+    private BigDecimal dividendAmount;
+
+    /**
+     * 分红口径说明，如「按累计净值推算，建仓以来」
+     */
+    private String dividendNote;
+
     private static final long serialVersionUID = 1L;
 }

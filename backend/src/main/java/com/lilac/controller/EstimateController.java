@@ -3,16 +3,20 @@ package com.lilac.controller;
 import com.lilac.domain.dto.estimate.EstimateBatchRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.EstimateBatchVO;
+import com.lilac.domain.vo.EstimateTrackVO;
 import com.lilac.domain.vo.EstimateVO;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.service.EstimateService;
 import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.Resource;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 /**
  * 预估接口，供页面、邮件与晚间校准取当日预估涨跌
@@ -40,5 +44,13 @@ public class EstimateController {
         ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(),
                 HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
         return Result.success(estimateService.estimateOne(varietyKey.trim()));
+    }
+
+    /**
+     * 读取整体预估的盘中轨迹，行情条据此画出当天走向
+     */
+    @GetMapping("/track")
+    public Result<EstimateTrackVO> track(@RequestParam(value = "tradeDate", required = false) LocalDate tradeDate) {
+        return Result.success(estimateService.track(tradeDate));
     }
 }

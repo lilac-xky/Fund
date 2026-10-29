@@ -1,6 +1,7 @@
 package com.lilac.engine;
 
 import com.lilac.adapter.fund.BenchmarkIndexRegistry;
+import com.lilac.adapter.fund.IndexEtfRegistry;
 import com.lilac.adapter.model.MarketSymbol;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.FundCategory;
@@ -20,6 +21,7 @@ public class BenchmarkResolver {
 
     // 基金简称里出现的 6 位指数代码，如 中证1000指数(000852)
     private static final Pattern CODE_IN_NAME = Pattern.compile("\\((\\d{6})\\)");
+    private static final Pattern NUMERIC_CODE = Pattern.compile("^\\d{5,6}$");
 
     private final EstimateThresholds thresholds;
 
@@ -89,8 +91,19 @@ public class BenchmarkResolver {
         if (code == null || code.isBlank()) {
             return null;
         }
+        String trimmed = code.trim();
+        // H30269 这类字母开头的指数代码推不出市场，改取跟踪它的 ETF
+        if (!NUMERIC_CODE.matcher(trimmed).matches()) {
+            String etfCode = IndexEtfRegistry.findByIndexCode(trimmed);
+            if (etfCode == null) {
+                log.warn("指数 {} 无对应可交易 ETF，跳过代理解析", trimmed);
+                return null;
+            }
+            log.info("指数 {} 用跟踪它的 ETF {} 作代理标的", trimmed, etfCode);
+            trimmed = etfCode;
+        }
         try {
-            return MarketSymbol.of(code.trim()).symbol();
+            return MarketSymbol.of(trimmed).symbol();
         } catch (RuntimeException e) {
             log.warn("代理标的代码无法识别：{}", code);
             return null;

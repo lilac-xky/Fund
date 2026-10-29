@@ -13,6 +13,7 @@ import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.entity.FundCatalog;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateErrorVO;
+import com.lilac.domain.vo.EstimateTrackVO;
 import com.lilac.domain.vo.EstimateVO;
 import com.lilac.domain.vo.FundSnapshotVO;
 import com.lilac.domain.vo.HoldingItemVO;
@@ -23,10 +24,12 @@ import com.lilac.engine.EstimateCache;
 import com.lilac.engine.EstimateConverter;
 import com.lilac.engine.EstimateEngine;
 import com.lilac.engine.EstimateThresholds;
+import com.lilac.engine.EstimateTrackStore;
 import com.lilac.engine.GoldBetaEstimator;
 import com.lilac.engine.HoldingWeightCalculator;
 import com.lilac.engine.model.EstimateContext;
 import com.lilac.engine.model.EstimateOutcome;
+import com.lilac.engine.model.EstimateTrack;
 import com.lilac.enums.EstimateBranch;
 import com.lilac.enums.EstimateTier;
 import com.lilac.enums.FundCategory;
@@ -87,6 +90,9 @@ public class EstimateServiceImpl implements EstimateService {
     private EstimateCache estimateCache;
 
     @Resource
+    private EstimateTrackStore estimateTrackStore;
+
+    @Resource
     private HoldingService holdingService;
 
     @Resource
@@ -124,7 +130,10 @@ public class EstimateServiceImpl implements EstimateService {
         if (!refresh) {
             Optional<EstimateBatchVO> cached = estimateCache.read(today);
             if (cached.isPresent()) {
-                return cached.get();
+                EstimateBatchVO hit = cached.get();
+                // 命中缓存也要记轨迹，否则一个交易时点内只有第一次请求留下点
+                recordTrack(hit, today);
+                return hit;
             }
         }
         List<String> varietyKeys = resolveVarietyKeys(query);
@@ -135,7 +144,38 @@ public class EstimateServiceImpl implements EstimateService {
         LocalDate dataDate = result.getDataDate() == null ? today : result.getDataDate();
         retainSnapshots(result, dataDate);
         estimateCache.save(result, dataDate);
+        recordTrack(result, dataDate);
         return result;
+    }
+
+    /**
+     * 读取今日整体预估的盘中轨迹，供行情条画曲线
+     *
+     * @param tradeDate 交易日，为空时取今天
+     * @return 轨迹
+     */
+    @Override
+    public EstimateTrackVO track(LocalDate tradeDate) {
+        LocalDate date = tradeDate == null ? LocalDate.now() : tradeDate;
+        EstimateTrack track = estimateTrackStore.read(date);
+        EstimateTrackVO vo = new EstimateTrackVO();
+        vo.setTradeDate(date);
+        vo.setPoints(track.getPoints());
+        vo.setPointCount(track.getPoints() == null ? 0 : track.getPoints().size());
+        if (track.getPoints() == null || track.getPoints().size() < 2) {
+            vo.setNote("轨迹从今日首次预估开始记录，满 2 个采样点后才会画出走势");
+        }
+        return vo;
+    }
+
+    /**
+     * 记录一个轨迹采样点，失败只告警不影响预估本身
+     *
+     * @param result    预估总览
+     * @param tradeDate 交易日
+     */
+    private void recordTrack(EstimateBatchVO result, LocalDate tradeDate) {
+        estimateTrackStore.record(tradeDate, result.getOverallChange(), result.getEstimableCount());
     }
 
     /**
@@ -287,7 +327,11 @@ public class EstimateServiceImpl implements EstimateService {
             return EstimateBranch.INDEX_ONLY;
         }
         String rawType = rawFundType == null ? "" : rawFundType;
-        if (rawType.startsWith("指数型") && category != FundCategory.DIVIDEND && proxySymbol != null) {
+        // ETF 联接的季报只有那只 ETF 与现金，个股加权必判覆盖率不足，与引擎同样改走指数直取
+        boolean linkFund = variety.getVarietyName() != null && variety.getVarietyName().contains("联接");
+        boolean dividendByIndex = category == FundCategory.DIVIDEND && linkFund;
+        if (rawType.startsWith("指数型") && (category != FundCategory.DIVIDEND || dividendByIndex)
+                && proxySymbol != null) {
             return EstimateBranch.INDEX_ONLY;
         }
         return EstimateBranch.STOCK_WEIGHTED;

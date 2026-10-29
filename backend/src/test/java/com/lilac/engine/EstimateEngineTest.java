@@ -134,6 +134,32 @@ class EstimateEngineTest {
     }
 
     /**
+     * 红利 ETF 联接基金改走指数直取，季报只有那只 ETF 与现金，个股合计不到 1%
+     */
+    @Test
+    @DisplayName("红利 ETF 联接基金走指数直取")
+    void dividendLinkFundUsesIndexOnly() {
+        EstimateContext context = contextOf(variety("OF:007467", VarietyType.OF,
+                "华泰柏瑞中证红利低波ETF联接C", FundCategory.DIVIDEND));
+        context.setRawFundType("指数型-股票");
+        context.setProxySymbol("sh512890");
+        context.setProxyQuote(okQuote("sh512890", "-0.19"));
+        context.setSnapshot(snapshotOf("0.60"));
+        Map<String, MarketQuote> quotes = new LinkedHashMap<>();
+        quotes.put("sh600519", okQuote("sh600519", "1.00"));
+        quotes.put("sz000858", okQuote("sz000858", "1.00"));
+        context.setHoldingQuotes(quotes);
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        // 联接基金不按 0.6% 的个股加权出数，改用跟踪的 ETF 涨跌
+        assertThat(outcome.getBranch()).isEqualTo(EstimateBranch.INDEX_ONLY);
+        assertThat(outcome.estimable()).isTrue();
+        assertThat(outcome.getEstimatedChange()).isEqualByComparingTo("-0.1900");
+        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("联接"));
+    }
+
+    /**
      * 黄金走 β + AR(1)，β 与 ρ 一路带到结果里
      */
     @Test
