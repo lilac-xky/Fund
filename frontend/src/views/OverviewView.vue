@@ -20,6 +20,7 @@
       :market-value="store.payload.holding.totalMarketValue"
       :data-as-of="dataAsOfLabel"
       :next-note="pulseNote"
+      :track="store.track"
     />
 
     <div class="app-body">
@@ -130,11 +131,18 @@
                         {{ signedPercent(item.estimatedChange) }}
                       </span>
                       <span v-else class="app-direction" :class="toneClass(directionTone(item))">
-                        {{ item.directionLabel ?? '—' }}
-                        <em v-if="item.intervalLow !== null && item.intervalHigh !== null">
-                          {{ signedPercent(item.intervalLow) }}~{{
+                        <b class="app-direction__v">{{ item.directionLabel ?? '—' }}</b>
+                        <em
+                          v-if="item.intervalLow !== null && item.intervalHigh !== null"
+                          class="app-interval"
+                        >
+                          <span class="app-interval__bound">{{
+                            signedPercent(item.intervalLow)
+                          }}</span>
+                          <span class="app-interval__sep">~</span>
+                          <span class="app-interval__bound">{{
                             signedPercent(item.intervalHigh)
-                          }}
+                          }}</span>
                         </em>
                       </span>
                     </div>
@@ -635,7 +643,7 @@ onBeforeUnmount(() => {
 }
 
 .app-center__in {
-  max-width: 880px;
+  max-width: var(--content);
   margin: 0 auto;
 }
 
@@ -836,7 +844,7 @@ onBeforeUnmount(() => {
 
 .col-change {
   flex: none;
-  width: 92px;
+  width: 118px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -889,16 +897,33 @@ onBeforeUnmount(() => {
   display: inline-flex;
   flex-direction: column;
   align-items: flex-end;
-  font-size: 12.5px;
-  font-weight: 600;
+  gap: 3px;
 }
 
-.app-direction em {
-  margin-top: 2px;
-  font-size: 10px;
+.app-direction__v {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+/* 区间两端都要能看清正负号，负数不再缩成六号字 */
+.app-interval {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 11.5px;
   font-style: normal;
-  font-weight: 400;
-  color: var(--t3);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--t2);
+}
+
+.app-interval__bound {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-interval__sep {
+  color: var(--t4);
+  font-size: 10px;
 }
 
 .app-tier {

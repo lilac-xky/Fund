@@ -41,6 +41,18 @@ export async function changes(
   })
 }
 
+/** 基金转换，同一事务内先卖出再买入，任一步失败整笔回滚 POST /api/holding/convert */
+export async function convert(body: API.HoldingConvertRequest, options?: { [key: string]: any }) {
+  return request<API.ResultHoldingConvertVO>('/api/holding/convert', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 按主键逻辑删除持仓 POST /api/holding/delete */
 export async function deleteUsingPost(body: API.DeleteRequest, options?: { [key: string]: any }) {
   return request<API.ResultBoolean>('/api/holding/delete', {

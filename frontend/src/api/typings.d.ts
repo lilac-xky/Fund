@@ -264,6 +264,33 @@ declare namespace API {
     limit?: number
   }
 
+  type DividendWatchVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 跟踪指数代码，未登记时为 null */
+    indexCode?: string
+    /** 跟踪指数全称 */
+    indexName?: string
+    /** 当前持有金额，单位元；取不到时为 null */
+    currentAmount?: number
+    /** 当前股息率，单位百分点；取不到时为 null */
+    dividendYield?: number
+    /** 股息率数据日期 */
+    dataDate?: string
+    /** 股息率距今天数 */
+    ageDays?: number
+    /** 股息率是否已过期，过期时不给加减仓动作 */
+    stale?: boolean
+    /** 该标的是否能正常参与建议，false 时看 reason */
+    usable?: boolean
+    /** 不能参与建议的原因，逐条可读 */
+    reasons?: string[]
+  }
+
   type EstimateBatchRequest = {
     /** 品种业务主键列表，为空时按全部 HOLDING 状态的持仓预估 */
     varietyKeys?: string[]
@@ -381,6 +408,26 @@ declare namespace API {
     createTime?: string
     /** 更新时间 */
     updateTime?: string
+  }
+
+  type EstimatePointVO = {
+    /** 采样时刻 */
+    time?: string
+    /** 该时刻的整体预估涨跌幅，百分点；无 A 档基金时为 null */
+    change?: number
+    /** 该时刻的可预估只数 */
+    estimableCount?: number
+  }
+
+  type EstimateTrackVO = {
+    /** 行情所属交易日 */
+    tradeDate?: string
+    /** 采样点，按时间升序 */
+    points?: EstimatePointVO[]
+    /** 采样点数，少于两点画不出线 */
+    pointCount?: number
+    /** 轨迹说明，如「今日首次预估后才开始记录」 */
+    note?: string
   }
 
   type EstimateVO = {
@@ -716,6 +763,8 @@ declare namespace API {
   }
 
   type GridParamSaveRequest = {
+    /** 品种业务主键；留空表示保存通用参数，供尚未逐只配置的标的兜底 */
+    varietyKey?: string
     /** 价格下界，单位元 */
     lowerBound?: number
     /** 价格上界，单位元 */
@@ -727,6 +776,10 @@ declare namespace API {
   }
 
   type GridPlanVO = {
+    /** 所属品种业务主键；通用参数为 null */
+    varietyKey?: string
+    /** 所属品种名称，供页面显示这套格子管的是哪只 */
+    varietyName?: string
     /** 价格下界，单位元 */
     lowerBound?: number
     /** 价格上界，单位元 */
@@ -741,6 +794,37 @@ declare namespace API {
     usable?: boolean
     /** 参数问题清单，可用时为空 */
     issues?: string[]
+    /** 参数提示，如「正在沿用通用参数」；不影响可用性 */
+    notes?: string[]
+  }
+
+  type GridWatchVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 该标的的价格下界，单位元 */
+    lowerBound?: number
+    /** 该标的的价格上界，单位元 */
+    upperBound?: number
+    /** 该标的的格子大小，单位元 */
+    step?: number
+    /** 该标的的每格金额，单位元 */
+    amountPerGrid?: number
+    /** 该标的的参数是否齐全且自洽 */
+    paramUsable?: boolean
+    /** 参数问题清单，可用时为空 */
+    paramIssues?: string[]
+    /** 参数提示，如「正在沿用通用参数」 */
+    paramNotes?: string[]
+    /** 该标的能划出的网格线条数 */
+    lineCount?: number
+    /** 是否已单独配置；false 表示仍在沿用通用参数 */
+    customized?: boolean
   }
 
   type historyParams = {
@@ -802,6 +886,34 @@ declare namespace API {
     openDate?: string
     /** 创建时间 */
     createTime?: string
+  }
+
+  type HoldingConvertRequest = {
+    /** 转出的品种业务主键 */
+    fromVarietyKey?: string
+    /** 转入的品种业务主键，必须已注册且类型已确认 */
+    toVarietyKey?: string
+    /** 转出的份额，必须为正数且不超过当前持有 */
+    shares?: number
+    /** 转入份额，按转入基金的实际申购份额填写 */
+    toShares?: number
+    /** 转入成本价，即转入基金的成交净值 */
+    toCostPrice?: number
+    /** 业务日期，为空时取当日 */
+    openDate?: string
+  }
+
+  type HoldingConvertVO = {
+    /** 持仓总览的单品种聚合行 */
+    fromVariety?: HoldingVarietyVO
+    /** 持仓总览的单品种聚合行 */
+    toVariety?: HoldingVarietyVO
+    /** 转出只数 */
+    outCount?: number
+    /** 转入只数 */
+    inCount?: number
+    /** 转换说明，如「已转出 100 份、转入 95.24 份」 */
+    note?: string
   }
 
   type HoldingItemVO = {
@@ -899,6 +1011,10 @@ declare namespace API {
     profitRate?: number
     /** 当日涨跌幅，单位百分点；没有可用日变动时为 null */
     dailyChangePercent?: number
+    /** 持仓期间累计的现金分红金额，单位元；无累计净值数据时为 null */
+    dividendAmount?: number
+    /** 分红口径说明，如「按累计净值推算，建仓以来」 */
+    dividendNote?: string
   }
 
   type HoldingVO = {
@@ -1152,6 +1268,10 @@ declare namespace API {
     paramDesc?: string
   }
 
+  type planOfParams = {
+    varietyKey: string
+  }
+
   type PointOutcome = {
     /** 产出是否成功 */
     success?: boolean
@@ -1249,6 +1369,12 @@ declare namespace API {
     data?: EstimateErrorTrendVO
   }
 
+  type ResultEstimateTrackVO = {
+    code?: number
+    msg?: string
+    data?: EstimateTrackVO
+  }
+
   type ResultEstimateVO = {
     code?: number
     msg?: string
@@ -1303,6 +1429,12 @@ declare namespace API {
     data?: GridPlanVO
   }
 
+  type ResultHoldingConvertVO = {
+    code?: number
+    msg?: string
+    data?: HoldingConvertVO
+  }
+
   type ResultHoldingOverviewVO = {
     code?: number
     msg?: string
@@ -1347,6 +1479,12 @@ declare namespace API {
     data?: number[]
   }
 
+  type ResultListDividendWatchVO = {
+    code?: number
+    msg?: string
+    data?: DividendWatchVO[]
+  }
+
   type ResultListEstimateErrorTrendVO = {
     code?: number
     msg?: string
@@ -1363,6 +1501,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: GoldBetaRecordVO[]
+  }
+
+  type ResultListGridWatchVO = {
+    code?: number
+    msg?: string
+    data?: GridWatchVO[]
   }
 
   type ResultListHoldingChangeVO = {
@@ -1683,6 +1827,10 @@ declare namespace API {
     overdue?: boolean
     /** 一句话说明，含应发时刻与状态 */
     summary?: string
+  }
+
+  type trackParams = {
+    tradeDate?: string
   }
 
   type trendParams = {

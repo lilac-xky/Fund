@@ -106,6 +106,208 @@
               </AppField>
             </AppGroup>
 
+            <!-- 红利监控对象：说明这套参数实际管的是哪几只基金 -->
+            <AppGroup
+              v-if="activeGroup === 'DIVIDEND'"
+              title="红利监控对象"
+              code="WATCH"
+              :meta="dividendWatch.length ? `${dividendWatch.length} 只` : '当前无红利持仓'"
+              :meta-ok="!dividendBlocked.length"
+            >
+              <template #icon>
+                <span v-html="GROUP_ICONS.WATCH" />
+              </template>
+
+              <div v-if="!dividendWatch.length" class="app-listempty">
+                当前没有持有中的红利基金。请在持仓页把基金类型确认为「红利」并登记跟踪指数，
+                这里才会列出它参与加减仓建议。
+              </div>
+
+              <div v-else class="app-watch">
+                <div
+                  v-for="row in dividendWatch"
+                  :key="row.varietyKey"
+                  class="app-watch__row"
+                  :class="{ 'app-watch__row--off': row.usable === false }"
+                >
+                  <div class="app-watch__id">
+                    <b>{{ row.varietyName ?? row.varietyKey }}</b>
+                    <span class="app-watch__sub">
+                      {{ row.varietyCode }} · 跟踪 {{ row.indexCode ?? '未登记' }}
+                      <template v-if="row.indexName">（{{ row.indexName }}）</template>
+                    </span>
+                  </div>
+                  <div class="app-watch__nums">
+                    <span v-if="row.currentAmount != null">
+                      当前 {{ fmtMoney(row.currentAmount) }} 元
+                    </span>
+                    <span v-if="row.dividendYield != null">
+                      股息率 {{ row.dividendYield.toFixed(2) }}%
+                    </span>
+                    <span v-if="row.dataDate" class="app-watch__sub">
+                      数据 {{ row.dataDate
+                      }}<template v-if="row.ageDays != null"> · 距今 {{ row.ageDays }} 天</template>
+                    </span>
+                  </div>
+                  <div class="app-watch__state">
+                    <span v-if="row.usable !== false" class="app-pill app-pill--ok">参与建议</span>
+                    <span v-else-if="row.stale" class="app-pill app-pill--warn">数据过期</span>
+                    <span v-else class="app-pill app-pill--warn">不给动作</span>
+                  </div>
+                  <ul v-if="row.reasons?.length" class="app-watch__why">
+                    <li v-for="(reason, index) in row.reasons" :key="index">{{ reason }}</li>
+                  </ul>
+                </div>
+              </div>
+
+              <p class="app-hint">
+                红利的基准仓位与保底金额是<b>全局单值</b>：上面这
+                {{ dividendWatch.length }} 只各自都会按同一组金额给建议，不是合计口径。
+              </p>
+            </AppGroup>
+
+            <!-- 网格监控对象：每只 ETF 用自己的上下界，页面逐只编辑 -->
+            <AppGroup
+              v-if="activeGroup === 'GRID'"
+              title="网格监控对象"
+              code="WATCH"
+              :meta="gridWatch.length ? `${gridWatch.length} 只 ETF` : '当前无场内 ETF'"
+              :meta-ok="!gridBlocked.length"
+            >
+              <template #icon>
+                <span v-html="GROUP_ICONS.WATCH" />
+              </template>
+
+              <div v-if="!gridWatch.length" class="app-listempty">
+                当前没有持有中的场内
+                ETF。网格只对场内可交易标的有效，场外基金按净值成交、没有盘中价可划格。
+              </div>
+
+              <div v-else class="app-watch">
+                <div
+                  v-for="row in gridWatch"
+                  :key="row.varietyKey"
+                  class="app-watch__row"
+                  :class="{ 'app-watch__row--off': row.paramUsable === false }"
+                >
+                  <div class="app-watch__id">
+                    <b>{{ row.varietyName ?? row.varietyKey }}</b>
+                    <span class="app-watch__sub">
+                      {{ row.varietyCode }} · {{ row.categoryLabel }}
+                      <template v-if="row.customized === false"> · 沿用通用参数</template>
+                    </span>
+                  </div>
+                  <div class="app-watch__nums">
+                    <template v-if="row.paramUsable !== false">
+                      <span>{{ fmt(row.lowerBound) }} ~ {{ fmt(row.upperBound) }} 元</span>
+                      <span class="app-watch__sub">
+                        每格 {{ fmt(row.step) }} 元 · {{ fmtMoney(row.amountPerGrid) }} 元/格 ·
+                        {{ row.lineCount }} 条线
+                      </span>
+                    </template>
+                    <span v-else class="app-watch__sub">尚未配置可用参数</span>
+                  </div>
+                  <div class="app-watch__state">
+                    <AppButton size="sm" @click="openGridRow(row)">编辑</AppButton>
+                  </div>
+                  <ul v-if="row.paramIssues?.length" class="app-watch__why">
+                    <li v-for="(issue, index) in row.paramIssues" :key="index">{{ issue }}</li>
+                  </ul>
+                </div>
+              </div>
+
+              <p class="app-hint">
+                网格参数按标的各存一套：改某一只的格子只影响它自己，不会连带别的 ETF。
+                上方「网格策略」里的四项是尚未单独配置过的标的所使用的通用兜底值。
+              </p>
+            </AppGroup>
+
+            <!-- 单只网格参数编辑 -->
+            <AppGroup
+              v-if="activeGroup === 'GRID' && editingGrid"
+              :title="`编辑格子：${editingGrid.varietyName ?? editingGrid.varietyKey}`"
+              code="GRID"
+              :meta="gridSaving ? '保存中…' : `标的 ${editingGrid.varietyKey}`"
+            >
+              <template #icon>
+                <span v-html="GROUP_ICONS.GRID" />
+              </template>
+
+              <AppField
+                label="价格下界"
+                description="单位元；该标的网格的最低价"
+                :error="gridError('lowerBound')"
+              >
+                <AppInput
+                  :model-value="gridDraft.lowerBound"
+                  :numeric="true"
+                  :invalid="Boolean(gridError('lowerBound'))"
+                  inputmode="decimal"
+                  placeholder="3.60"
+                  @update:model-value="gridDraft.lowerBound = $event"
+                />
+                <span class="app-unit">元</span>
+              </AppField>
+              <AppField
+                label="价格上界"
+                description="单位元；必须大于下界"
+                :error="gridError('upperBound')"
+              >
+                <AppInput
+                  :model-value="gridDraft.upperBound"
+                  :numeric="true"
+                  :invalid="Boolean(gridError('upperBound'))"
+                  inputmode="decimal"
+                  placeholder="4.40"
+                  @update:model-value="gridDraft.upperBound = $event"
+                />
+                <span class="app-unit">元</span>
+              </AppField>
+              <AppField
+                label="格子大小"
+                description="相邻网格线的价格间距"
+                :error="gridError('step')"
+              >
+                <AppInput
+                  :model-value="gridDraft.step"
+                  :numeric="true"
+                  :invalid="Boolean(gridError('step'))"
+                  inputmode="decimal"
+                  placeholder="0.05"
+                  @update:model-value="gridDraft.step = $event"
+                />
+                <span class="app-unit">元</span>
+              </AppField>
+              <AppField
+                label="每格金额"
+                description="穿越一条网格线建议买卖的金额"
+                :error="gridError('amountPerGrid')"
+              >
+                <AppInput
+                  :model-value="gridDraft.amountPerGrid"
+                  :numeric="true"
+                  :invalid="Boolean(gridError('amountPerGrid'))"
+                  inputmode="decimal"
+                  placeholder="1000"
+                  @update:model-value="gridDraft.amountPerGrid = $event"
+                />
+                <span class="app-unit">元</span>
+              </AppField>
+
+              <div class="app-actions">
+                <AppButton
+                  variant="primary"
+                  :saving="gridSaving"
+                  :disabled="gridSaving"
+                  @click="saveGridRow"
+                >
+                  {{ gridSaving ? '保存中…' : '保存这只的格子' }}
+                </AppButton>
+                <AppButton @click="editingGrid = null">取消</AppButton>
+                <span v-if="gridSavedNote" class="app-actions__picked">{{ gridSavedNote }}</span>
+              </div>
+            </AppGroup>
+
             <AppGroup
               v-if="activeGroup === 'MAIL'"
               title="邮件与 SMTP"
@@ -306,6 +508,7 @@
  * 参数设置页：四个分组双列铺开、行内校验、右栏显示改动与校验清单
  */
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import AppButton from '@/ui/AppButton.vue'
 import AppField from '@/ui/AppField.vue'
 import AppGroup from '@/ui/AppGroup.vue'
 import AppInput from '@/ui/AppInput.vue'
@@ -316,6 +519,7 @@ import AppPulseBar from '@/layout/AppPulseBar.vue'
 import AppSideRail from '@/layout/AppSideRail.vue'
 import AppTopBar from '@/layout/AppTopBar.vue'
 import MessageHost from '@/ui/MessageHost.vue'
+import { ElMessage } from '@/ui/message'
 import {
   mailSetting as mailSettingApi,
   overview as overviewApi,
@@ -323,11 +527,25 @@ import {
   save as saveApi,
   saveMailSetting as saveMailApi,
 } from '@/api/settingController'
+import { watch as dividendWatchApi } from '@/api/dividendAdviceController'
+import {
+  planOf as gridPlanOf,
+  savePlan as saveGridPlan,
+  watch as gridWatchApi,
+} from '@/api/gridController'
 
 /** 待保存的分组，values 是「参数键 → 参数值」的键值表 */
 interface SettingGroupPayload {
   group: string
   values: Record<string, string>
+}
+
+/** 单只网格参数的可编辑草稿，数值都按字符串存以复用输入框 */
+interface GridDraft {
+  lowerBound: string
+  upperBound: string
+  step: string
+  amountPerGrid: string
 }
 
 /** 分组图标，用内联 SVG 以免引入图标库 */
@@ -340,6 +558,8 @@ const GROUP_ICONS: Record<string, string> = {
   ALERT:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 4 9v6l8 4.5 8-4.5V9z"/><path d="M12 4.5V20"/></svg>',
   MAIL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7.5 8 5.5 8-5.5"/></svg>',
+  WATCH:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.6-6.5 9.5-6.5S21.5 12 21.5 12s-3.6 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></svg>',
 }
 
 /** 侧栏锚点，数量按分组实际字段数给 */
@@ -400,7 +620,37 @@ const passwordInput = ref<InstanceType<typeof AppInput> | null>(null)
 
 /** 邮件普通字段的名称集合 */
 const MAIL_FIELDS = ['recipients', 'host', 'port', 'username', 'from'] as const
+/** 红利监控对象 */
+const dividendWatch = ref<API.DividendWatchVO[]>([])
 
+/** 网格监控对象 */
+const gridWatch = ref<API.GridWatchVO[]>([])
+
+/** 正在编辑的网格标的 */
+const editingGrid = ref<API.GridWatchVO | null>(null)
+
+/** 网格编辑草稿，四项都是字符串 */
+const gridDraft = reactive<GridDraft>({
+  lowerBound: '',
+  upperBound: '',
+  step: '',
+  amountPerGrid: '',
+})
+
+/** 网格保存中 */
+const gridSaving = ref(false)
+
+/** 网格字段级错误，键为字段名 */
+const gridErrors = reactive<Record<string, string>>({})
+
+/** 网格保存成功提示 */
+const gridSavedNote = ref('')
+
+/** 红利的阻断项，用于分组右上角状态 */
+const dividendBlocked = computed(() => dividendWatch.value.filter((row) => row.usable === false))
+
+/** 网格的阻断项 */
+const gridBlocked = computed(() => gridWatch.value.filter((row) => row.paramUsable === false))
 /** 参数分组名称集合，邮件走独立接口 */
 const PARAM_GROUPS = ['DIVIDEND', 'GRID', 'INDICATOR', 'ALERT'] as const
 
@@ -678,6 +928,148 @@ function focusPassword(): void {
   element?.focus()
 }
 
+/** 数值展示，缺值给破折号 */
+function fmt(value?: number | null): string {
+  if (value === undefined || value === null) {
+    return '—'
+  }
+  return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+}
+
+/** 金额展示，两位小数 */
+function fmtMoney(value?: number | null): string {
+  if (value === undefined || value === null) {
+    return '—'
+  }
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+/**
+ * 拉取红利与网格的监控对象，说明这套参数实际管的是哪几只
+ *
+ * @returns 无
+ */
+async function loadWatch(): Promise<void> {
+  const [dividendResult, gridResult] = await Promise.allSettled([
+    dividendWatchApi(),
+    gridWatchApi(),
+  ])
+  if (dividendResult.status === 'fulfilled') {
+    dividendWatch.value = dividendResult.value.data ?? []
+  }
+  if (gridResult.status === 'fulfilled') {
+    gridWatch.value = gridResult.value.data ?? []
+  }
+}
+
+/**
+ * 打开某只标的的网格编辑，先把它的当前参数读回来
+ *
+ * @param row 监控对象
+ * @returns 无
+ */
+async function openGridRow(row: API.GridWatchVO): Promise<void> {
+  editingGrid.value = row
+  gridSavedNote.value = ''
+  Object.keys(gridErrors).forEach((key) => delete gridErrors[key])
+  let plan: API.GridPlanVO | undefined
+  try {
+    const result = await gridPlanOf({ varietyKey: row.varietyKey ?? '' })
+    plan = result.data
+  } catch {
+    plan = undefined
+  }
+  // 该标的没配过时，用监控对象里回落的通用值作为起点
+  gridDraft.lowerBound = toText(plan?.lowerBound ?? row.lowerBound)
+  gridDraft.upperBound = toText(plan?.upperBound ?? row.upperBound)
+  gridDraft.step = toText(plan?.step ?? row.step)
+  gridDraft.amountPerGrid = toText(plan?.amountPerGrid ?? row.amountPerGrid)
+}
+
+/**
+ * 数值转输入框文本
+ *
+ * @param value 数值
+ * @returns 文本，缺值返回空串
+ */
+function toText(value?: number | null): string {
+  return value === undefined || value === null ? '' : String(value)
+}
+
+/**
+ * 取网格字段错误
+ *
+ * @param field 字段名
+ * @returns 错误文案，无错误返回空串
+ */
+function gridError(field: string): string {
+  return gridErrors[field] ?? ''
+}
+
+/**
+ * 保存当前标的的网格参数，校验失败就地标红
+ *
+ * @returns 无
+ */
+async function saveGridRow(): Promise<void> {
+  const target = editingGrid.value
+  if (!target?.varietyKey) {
+    return
+  }
+  Object.keys(gridErrors).forEach((key) => delete gridErrors[key])
+  const lower = Number(gridDraft.lowerBound)
+  const upper = Number(gridDraft.upperBound)
+  const step = Number(gridDraft.step)
+  const amount = Number(gridDraft.amountPerGrid)
+  if (!Number.isFinite(lower) || lower <= 0) {
+    gridErrors.lowerBound = '下界必须为正数'
+  }
+  if (!Number.isFinite(upper) || upper <= 0) {
+    gridErrors.upperBound = '上界必须为正数'
+  } else if (Number.isFinite(lower) && upper <= lower) {
+    gridErrors.upperBound = '上界必须大于下界'
+  }
+  if (!Number.isFinite(step) || step <= 0) {
+    gridErrors.step = '格子大小必须为正数'
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    gridErrors.amountPerGrid = '每格金额必须为正数'
+  }
+  if (Object.keys(gridErrors).length > 0) {
+    return
+  }
+  gridSaving.value = true
+  try {
+    const result = await saveGridPlan({
+      varietyKey: target.varietyKey,
+      lowerBound: lower,
+      upperBound: upper,
+      step,
+      amountPerGrid: amount,
+    })
+    gridSavedNote.value = `已保存，可划 ${result.data?.lines?.length ?? 0} 条网格线`
+    ElMessage.success(`${target.varietyName ?? target.varietyKey} 的格子已保存`)
+    await loadWatch()
+  } catch (error) {
+    // 后端也会校验，把它的问题逐条摊到字段上，避免只弹一条笼统提示
+    const message = error instanceof Error ? error.message : ''
+    if (message.includes('下界')) {
+      gridErrors.lowerBound = message
+    } else if (message.includes('上界')) {
+      gridErrors.upperBound = message
+    } else if (message.includes('格子')) {
+      gridErrors.step = message
+    } else if (message.includes('每格金额')) {
+      gridErrors.amountPerGrid = message
+    }
+  } finally {
+    gridSaving.value = false
+  }
+}
+
 watch(
   () => draft['DIVIDEND.baseAmount'],
   () => {
@@ -687,6 +1079,7 @@ watch(
 
 onMounted(() => {
   void load()
+  void loadWatch()
   window.addEventListener('keydown', onKeydown)
 })
 </script>
@@ -748,7 +1141,7 @@ onMounted(() => {
 }
 
 .app-center__in {
-  max-width: 880px;
+  max-width: var(--content);
   margin: 0 auto;
 }
 
@@ -771,7 +1164,7 @@ onMounted(() => {
   }
 
   .app-center__in {
-    max-width: 720px;
+    max-width: 860px;
   }
 }
 
@@ -789,6 +1182,113 @@ onMounted(() => {
 .app-unit {
   flex: none;
   font-size: 11px;
+  color: var(--t4);
+}
+
+/* ── 监控对象 ── */
+.app-watch {
+  padding: 4px 0;
+}
+
+.app-watch__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.5fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.app-watch__row:last-child {
+  border-bottom: 0;
+}
+
+/* 不参与建议或参数不可用的行整体压暗，但仍完整可读 */
+.app-watch__row--off .app-watch__id b {
+  color: var(--t3);
+}
+
+.app-watch__id {
+  min-width: 0;
+}
+
+.app-watch__id b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.app-watch__sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--t4);
+}
+
+.app-watch__nums {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--t2);
+}
+
+.app-watch__state {
+  justify-self: end;
+}
+
+.app-watch__why {
+  grid-column: 1 / -1;
+  padding-left: 15px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--warn);
+}
+
+.app-hint {
+  margin: 8px 0 6px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--s2);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--t3);
+}
+
+.app-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--s3);
+  color: var(--t3);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.app-pill--ok {
+  background: var(--dn-soft);
+  color: var(--dn);
+}
+
+.app-pill--warn {
+  background: color-mix(in oklab, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+.app-listempty {
+  padding: 18px 0;
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.7;
   color: var(--t4);
 }
 

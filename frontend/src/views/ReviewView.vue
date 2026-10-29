@@ -644,7 +644,7 @@ onBeforeUnmount(() => {
 }
 
 .app-center__in {
-  max-width: 940px;
+  max-width: var(--content);
   margin: 0 auto;
 }
 

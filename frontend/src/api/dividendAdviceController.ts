@@ -44,3 +44,11 @@ export async function single(body: API.DividendAdviceRequest, options?: { [key: 
     ...(options || {}),
   })
 }
+
+/** 列出红利策略的监控对象，说明这套参数管的是哪几只基金 GET /api/dividend/advice/watch */
+export async function watch(options?: { [key: string]: any }) {
+  return request<API.ResultListDividendWatchVO>('/api/dividend/advice/watch', {
+    method: 'GET',
+    ...(options || {}),
+  })
+}

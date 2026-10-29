@@ -1,7 +1,7 @@
 /**
  * 总览页数据编排：预估、持仓、指数、日线走势与指标参数各拉一路，任一失败不影响其余
  */
-import { batch as estimateBatch } from '@/api/estimateController'
+import { batch as estimateBatch, track as estimateTrackApi } from '@/api/estimateController'
 import { catalogStatus as catalogStatusApi } from '@/api/fundController'
 import { overview as holdingOverview } from '@/api/holdingController'
 import { batch as quoteBatch, history as quoteHistory } from '@/api/marketQuoteController'
@@ -9,6 +9,9 @@ import { list as paramList } from '@/api/strategyParamController'
 import { RequestError } from '@/request'
 import { DEFAULT_INDICATOR_PARAMS, lastMa, macd, rsi, sparklinePoints } from './indicators'
 import type { IndicatorParams } from './indicators'
+
+/** 今日整体预估的一个采样点，与生成层的 EstimatePointVO 同构 */
+export type EstimateTrackPoint = API.EstimatePointVO
 
 /** 行情条展示的宽基指数，代码带显式交易所前缀，避免 000 段被推断成深市个股 */
 const PULSE_INDEXES: Array<{ name: string; symbol: string }> = [
@@ -85,6 +88,8 @@ export interface OverviewPayload {
   indicatorParams: IndicatorParams
   /** 持仓相关指数走势 */
   trends: TrendItem[]
+  /** 今日整体预估的盘中采样点，行情条画曲线用 */
+  track: EstimateTrackPoint[]
   /** 本次失败的环节，全部成功时为空数组 */
   failures: LoadFailure[]
 }
@@ -256,7 +261,17 @@ export async function loadOverview(refresh = false): Promise<OverviewPayload> {
     failures.push(failureOf('拉取指数日线', error))
   }
 
-  return { estimate, holding, catalog, indexes, indicatorParams, trends, failures }
+  // 轨迹只用来画曲线，取不到时留空即可，不列进失败环节
+  let track: EstimateTrackPoint[] = []
+  try {
+    // 生成层的 trackParams 是必填对象，不指定日期时传空对象表示取今天
+    const trackResult = await estimateTrackApi({})
+    track = trackResult.data?.points ?? []
+  } catch {
+    track = []
+  }
+
+  return { estimate, holding, catalog, indexes, indicatorParams, trends, track, failures }
 }
 
 /** 判断一份数据里是否有可展示的内容 */

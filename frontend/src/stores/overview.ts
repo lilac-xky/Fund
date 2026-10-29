@@ -29,6 +29,7 @@ function emptyPayload(): OverviewPayload {
     indexes: [],
     indicatorParams: { rsiPeriod: 14, macdFast: 12, macdSlow: 26, macdSignal: 9 },
     trends: [],
+    track: [],
     failures: [],
   }
 }
@@ -95,6 +96,9 @@ export const useOverviewStore = defineStore('overview', () => {
       .filter((item) => item.change !== null)
       .map((item) => ({ name: item.name, change: item.change ?? 0 })),
   )
+
+  /** 今日整体预估的盘中采样点，行情条画曲线用 */
+  const track = computed(() => payload.value.track ?? [])
 
   /** 日线数据日期，页面标注用 */
   const trendAsOf = computed(() => {
@@ -208,6 +212,7 @@ export const useOverviewStore = defineStore('overview', () => {
     unavailableItems,
     trends,
     indexes,
+    track,
     trendAsOf,
     load,
     bootstrap,

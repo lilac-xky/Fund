@@ -1,10 +1,15 @@
 <template>
   <div class="app-pulse">
-    <div class="app-pulse__cell">
-      <div>
-        <div class="app-pulse__k">今日预估</div>
-        <div class="app-pulse__v app-pulse__v--big" :style="{ color: tone(estimatedChange) }">
-          {{ signed(estimatedChange) }}
+    <div class="app-pulse__cell app-pulse__cell--lead">
+      <div class="app-pulse__lead">
+        <div class="app-pulse__leadmain">
+          <div class="app-pulse__k">今日预估</div>
+          <div class="app-pulse__v app-pulse__v--big" :style="{ color: tone(estimatedChange) }">
+            {{ signed(estimatedChange) }}
+          </div>
+        </div>
+        <div v-if="trackPoints" class="app-pulse__spark" :title="trackTitle">
+          <AppSparkline :points="trackPoints" :tone="estimatedChange" area :height="30" />
         </div>
       </div>
     </div>
@@ -56,6 +61,9 @@
  * 行情条：一行展示今日预估、可预估数、冷暖、指数、市值与数据截止
  */
 import { computed } from 'vue'
+import AppSparkline from '@/ui/AppSparkline.vue'
+import { sparklinePoints } from '@/services/indicators'
+import type { EstimateTrackPoint } from '@/services/overview'
 
 const props = defineProps<{
   /** 今日预估涨跌幅，百分点；null 表示暂不可估 */
@@ -74,6 +82,8 @@ const props = defineProps<{
   dataAsOf?: string
   /** 下次生效说明 */
   nextNote?: string
+  /** 今日整体预估的盘中采样点，按时间升序；不足两点时不画 */
+  track?: EstimateTrackPoint[]
 }>()
 
 /** 市值文案，按万元折算以免行情条被长数字撑开 */
@@ -87,6 +97,20 @@ const marketValueText = computed(() => {
   }
   return value.toFixed(2)
 })
+
+/** 轨迹折线坐标，高度与 AppSparkline 的 30 对齐 */
+const trackPoints = computed(() => {
+  const values = (props.track ?? [])
+    .map((point) => point.change)
+    .filter((value): value is number => value !== null && value !== undefined)
+  if (values.length < 2) {
+    return ''
+  }
+  return sparklinePoints(values, 100, 30)
+})
+
+/** 曲线悬停说明，点出这条线的口径与采样数 */
+const trackTitle = computed(() => `今日整体预估的盘中采样，共 ${(props.track ?? []).length} 个点`)
 
 /** 涨跌上色，涨红跌绿 */
 function tone(value?: number | null): string {
@@ -138,6 +162,27 @@ function signed(value?: number | null): string {
   margin-right: 0;
   padding-right: 0;
   border-right: 0;
+}
+
+/* 今日预估格带上曲线后要更宽，与图二的「数字 + 走势」同构 */
+.app-pulse__cell--lead {
+  padding-right: 22px;
+  margin-right: 22px;
+}
+
+.app-pulse__lead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-pulse__leadmain {
+  flex: none;
+}
+
+.app-pulse__spark {
+  flex: none;
+  width: 106px;
 }
 
 .app-pulse__k {

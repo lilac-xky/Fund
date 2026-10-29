@@ -249,8 +249,7 @@ onMounted(async () => {
   color: var(--t1);
 }
 
-.app-login__lede code,
-:deep(code) {
+.app-login :deep(code) {
   padding: 1px 4px;
   border-radius: 3px;
   background: var(--s3);

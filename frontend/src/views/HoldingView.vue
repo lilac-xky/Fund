@@ -279,33 +279,47 @@
                     >
                     <span v-if="item.confirmed === false" class="app-row__unknown">类型待确认</span>
                   </div>
+                  <!-- 盈亏是首要信息，单独成列放在最右且用大字号 -->
+                  <div class="app-row__pnl">
+                    <template v-if="item.profitLoss != null">
+                      <b class="app-row__pnlv" :class="toneClass(item.profitLoss)">
+                        {{ signedMoney(item.profitLoss) }}
+                      </b>
+                      <span class="app-row__pnlr" :class="toneClass(item.profitLoss)">
+                        {{ signedPercent(item.profitRate) }}
+                      </span>
+                      <span v-if="item.dailyChangePercent != null" class="app-row__day">
+                        当日
+                        <em :class="toneClass(item.dailyChangePercent)">
+                          {{ signedPercent(item.dailyChangePercent) }}
+                        </em>
+                      </span>
+                      <!-- 分红单列：现金分红会从单位净值里扣掉，不算出来会被误读成没赚 -->
+                      <span
+                        v-if="item.dividendAmount != null && item.dividendAmount > 0"
+                        class="app-row__dividend"
+                        :title="item.dividendNote ?? ''"
+                      >
+                        含分红 {{ signedMoney(item.dividendAmount) }}
+                      </span>
+                    </template>
+                    <span v-else class="app-row__missing">暂无净值，盈亏不可算</span>
+                  </div>
+
+                  <!-- 持仓细节降到次要层级，字号更小、颜色更淡 -->
                   <div class="app-row__nums">
+                    <span class="app-row__val">市值 {{ fmtMoney(item.marketValue) }}</span>
                     <span>{{ fmt(item.totalShares) }} 份</span>
-                    <span>成本单价 {{ fmt(item.avgCostPrice) }}</span>
-                    <span>成本金额 {{ fmtMoney(item.costAmount) }}</span>
+                    <span>成本 {{ fmt(item.avgCostPrice) }} / {{ fmtMoney(item.costAmount) }}</span>
                     <span v-if="item.latestPrice != null">
                       {{ item.priceSource }} {{ fmt(item.latestPrice) }}
                     </span>
-                    <span v-if="item.marketValue != null" class="app-row__val">
-                      市值 {{ fmtMoney(item.marketValue) }}
-                    </span>
-                    <span v-if="item.profitLoss != null" :class="toneClass(item.profitLoss)">
-                      浮盈亏 {{ signedMoney(item.profitLoss) }} ({{
-                        signedPercent(item.profitRate)
-                      }})
-                    </span>
-                    <span
-                      v-if="item.dailyChangePercent != null"
-                      :class="toneClass(item.dailyChangePercent)"
-                    >
-                      当日 {{ signedPercent(item.dailyChangePercent) }}
-                    </span>
-                    <span v-if="item.latestPrice == null" class="app-row__missing">
-                      暂无净值/行情，市值及盈亏暂不可计算
-                    </span>
                   </div>
+
                   <div class="app-row__ops">
+                    <AppButton size="sm" @click="openBuy(item)">买入</AppButton>
                     <AppButton size="sm" @click="openSell(item)">卖出</AppButton>
+                    <AppButton size="sm" @click="openConvert(item)">转换</AppButton>
                     <AppButton size="sm" @click="showChanges(item)">变动</AppButton>
                   </div>
                 </div>
@@ -317,6 +331,10 @@
                   <span :class="toneClass(totalProfitRate)"
                     >({{ signedPercent(totalProfitRate) }})</span
                   >
+                  <template v-if="totalDividend > 0">
+                    <span class="app-total__dividend">含分红</span>
+                    <b class="app-total__dividend">{{ signedMoney(totalDividend) }}</b>
+                  </template>
                 </div>
               </div>
             </AppGroup>
@@ -412,6 +430,101 @@
       </div>
     </div>
 
+    <!-- 加仓弹层 -->
+    <div v-if="buying" class="app-mask" @click.self="buying = null">
+      <div class="app-dialog">
+        <h3>加仓 {{ buying.varietyName }}</h3>
+        <p class="app-dialog__meta">
+          当前持有 {{ fmt(buying.totalShares) }} 份，加权成本 {{ fmt(buying.avgCostPrice) }}。
+          这里只补充份额与成本，名称与类型仍来自品种注册表。
+        </p>
+        <AppField label="买入份额" description="必须为正数" :error="buyError">
+          <AppInput
+            :model-value="buyShares"
+            :numeric="true"
+            :invalid="Boolean(buyError)"
+            inputmode="decimal"
+            placeholder="100"
+            @update:model-value="buyShares = $event"
+          />
+          <span class="app-unit">份</span>
+        </AppField>
+        <AppField label="买入成本价" description="成交价或当日净值" :error="buyError">
+          <AppInput
+            :model-value="buyCostPrice"
+            :numeric="true"
+            :invalid="Boolean(buyError)"
+            inputmode="decimal"
+            placeholder="1.5000"
+            @update:model-value="buyCostPrice = $event"
+          />
+          <span class="app-unit">元/份</span>
+        </AppField>
+        <div class="app-dialog__ops">
+          <AppButton variant="primary" @click="onBuy">确认加仓</AppButton>
+          <AppButton @click="buying = null">取消</AppButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- 转换弹层 -->
+    <div v-if="converting" class="app-mask" @click.self="converting = null">
+      <div class="app-dialog app-dialog--wide">
+        <h3>转换 {{ converting.varietyName }}</h3>
+        <p class="app-dialog__meta">
+          一次提交同时完成转出与转入，任一步失败整笔回滚，不会出现「已卖未买」。
+          转出按先进先出扣减，转入份额与成本价按实际成交填写。
+        </p>
+        <AppField label="转出份额" description="不超过当前持有合计" :error="convertError">
+          <AppInput
+            :model-value="convertShares"
+            :numeric="true"
+            :invalid="Boolean(convertError)"
+            inputmode="decimal"
+            :placeholder="fmt(converting.totalShares)"
+            @update:model-value="convertShares = $event"
+          />
+          <span class="app-unit">份</span>
+        </AppField>
+        <AppField label="转入基金" description="从当前持仓里选，不含转出这一只">
+          <select
+            class="app-input app-select"
+            :value="convertTarget"
+            @change="onConvertTargetChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">请选择转入基金</option>
+            <option v-for="row in convertTargets" :key="row.varietyKey" :value="row.varietyKey">
+              {{ row.varietyName }}（{{ row.varietyCode }}）
+            </option>
+          </select>
+        </AppField>
+        <AppField label="转入份额" description="按实际成交份额填写">
+          <AppInput
+            :model-value="convertToShares"
+            :numeric="true"
+            inputmode="decimal"
+            placeholder="100"
+            @update:model-value="convertToShares = $event"
+          />
+          <span class="app-unit">份</span>
+        </AppField>
+        <AppField label="转入成本价" description="转入基金的成交净值">
+          <AppInput
+            :model-value="convertToCost"
+            :numeric="true"
+            inputmode="decimal"
+            placeholder="1.5000"
+            @update:model-value="convertToCost = $event"
+          />
+          <span class="app-unit">元/份</span>
+        </AppField>
+        <div class="app-dialog__ops">
+          <AppButton variant="primary" @click="onConvert">确认转换</AppButton>
+          <AppButton @click="converting = null">取消</AppButton>
+        </div>
+      </div>
+    </div>
+
     <!-- 变动历史弹层 -->
     <div v-if="historyOf" class="app-mask" @click.self="historyOf = null">
       <div class="app-dialog app-dialog--wide">
@@ -469,6 +582,7 @@ import {
   disambiguate as disambiguateApi,
   syncCatalog as syncCatalogApi,
 } from '@/api/fundController'
+import { convert as convertHolding } from '@/api/holdingController'
 
 /** 分组图标，内联 SVG 保持与全站一致 */
 const ICONS: Record<string, string> = {
@@ -550,6 +664,8 @@ type HoldingVarietyDisplay = API.HoldingVarietyVO & {
   profitLoss?: number
   profitRate?: number
   dailyChangePercent?: number
+  dividendAmount?: number | null
+  dividendNote?: string | null
 }
 
 type HoldingOverviewDisplay = Omit<API.HoldingOverviewVO, 'items'> & {
@@ -564,6 +680,25 @@ const changes = ref<API.HoldingChangeVO[]>([])
 /** 卖出弹层状态 */
 const selling = ref<HoldingVarietyDisplay | null>(null)
 const sellShares = ref('')
+
+/** 加仓弹层状态 */
+const buying = ref<HoldingVarietyDisplay | null>(null)
+const buyShares = ref('')
+const buyCostPrice = ref('')
+const buyError = ref('')
+
+/** 转换弹层状态 */
+const converting = ref<HoldingVarietyDisplay | null>(null)
+const convertShares = ref('')
+const convertTarget = ref('')
+const convertToShares = ref('')
+const convertToCost = ref('')
+const convertError = ref('')
+
+/** 可转入的品种，供转换弹层选择 */
+const convertTargets = computed(() =>
+  (overview.value.items ?? []).filter((item) => item.varietyKey !== converting.value?.varietyKey),
+)
 
 /** 变动历史弹层状态 */
 const historyOf = ref<API.HoldingVarietyVO | null>(null)
@@ -608,6 +743,11 @@ const totalProfitLoss = computed(() =>
 
 const totalProfitRate = computed(() =>
   totalCost.value > 0 ? (totalProfitLoss.value / totalCost.value) * 100 : 0,
+)
+
+/** 全部持仓的现金分红合计，用于底部汇总 */
+const totalDividend = computed(() =>
+  (overview.value.items ?? []).reduce((sum, item) => sum + (item.dividendAmount ?? 0), 0),
 )
 
 /** 市值摘要，用于行情条 */
@@ -814,6 +954,104 @@ function openSell(item: API.HoldingVarietyVO): void {
   sellError.value = ''
 }
 
+/** 打开加仓弹层，默认带上当前净值与成本价便于快速加仓 */
+function openBuy(item: HoldingVarietyDisplay): void {
+  buying.value = item
+  buyShares.value = ''
+  buyCostPrice.value = item.latestPrice != null ? String(item.latestPrice) : ''
+  buyError.value = ''
+}
+
+/** 提交加仓 */
+async function onBuy(): Promise<void> {
+  if (!buying.value?.varietyKey) {
+    return
+  }
+  const sharesValue = Number(buyShares.value)
+  const costValue = Number(buyCostPrice.value)
+  if (!Number.isFinite(sharesValue) || sharesValue <= 0) {
+    buyError.value = '买入份额必须为正数'
+    return
+  }
+  if (!Number.isFinite(costValue) || costValue <= 0) {
+    buyError.value = '买入成本价必须为正数'
+    return
+  }
+  buyError.value = ''
+  try {
+    await buyHolding({
+      varietyKey: buying.value.varietyKey,
+      shares: sharesValue,
+      costPrice: costValue,
+    })
+    ElMessage.success(`已加仓 ${buying.value.varietyName} ${sharesValue} 份`)
+    buying.value = null
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  }
+}
+
+/** 打开转换弹层 */
+function openConvert(item: HoldingVarietyDisplay): void {
+  converting.value = item
+  convertShares.value = ''
+  convertTarget.value = ''
+  convertToShares.value = ''
+  convertToCost.value = ''
+  convertError.value = ''
+}
+
+/** 选中转入品种时带出它的最新净值作为成本价默认值 */
+function onConvertTargetChange(value: string): void {
+  convertTarget.value = value
+  const target = convertTargets.value.find((item) => item.varietyKey === value)
+  convertToCost.value = target?.latestPrice != null ? String(target.latestPrice) : ''
+}
+
+/** 提交转换，后端同一事务内先卖出再买入 */
+async function onConvert(): Promise<void> {
+  const source = converting.value
+  if (!source?.varietyKey || !convertTarget.value) {
+    convertError.value = '请选择要转入的基金'
+    return
+  }
+  const outShares = Number(convertShares.value)
+  const inShares = Number(convertToShares.value)
+  const inCost = Number(convertToCost.value)
+  if (!Number.isFinite(outShares) || outShares <= 0) {
+    convertError.value = '转出份额必须为正数'
+    return
+  }
+  if (source.totalShares != null && outShares > source.totalShares) {
+    convertError.value = `转出份额超过当前持有 ${fmt(source.totalShares)} 份`
+    return
+  }
+  if (!Number.isFinite(inShares) || inShares <= 0) {
+    convertError.value = '转入份额必须为正数'
+    return
+  }
+  if (!Number.isFinite(inCost) || inCost <= 0) {
+    convertError.value = '转入成本价必须为正数'
+    return
+  }
+  convertError.value = ''
+  try {
+    const result = await convertHolding({
+      fromVarietyKey: source.varietyKey,
+      toVarietyKey: convertTarget.value,
+      shares: outShares,
+      toShares: inShares,
+      toCostPrice: inCost,
+    })
+    ElMessage.success(result.data?.note ?? '转换已完成')
+    converting.value = null
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  }
+}
+
 /** 提交卖出 */
 async function onSell(): Promise<void> {
   if (!selling.value?.varietyKey) {
@@ -960,7 +1198,7 @@ onMounted(() => {
 }
 
 .app-center__in {
-  max-width: 880px;
+  max-width: var(--content);
   margin: 0 auto;
 }
 
@@ -1356,7 +1594,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 2px;
+  padding: 13px 2px;
   border-bottom: 1px solid var(--hair);
 }
 
@@ -1365,8 +1603,56 @@ onMounted(() => {
 }
 
 .app-row__id {
-  flex: 1.4;
+  flex: 1.5;
   min-width: 0;
+}
+
+/* 盈亏列是首要信息：大字号、加粗，与次要细节拉开层级 */
+.app-row__pnl {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  width: 132px;
+  text-align: right;
+}
+
+.app-row__pnlv {
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.app-row__pnlr {
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.app-row__day {
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  color: var(--t4);
+}
+
+.app-row__day em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.app-row__dividend {
+  margin-top: 1px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--acc-soft);
+  color: var(--acc);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .app-row__name {
@@ -1397,19 +1683,22 @@ onMounted(() => {
   font-weight: 650;
 }
 
+/* 持仓细节退为次要层级：字号更小、颜色更淡，扫一眼先看到盈亏 */
 .app-row__nums {
   display: flex;
   flex: 2;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+  flex-direction: column;
+  gap: 2px;
   font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-  color: var(--t2);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--t4);
 }
 
 .app-row__val {
-  font-weight: 600;
-  color: var(--t1);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--t2);
 }
 
 .app-row__ops {
@@ -1432,6 +1721,17 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
   font-size: 14px;
   color: var(--t1);
+}
+
+.app-total__dividend {
+  color: var(--acc);
+}
+
+/* 转换弹层的下拉与输入框视觉对齐 */
+.app-select {
+  flex: 1;
+  appearance: none;
+  cursor: pointer;
 }
 
 /* ── 右栏 ── */
