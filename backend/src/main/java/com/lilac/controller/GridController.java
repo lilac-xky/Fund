@@ -6,12 +6,14 @@ import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.GridAdviceVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.GridPlanVO;
+import com.lilac.domain.vo.GridWatchVO;
 import com.lilac.service.GridAdviceService;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -28,7 +30,7 @@ public class GridController {
     private GridAdviceService gridAdviceService;
 
     /**
-     * 读取网格参数与划格结果
+     * 读取通用网格参数与划格结果，未按标的分开配置时作为兜底
      */
     @GetMapping("/plan")
     public Result<GridPlanVO> plan() {
@@ -36,11 +38,35 @@ public class GridController {
     }
 
     /**
-     * 保存网格参数，上下界颠倒或划不出两格时拒绝并指出字段
+     * 读取指定标的的网格参数，页面逐只编辑时用它
+     */
+    @GetMapping("/plan/single")
+    public Result<GridPlanVO> planOf(@RequestParam("varietyKey") String varietyKey) {
+        return Result.success(gridAdviceService.getPlanOf(varietyKey));
+    }
+
+    /**
+     * 保存指定标的的网格参数，上下界颠倒或划不出两格时拒绝并指出字段
      */
     @PostMapping("/plan/save")
     public Result<GridPlanVO> savePlan(@RequestBody GridParamSaveRequest request) {
         return Result.success(gridAdviceService.savePlan(request));
+    }
+
+    /**
+     * 保存通用网格参数，供尚未逐只配置的标的兜底
+     */
+    @PostMapping("/plan/global/save")
+    public Result<GridPlanVO> saveGlobalPlan(@RequestBody GridParamSaveRequest request) {
+        return Result.success(gridAdviceService.saveGlobalPlan(request));
+    }
+
+    /**
+     * 列出网格的监控对象，说明每只 ETF 用的是哪套格子
+     */
+    @GetMapping("/watch")
+    public Result<List<GridWatchVO>> watch() {
+        return Result.success(gridAdviceService.watchList());
     }
 
     /**

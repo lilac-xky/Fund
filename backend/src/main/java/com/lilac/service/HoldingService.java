@@ -2,9 +2,11 @@ package com.lilac.service;
 
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
 import com.lilac.domain.vo.HoldingChangeVO;
+import com.lilac.domain.vo.HoldingConvertVO;
 import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
 import com.lilac.domain.vo.HoldingVO;
@@ -39,6 +41,14 @@ public interface HoldingService {
      * @return 变动后该品种的剩余持仓
      */
     List<HoldingVO> sell(HoldingSellRequest request);
+
+    /**
+     * 基金转换，把一只品种的份额换成另一只，同一事务内卖出加买入
+     *
+     * @param request 转换请求
+     * @return 转出与转入的变动后状态
+     */
+    HoldingConvertVO convert(HoldingConvertRequest request);
 
     /**
      * 查询持仓变动历史，按时间倒序

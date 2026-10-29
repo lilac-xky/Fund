@@ -5,6 +5,9 @@ import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.DividendPlanVO;
+import com.lilac.domain.vo.DividendWatchVO;
+
+import java.util.List;
 
 /**
  * 红利加减仓建议业务接口，负责取股息率、装配参数并给出精确到元的建议
@@ -40,4 +43,11 @@ public interface DividendAdviceService {
      * @return 单只建议
      */
     DividendAdviceVO adviseOne(DividendAdviceRequest request);
+
+    /**
+     * 列出红利策略的监控对象，说明这套参数管的是哪几只基金
+     *
+     * @return 监控对象列表
+     */
+    List<DividendWatchVO> watchList();
 }

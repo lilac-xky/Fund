@@ -6,10 +6,15 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 
 /**
- * 网格参数保存请求，四项都是必填
+ * 网格参数保存请求，按标的分开配置时带品种主键，四项都是必填
  */
 @Data
 public class GridParamSaveRequest implements Serializable {
+
+    /**
+     * 品种业务主键；留空表示保存通用参数，供尚未逐只配置的标的兜底
+     */
+    private String varietyKey;
 
     /**
      * 价格下界，单位元

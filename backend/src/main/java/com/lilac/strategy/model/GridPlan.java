@@ -13,6 +13,16 @@ import java.util.List;
 public class GridPlan {
 
     /**
+     * 所属品种业务主键；为 null 表示尚未按标的拆分的历史全局参数
+     */
+    private String varietyKey;
+
+    /**
+     * 所属品种名称，供页面显示「这套格子管的是哪只」，全局旧参数为 null
+     */
+    private String varietyName;
+
+    /**
      * 价格下界，单位元
      */
     private BigDecimal lowerBound;
@@ -33,9 +43,14 @@ public class GridPlan {
     private BigDecimal amountPerGrid;
 
     /**
-     * 参数问题清单，为空表示可用于计算网格
+     * 参数问题清单，非空表示不可用于计算网格
      */
     private List<String> issues = new ArrayList<>();
+
+    /**
+     * 参数提示，如「正在沿用通用参数」；不影响参数是否可用
+     */
+    private List<String> notes = new ArrayList<>();
 
     /**
      * 参数是否齐全且互相自洽

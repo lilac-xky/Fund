@@ -6,6 +6,7 @@ import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.DividendPlanVO;
+import com.lilac.domain.vo.DividendWatchVO;
 import com.lilac.service.DividendAdviceService;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 红利加减仓建议接口，含参数读写与逐只建议
@@ -54,5 +57,13 @@ public class DividendAdviceController {
     @PostMapping("/single")
     public Result<DividendAdviceVO> single(@RequestBody DividendAdviceRequest request) {
         return Result.success(dividendAdviceService.adviseOne(request));
+    }
+
+    /**
+     * 列出红利策略的监控对象，说明这套参数管的是哪几只基金
+     */
+    @GetMapping("/watch")
+    public Result<List<DividendWatchVO>> watch() {
+        return Result.success(dividendAdviceService.watchList());
     }
 }

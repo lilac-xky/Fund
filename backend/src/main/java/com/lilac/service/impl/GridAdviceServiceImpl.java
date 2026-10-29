@@ -11,6 +11,7 @@ import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.GridAdviceVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.GridPlanVO;
+import com.lilac.domain.vo.GridWatchVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.DividendAction;
@@ -37,6 +38,8 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 网格到价提醒业务实现，取行情与红利建议后交给规则计算器判定是否穿越网格线
@@ -78,7 +81,27 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 保存网格参数，上下界颠倒或划不出两格时拒绝
+     * 读取指定标的的网格参数，未单独配置时回落通用参数并说明来源
+     *
+     * @param varietyKey 品种业务主键
+     * @return 参数视图
+     */
+    @Override
+    public GridPlanVO getPlanOf(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "品种业务主键不能为空");
+        VarietyVO variety = findVariety(varietyKey.trim());
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR,
+                "未找到品种 " + varietyKey);
+        GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+        GridPlanVO vo = toPlanVO(plan);
+        vo.setVarietyKey(plan.getVarietyKey());
+        vo.setVarietyName(plan.getVarietyName());
+        return vo;
+    }
+
+    /**
+     * 保存指定标的的网格参数，不合法时拒绝
      *
      * @param request 保存请求
      * @return 保存后的参数视图
@@ -86,12 +109,44 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     @Override
     public GridPlanVO savePlan(GridParamSaveRequest request) {
         ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR, "网格参数不能为空");
+        ThrowUtils.throwIf(request.getVarietyKey() == null || request.getVarietyKey().isBlank(),
+                HttpsCodeEnum.PARAMS_ERROR, "保存网格参数必须指定标的");
+        VarietyVO variety = findVariety(request.getVarietyKey().trim());
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR,
+                "未找到品种 " + request.getVarietyKey());
+        GridPlan plan = toPlan(request, variety.getVarietyKey());
+        GridPlan saved = gridPlanResolver.save(plan);
+        saved.setVarietyName(variety.getVarietyName());
+        return toPlanVO(saved);
+    }
+
+    /**
+     * 保存通用网格参数，供尚未逐只配置时的兜底
+     *
+     * @param request 保存请求
+     * @return 保存后的参数视图
+     */
+    @Override
+    public GridPlanVO saveGlobalPlan(GridParamSaveRequest request) {
+        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR, "网格参数不能为空");
+        return toPlanVO(gridPlanResolver.saveGlobal(toPlan(request, null)));
+    }
+
+    /**
+     * 把保存请求转成参数对象
+     *
+     * @param request    保存请求
+     * @param varietyKey 品种业务主键，可为 null 表示全局
+     * @return 参数
+     */
+    private GridPlan toPlan(GridParamSaveRequest request, String varietyKey) {
         GridPlan plan = new GridPlan();
+        plan.setVarietyKey(varietyKey);
         plan.setLowerBound(request.getLowerBound());
         plan.setUpperBound(request.getUpperBound());
         plan.setStep(request.getStep());
         plan.setAmountPerGrid(request.getAmountPerGrid());
-        return toPlanVO(gridPlanResolver.save(plan));
+        return plan;
     }
 
     /**
@@ -101,11 +156,13 @@ public class GridAdviceServiceImpl implements GridAdviceService {
      */
     @Override
     public GridAdvisoryVO adviseAll() {
-        GridPlan plan = gridPlanResolver.resolve();
+        GridPlan globalPlan = gridPlanResolver.resolve();
         List<VarietyVO> varieties = gridVarieties();
         List<GridAdviceVO> items = new ArrayList<>();
         List<GridAdviceVO> idle = new ArrayList<>();
         for (VarietyVO variety : varieties) {
+            // 每只标的有自己的上下界，不能拿一套价格区间套在所有 ETF 上
+            GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
             GridAdviceVO advice = advise(variety, plan, null, null);
             if (advice.getAction() == GridAction.BUY || advice.getAction() == GridAction.SELL) {
                 items.add(advice);
@@ -113,7 +170,42 @@ public class GridAdviceServiceImpl implements GridAdviceService {
                 idle.add(advice);
             }
         }
-        return assemble(plan, varieties.size(), items, idle);
+        return assemble(globalPlan, varieties.size(), items, idle);
+    }
+
+    /**
+     * 列出网格的监控对象，说明这套参数管的是哪几只 ETF
+     *
+     * @return 监控对象列表，含各自的参数是否可用
+     */
+    @Override
+    public List<GridWatchVO> watchList() {
+        List<VarietyVO> varieties = gridVarieties();
+        // 一次取回已单独配置过的标的集合，避免逐只查询各自是否配置过
+        Set<String> customized = gridPlanResolver.listAll().stream()
+                .map(GridPlan::getVarietyKey)
+                .filter(key -> key != null)
+                .collect(Collectors.toSet());
+        List<GridWatchVO> result = new ArrayList<>(varieties.size());
+        for (VarietyVO variety : varieties) {
+            GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+            GridWatchVO vo = new GridWatchVO();
+            vo.setVarietyKey(variety.getVarietyKey());
+            vo.setVarietyCode(variety.getVarietyCode());
+            vo.setVarietyName(variety.getVarietyName());
+            vo.setCategoryLabel(variety.getCategory() == null ? "待确认" : variety.getCategory().getLabel());
+            vo.setLowerBound(plan.getLowerBound());
+            vo.setUpperBound(plan.getUpperBound());
+            vo.setStep(plan.getStep());
+            vo.setAmountPerGrid(plan.getAmountPerGrid());
+            vo.setParamUsable(plan.complete());
+            vo.setParamIssues(plan.getIssues());
+            vo.setParamNotes(plan.getNotes());
+            vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
+            vo.setCustomized(customized.contains(variety.getVarietyKey()));
+            result.add(vo);
+        }
+        return result;
     }
 
     /**
@@ -135,7 +227,9 @@ public class GridAdviceServiceImpl implements GridAdviceService {
                 HttpsCodeEnum.PARAMS_ERROR, "当前价必须大于 0");
         ThrowUtils.throwIf(request.getReferencePrice() != null && request.getReferencePrice().signum() <= 0,
                 HttpsCodeEnum.PARAMS_ERROR, "参考价必须大于 0");
-        return advise(variety, gridPlanResolver.resolve(), request.getCurrentPrice(), request.getReferencePrice());
+        // 试算也按该标的自己的格子，否则核对结果与实盘提醒对不上
+        return advise(variety, gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName()),
+                request.getCurrentPrice(), request.getReferencePrice());
     }
 
     /**
@@ -370,12 +464,15 @@ public class GridAdviceServiceImpl implements GridAdviceService {
      */
     private GridPlanVO toPlanVO(GridPlan plan) {
         GridPlanVO vo = new GridPlanVO();
+        vo.setVarietyKey(plan.getVarietyKey());
+        vo.setVarietyName(plan.getVarietyName());
         vo.setLowerBound(plan.getLowerBound());
         vo.setUpperBound(plan.getUpperBound());
         vo.setStep(plan.getStep());
         vo.setAmountPerGrid(plan.getAmountPerGrid());
         vo.setUsable(plan.complete());
         vo.setIssues(plan.getIssues());
+        vo.setNotes(plan.getNotes());
         vo.setLines(plan.complete() ? gridCalculator.lines(plan) : List.of());
         return vo;
     }

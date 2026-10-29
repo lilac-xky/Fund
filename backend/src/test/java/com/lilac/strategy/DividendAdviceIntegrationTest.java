@@ -82,6 +82,80 @@ class DividendAdviceIntegrationTest {
     }
 
     /**
+     * 监控对象说明这套参数管的是哪只基金：带出跟踪指数、股息率与数据日期
+     */
+    @Test
+    @DisplayName("监控对象带出跟踪指数与股息率")
+    void watchListExplainsTarget() {
+        savePlan("100000", "60000", "5.00", "3.00");
+        indexDividendService.saveManual(manualOf(TODAY.minusDays(1), "4.23"));
+        saveHolding("50000.0000");
+        saveNetWorth("1.5000");
+
+        var watch = dividendAdviceService.watchList();
+
+        assertThat(watch).hasSize(1);
+        var row = watch.get(0);
+        assertThat(row.getVarietyKey()).isEqualTo(DIVIDEND_KEY);
+        assertThat(row.getIndexCode()).isEqualTo(INDEX_CODE);
+        assertThat(row.getDividendYield()).isEqualByComparingTo("4.23");
+        assertThat(row.getDataDate()).isEqualTo(TODAY.minusDays(1));
+        assertThat(row.getCurrentAmount()).isEqualByComparingTo("75000");
+        assertThat(row.getUsable()).isTrue();
+        assertThat(row.getReasons()).isEmpty();
+    }
+
+    /**
+     * 未登记跟踪指数时无法取股息率，监控对象要说明原因而不是静默不参与
+     */
+    @Test
+    @DisplayName("未登记跟踪指数时说明原因")
+    void watchListExplainsMissingIndex() {
+        savePlan("100000", "60000", "5.00", "3.00");
+        // 另建一只从未登记过跟踪指数的红利基金，避免去改已有行的 null 值
+        String noIndexCode = "990923";
+        String noIndexKey = "OF:" + noIndexCode;
+        VarietySaveRequest request = new VarietySaveRequest();
+        request.setVarietyKey(noIndexKey);
+        request.setVarietyType(VarietyType.OF);
+        request.setVarietyCode(noIndexCode);
+        request.setVarietyName("未登记指数的红利基金");
+        request.setCategory(FundCategory.DIVIDEND);
+        request.setConfirmed(Boolean.TRUE);
+        varietyService.saveVariety(request);
+        saveHoldingOf(noIndexKey, "50000.0000");
+
+        var watch = dividendAdviceService.watchList();
+
+        assertThat(watch).hasSize(1);
+        assertThat(watch.get(0).getVarietyKey()).isEqualTo(noIndexKey);
+        assertThat(watch.get(0).getUsable()).isFalse();
+        assertThat(watch.get(0).getReasons())
+                .anyMatch(text -> text.contains("未登记跟踪指数"));
+        // 缺指数时不该再去说「该指数尚无股息率」，两条原因会互相矛盾
+        assertThat(watch.get(0).getReasons())
+                .noneMatch(text -> text.contains("该指数尚无股息率数据"));
+    }
+
+    /**
+     * 股息率过期时监控对象标为过期并带出原因
+     */
+    @Test
+    @DisplayName("股息率过期时监控对象标注原因")
+    void watchListMarksStale() {
+        savePlan("100000", "60000", "5.00", "3.00");
+        indexDividendService.saveManual(manualOf(TODAY.minusDays(30), "4.23"));
+        saveHolding("50000.0000");
+        saveNetWorth("1.5000");
+
+        var watch = dividendAdviceService.watchList();
+
+        assertThat(watch.get(0).getStale()).isTrue();
+        assertThat(watch.get(0).getUsable()).isFalse();
+        assertThat(watch.get(0).getReasons()).anyMatch(text -> text.contains("不得据此给出加减仓动作"));
+    }
+
+    /**
      * 按份额乘净值推算的当前金额与手工核算一致，金额精确到元
      */
     @Test

@@ -9,6 +9,7 @@ import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.DividendPlanVO;
+import com.lilac.domain.vo.DividendWatchVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.IndexDividendOverviewVO;
 import com.lilac.domain.vo.VarietyVO;
@@ -138,6 +139,51 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     }
 
     /**
+     * 列出红利策略的监控对象，说明这套参数管的是哪几只基金与它们的股息率状态
+     *
+     * @return 监控对象列表
+     */
+    @Override
+    public List<DividendWatchVO> watchList() {
+        List<VarietyVO> varieties = dividendVarieties();
+        List<DividendWatchVO> result = new ArrayList<>(varieties.size());
+        for (VarietyVO variety : varieties) {
+            DividendWatchVO vo = new DividendWatchVO();
+            vo.setVarietyKey(variety.getVarietyKey());
+            vo.setVarietyCode(variety.getVarietyCode());
+            vo.setVarietyName(variety.getVarietyName());
+            vo.setIndexCode(variety.getTrackIndexCode());
+            List<String> reasons = new ArrayList<>();
+            boolean hasIndex = variety.getTrackIndexCode() != null && !variety.getTrackIndexCode().isBlank();
+            if (!hasIndex) {
+                reasons.add("未登记跟踪指数，取不到股息率，无法给加减仓建议");
+            }
+            DividendSignal signal = hasIndex ? signalOf(variety) : null;
+            if (hasIndex && signal == null) {
+                reasons.add("该指数尚无股息率数据，请先刷新股息率或手工录入");
+            } else if (signal != null) {
+                vo.setDividendYield(signal.getDividendYield());
+                vo.setDataDate(signal.getDataDate());
+                vo.setAgeDays(signal.getAgeDays() == null ? null : signal.getAgeDays().intValue());
+                vo.setStale(signal.getStale());
+                if (Boolean.TRUE.equals(signal.getStale())) {
+                    reasons.add(signal.getStaleReason());
+                }
+            }
+            vo.setIndexName(indexNameOf(variety.getTrackIndexCode()));
+            AmountSource amount = amountOf(variety, null);
+            vo.setCurrentAmount(amount.amount);
+            if (amount.amount == null) {
+                reasons.add(amount.source);
+            }
+            vo.setUsable(reasons.isEmpty());
+            vo.setReasons(reasons);
+            result.add(vo);
+        }
+        return result;
+    }
+
+    /**
      * 单只品种出建议，金额来源与股息率新鲜度都在这里装配
      *
      * @param variety       品种
@@ -211,6 +257,22 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         vo.setDataDate(signal.getDataDate());
         vo.setAgeDays(signal.getAgeDays());
         vo.setStale(signal.getStale());
+    }
+
+    /**
+     * 取跟踪指数的中文全称，供页面显示「这套参数管的是哪只指数」
+     *
+     * @param indexCode 指数代码，可为空
+     * @return 指数全称，取不到返回 null
+     */
+    private String indexNameOf(String indexCode) {
+        if (indexCode == null || indexCode.isBlank()) {
+            return null;
+        }
+        DividendQueryRequest query = new DividendQueryRequest();
+        query.setIndexCode(indexCode);
+        List<IndexDividendOverviewVO> rows = indexDividendService.listOverview(query);
+        return rows.isEmpty() ? null : rows.get(0).getIndexName();
     }
 
     /**

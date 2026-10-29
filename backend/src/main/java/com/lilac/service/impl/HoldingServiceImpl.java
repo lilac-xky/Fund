@@ -2,15 +2,19 @@ package com.lilac.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.lilac.adapter.model.MarketQuote;
+import com.lilac.adapter.model.FundNetWorthPoint;
 import com.lilac.adapter.quote.MarketQuoteAdapter;
+import com.lilac.engine.DividendCalculator;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
 import com.lilac.domain.entity.Holding;
 import com.lilac.domain.entity.HoldingChange;
 import com.lilac.domain.entity.Variety;
 import com.lilac.domain.vo.HoldingChangeVO;
+import com.lilac.domain.vo.HoldingConvertVO;
 import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
 import com.lilac.domain.vo.HoldingVO;
@@ -44,6 +48,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 /**
  * 持仓业务实现，买入校验、卖出先进先出与变动历史留痕
@@ -91,6 +96,9 @@ public class HoldingServiceImpl implements HoldingService {
     @Resource
     private MarketQuoteAdapter marketQuoteAdapter;
 
+    @Resource
+    private DividendCalculator dividendCalculator;
+
     /**
      * 统一查询未删除的持仓
      *
@@ -115,6 +123,17 @@ public class HoldingServiceImpl implements HoldingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public HoldingVO buy(HoldingBuyRequest request) {
+        return doBuy(request, null);
+    }
+
+    /**
+     * 买入的实际实现，自带备注时用它替换默认的身份回显文案
+     *
+     * @param request 买入请求
+     * @param note    变动留痕的备注，为空时写身份回显
+     * @return 新增的持仓
+     */
+    private HoldingVO doBuy(HoldingBuyRequest request, String note) {
         ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR);
         String varietyKey = trimKey(request.getVarietyKey());
         ThrowUtils.throwIf(varietyKey == null, HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
@@ -149,9 +168,10 @@ public class HoldingServiceImpl implements HoldingService {
         holdingMapper.insertSelective(holding);
 
         BigDecimal after = totalShares(varietyKey);
+        String changeNote = note != null ? note
+                : "身份回显：" + variety.getVarietyName() + "（" + variety.getVarietyCode() + "）";
         saveChange(varietyKey, HoldingChangeType.BUY, request.getShares(), request.getCostPrice(), after,
-                request.getOpenDate(),
-                "身份回显：" + variety.getVarietyName() + "（" + variety.getVarietyCode() + "）");
+                request.getOpenDate(), changeNote);
         log.info("买入入库 varietyKey={} shares={} cost={}", varietyKey, request.getShares(), request.getCostPrice());
         return BeanUtil.copyProperties(holding, HoldingVO.class);
     }
@@ -217,6 +237,89 @@ public class HoldingServiceImpl implements HoldingService {
         return listHolding(byVariety(varietyKey)).stream()
                 .filter(holding -> holding.getStatus() == HoldingStatus.HOLDING)
                 .toList();
+    }
+
+    /**
+     * 基金转换，同一事务内先按先进先出卖出、再买入转入品种，任一步失败整笔回滚
+     *
+     * @param request 转换请求
+     * @return 转出与转入的变动后状态
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public HoldingConvertVO convert(HoldingConvertRequest request) {
+        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR);
+        String fromKey = trimKey(request.getFromVarietyKey());
+        String toKey = trimKey(request.getToVarietyKey());
+        ThrowUtils.throwIf(fromKey == null || toKey == null, HttpsCodeEnum.PARAMS_ERROR,
+                "转出与转入品种都必须指定");
+        // 同一只基金自己转自己没有意义，且会让 FIFO 扣减与新增互相干扰
+        ThrowUtils.throwIf(fromKey.equals(toKey), HttpsCodeEnum.PARAMS_ERROR,
+                "转出与转入不能是同一只基金");
+        ThrowUtils.throwIf(request.getShares() == null || request.getShares().signum() <= 0,
+                HttpsCodeEnum.PARAMS_ERROR, "转出份额必须为正数");
+        ThrowUtils.throwIf(request.getToShares() == null || request.getToShares().signum() <= 0,
+                HttpsCodeEnum.PARAMS_ERROR, "转入份额必须为正数");
+        ThrowUtils.throwIf(request.getToCostPrice() == null || request.getToCostPrice().signum() <= 0,
+                HttpsCodeEnum.PARAMS_ERROR, "转入成本价必须为正数");
+
+        Variety toVariety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(Variety::getVarietyKey, toKey));
+        ThrowUtils.throwIf(toVariety == null, HttpsCodeEnum.PARAMS_ERROR,
+                "品种 " + toKey + " 尚未注册，请先通过代码消歧确认身份");
+        ThrowUtils.throwIf(!Boolean.TRUE.equals(toVariety.getConfirmed()), HttpsCodeEnum.PARAMS_ERROR,
+                "品种 " + toKey + " 类型待确认，请先指定类型再转入");
+
+        HoldingSellRequest sellRequest = new HoldingSellRequest();
+        sellRequest.setVarietyKey(fromKey);
+        sellRequest.setShares(request.getShares());
+        sell(sellRequest);
+
+        HoldingBuyRequest buyRequest = new HoldingBuyRequest();
+        buyRequest.setVarietyKey(toKey);
+        buyRequest.setShares(request.getToShares());
+        buyRequest.setCostPrice(request.getToCostPrice());
+        buyRequest.setOpenDate(request.getOpenDate());
+        // 转换只留一条买入痕迹，备注写明来源，读历史时能一眼看出这笔是转换来的
+        doBuy(buyRequest, "基金转换转入：由 " + fromKey + " 转出 " + plain(request.getShares()) + " 份");
+
+        HoldingConvertVO vo = new HoldingConvertVO();
+        vo.setFromVariety(rowOf(fromKey));
+        vo.setToVariety(rowOf(toKey));
+        vo.setOutCount(1);
+        vo.setInCount(1);
+        vo.setNote("已从 " + fromKey + " 转出 " + plain(request.getShares()) + " 份，转入 "
+                + toVariety.getVarietyName() + " " + plain(request.getToShares()) + " 份");
+        log.info("基金转换 from={} to={} out={} in={}", fromKey, toKey,
+                request.getShares(), request.getToShares());
+        return vo;
+    }
+
+    /**
+     * 取单个品种的总览行，供转换结果回显
+     *
+     * @param varietyKey 品种业务主键
+     * @return 聚合行，无持有中持仓时只带出份额为 0 的空行
+     */
+    private HoldingVarietyVO rowOf(String varietyKey) {
+        List<Holding> holdings = holdingMapper.selectListByQuery(QueryWrapper.create()
+                .eq(Holding::getVarietyKey, varietyKey)
+                .eq(Holding::getStatus, HoldingStatus.HOLDING));
+        HoldingVarietyVO row = new HoldingVarietyVO();
+        row.setVarietyKey(varietyKey);
+        row.setTotalShares(holdings.stream().map(Holding::getShares)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (holdings.isEmpty()) {
+            row.setStatus(HoldingStatus.CLOSED);
+            Variety variety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                    .eq(Variety::getVarietyKey, varietyKey));
+            if (variety != null) {
+                row.setVarietyName(variety.getVarietyName());
+                row.setVarietyCode(variety.getVarietyCode());
+            }
+            return row;
+        }
+        return buildVarietyRow(varietyKey, holdings);
     }
 
     /**
@@ -350,8 +453,39 @@ public class HoldingServiceImpl implements HoldingService {
                     : profitLoss.multiply(BigDecimal.valueOf(100))
                             .divide(cost, 2, RoundingMode.HALF_UP));
             item.setDailyChangePercent(price.changePercent);
+            fillDividend(item, variety, shares, price, holdings);
         }
         return item;
+    }
+
+    /**
+     * 按累计净值推算建仓以来的现金分红，现金分红会从单位净值里扣掉，只算市值会看不见这部分收益
+     *
+     * @param item     聚合行，原地补分红字段
+     * @param variety  品种
+     * @param shares   合计份额
+     * @param price    最新价
+     * @param holdings 该品种的持有中持仓
+     */
+    private void fillDividend(HoldingVarietyVO item, Variety variety, BigDecimal shares, LatestPrice price,
+                              List<Holding> holdings) {
+        if (variety == null || variety.getVarietyCode() == null || price.accumulated() == null) {
+            return;
+        }
+        LocalDate since = holdings.stream().map(Holding::getOpenDate)
+                .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(null);
+        if (since == null) {
+            return;
+        }
+        List<FundNetWorthPoint> history = fundNetWorthService.listRange(variety.getVarietyCode(),
+                since.minusDays(dividendCalculator.lookbackDays()), since);
+        FundNetWorthPoint latest = new FundNetWorthPoint(price.date(), price.value(), null, price.accumulated());
+        DividendCalculator.Result result = dividendCalculator.calculate(shares, since, latest, history);
+        if (result == null) {
+            return;
+        }
+        item.setDividendAmount(result.amount());
+        item.setDividendNote(result.note());
     }
 
     /**
@@ -369,8 +503,9 @@ public class HoldingServiceImpl implements HoldingService {
                 MarketQuote quote = marketQuoteAdapter.quote(variety.getVarietyCode());
                 if (quote != null && quote.getPrice() != null) {
                     String source = Boolean.TRUE.equals(quote.getRealtime()) ? "行情价（实时）" : "行情价（上一交易日）";
+                    // 场内 ETF 没有单位净值口径，累计净值不参与分红推算
                     return new LatestPrice(quote.getPrice(), quote.getTradeDate(), source,
-                            quote.getChangePercent());
+                            quote.getChangePercent(), null);
                 }
             } catch (Exception e) {
                 // 行情不可用不影响总览展示，回退净值
@@ -382,7 +517,8 @@ public class HoldingServiceImpl implements HoldingService {
             com.lilac.adapter.model.FundNetWorthPoint point = points.get(i);
             if (point.getUnitNetWorth() != null) {
                 return new LatestPrice(point.getUnitNetWorth(), point.getNetWorthDate(),
-                        "净值 " + point.getNetWorthDate(), point.getEquityReturn());
+                        "净值 " + point.getNetWorthDate(), point.getEquityReturn(),
+                        point.getAccumulatedNetWorth());
             }
         }
         return null;
@@ -554,6 +690,7 @@ public class HoldingServiceImpl implements HoldingService {
     /**
      * 最新价的内部载体
      */
-    private record LatestPrice(BigDecimal value, LocalDate date, String source, BigDecimal changePercent) {
+    private record LatestPrice(BigDecimal value, LocalDate date, String source, BigDecimal changePercent,
+                               BigDecimal accumulated) {
     }
 }

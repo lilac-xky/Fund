@@ -4,11 +4,13 @@ import cn.hutool.core.bean.BeanUtil;
 import com.lilac.common.DeleteRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
 import com.lilac.domain.entity.Holding;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.HoldingChangeVO;
+import com.lilac.domain.vo.HoldingConvertVO;
 import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
 import com.lilac.domain.vo.HoldingVO;
@@ -78,6 +80,14 @@ public class HoldingController {
     @PostMapping("/sell")
     public Result<List<HoldingVO>> sell(@RequestBody HoldingSellRequest request) {
         return Result.success(holdingService.sell(request));
+    }
+
+    /**
+     * 基金转换，同一事务内先卖出再买入，任一步失败整笔回滚
+     */
+    @PostMapping("/convert")
+    public Result<HoldingConvertVO> convert(@RequestBody HoldingConvertRequest request) {
+        return Result.success(holdingService.convert(request));
     }
 
     /**

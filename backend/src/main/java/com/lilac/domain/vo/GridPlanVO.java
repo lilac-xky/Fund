@@ -13,6 +13,16 @@ import java.util.List;
 public class GridPlanVO implements Serializable {
 
     /**
+     * 所属品种业务主键；通用参数为 null
+     */
+    private String varietyKey;
+
+    /**
+     * 所属品种名称，供页面显示这套格子管的是哪只
+     */
+    private String varietyName;
+
+    /**
      * 价格下界，单位元
      */
     private BigDecimal lowerBound;
@@ -46,6 +56,11 @@ public class GridPlanVO implements Serializable {
      * 参数问题清单，可用时为空
      */
     private List<String> issues;
+
+    /**
+     * 参数提示，如「正在沿用通用参数」；不影响可用性
+     */
+    private List<String> notes;
 
     private static final long serialVersionUID = 1L;
 }
