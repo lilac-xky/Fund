@@ -85,9 +85,19 @@ export default async function request<T>(
   const query = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        query.append(key, String(value))
+      if (value === undefined || value === null || value === '') {
+        return
       }
+      // 数组按重复参数逐个追加，直接 String(array) 会得到一个逗号拼接的串
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item !== undefined && item !== null && item !== '') {
+            query.append(key, String(item))
+          }
+        })
+        return
+      }
+      query.append(key, String(value))
     })
   }
   const queryString = query.toString()

@@ -34,6 +34,13 @@
       </div>
     </div>
 
+    <div v-if="marketValue != null" class="app-pulse__cell">
+      <div>
+        <div class="app-pulse__k">持仓市值</div>
+        <div class="app-pulse__v app-pulse__v--sm">{{ marketValueText }}</div>
+      </div>
+    </div>
+
     <div class="app-pulse__cell app-pulse__cell--grow">
       <span v-if="dataAsOf" class="app-pulse__note">
         <i class="app-pulse__dot" />
@@ -48,7 +55,9 @@
 /**
  * 行情条：一行展示今日预估、可预估数、冷暖、指数、市值与数据截止
  */
-defineProps<{
+import { computed } from 'vue'
+
+const props = defineProps<{
   /** 今日预估涨跌幅，百分点；null 表示暂不可估 */
   estimatedChange?: number | null
   /** 可预估只数 */
@@ -66,6 +75,18 @@ defineProps<{
   /** 下次生效说明 */
   nextNote?: string
 }>()
+
+/** 市值文案，按万元折算以免行情条被长数字撑开 */
+const marketValueText = computed(() => {
+  const value = props.marketValue
+  if (value === undefined || value === null) {
+    return '—'
+  }
+  if (Math.abs(value) >= 10000) {
+    return `${(value / 10000).toFixed(2)} 万`
+  }
+  return value.toFixed(2)
+})
 
 /** 涨跌上色，涨红跌绿 */
 function tone(value?: number | null): string {

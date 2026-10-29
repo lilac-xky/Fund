@@ -49,6 +49,15 @@
   --dn-soft: rgba(63, 122, 85, 0.1);
   --warn: #9a6b16;
 
+  /* 类型标识：六类基金各一色，低饱和以免与强调色抢视线 */
+  --cat-stock: #2f5d8c;
+  --cat-mixed: #6b4e8e;
+  --cat-bond: #3f7a55;
+  --cat-gold: #9a6b16;
+  --cat-dividend: #a6405c;
+  --cat-etf: #4a6b7c;
+  --cat-unknown: #a0968a;
+
   /* 控件 */
   --inp-bg: #ffffff;
   --inp-shadow: inset 0 1px 2px rgba(61, 45, 28, 0.045);
@@ -114,6 +123,15 @@
   --dn: #66b68a;
   --dn-soft: rgba(102, 182, 138, 0.13);
   --warn: #ddaa5e;
+
+  /* 类型标识：深色下整体提亮，保持可辨 */
+  --cat-stock: #6a9fd4;
+  --cat-mixed: #a98bd0;
+  --cat-bond: #66b68a;
+  --cat-gold: #ddaa5e;
+  --cat-dividend: #d9779a;
+  --cat-etf: #7fa9bd;
+  --cat-unknown: #645b51;
 
   --inp-bg: var(--s2);
   --inp-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) inset;

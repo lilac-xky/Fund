@@ -12,7 +12,7 @@
 | 技术方案 | 已定案（`docs/02-tech/TECH-PRD.md` v0.4） |
 | 排期 | 30 条 issue / 184 小时（`docs/03-plan/`） |
 | 探针 | ISSUE-001 已完成，结论见 `docs/04-research/` |
-| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口）；ISSUE-005 历史净值与重仓股已落地（第 7 张表 `fund_net_worth` + `GET /fund/snapshot`）；ISSUE-006 盘中行情已落地（腾讯/新浪多源回退 + Redis 缓存 + 4 个 `/quote` 接口）；ISSUE-007 预估引擎已落地（4 条分支 + A/B/C 档位 + 不可预估分支 + 2 个 `/estimate` 接口）；ISSUE-008 晚间校准已落地（第 8、9 张表 `estimate_snapshot` / `estimate_gold_beta` + 误差历史扩列 + 滚动档位 + 5 个 `/estimate/calibration` 接口）；ISSUE-009 中证股息率已落地（第 10 张表 `index_dividend` + HSSF 解析老式 `.xls` + 手工覆盖 + 3 个 `/dividend` 接口）；ISSUE-010 红利建议已落地（不新增表，参数进 `strategy_param` 的 `DIVIDEND` 分组 + 保底分红约束 + 4 个 `/dividend/advice` 接口）；ISSUE-011 四时点调度已落地（不新增表，复用 `send_record` + 启动补跑 + 时钟跳变 + 4 个 `/task` 接口）；ISSUE-012 收盘前邮件已落地（新增 `spring-boot-starter-mail` + HTML/纯文本双版 + 失败留存 `data/mail/` + 3 个 `/mail` 接口），M9 里程碑达成；**ISSUE-013 参数设置页已落地**（前端从零补齐：双模式主题 token + 三栏布局壳 + 6 个基础组件 + 参数设置页；后端新增 `SettingService` 字段级校验 + `SecretsWriter` 只写不读 + 5 个 `/setting` 接口）；**ISSUE-014 持仓录入页已落地**（新增第 11 张表 `holding_change` + 买入校验/卖出先进先出/品种聚合总览 + 6 个 `/holding` 接口 + 消歧候选带注册态回显 + 前端持仓录入页），M10 进行中 |
+| 代码 | ISSUE-003 数据层已落地（5 张业务表 + Mapper/Service + 三个 CRUD Controller + 启动自检）；ISSUE-004 基金全集与代码消歧已落地（第 6 张表 `fund_catalog` + 4 个 `/fund` 接口）；ISSUE-005 历史净值与重仓股已落地（第 7 张表 `fund_net_worth` + `GET /fund/snapshot`）；ISSUE-006 盘中行情已落地（腾讯/新浪多源回退 + Redis 缓存 + 4 个 `/quote` 接口）；ISSUE-007 预估引擎已落地（4 条分支 + A/B/C 档位 + 不可预估分支 + 2 个 `/estimate` 接口）；ISSUE-008 晚间校准已落地（第 8、9 张表 `estimate_snapshot` / `estimate_gold_beta` + 误差历史扩列 + 滚动档位 + 5 个 `/estimate/calibration` 接口）；ISSUE-009 中证股息率已落地（第 10 张表 `index_dividend` + HSSF 解析老式 `.xls` + 手工覆盖 + 3 个 `/dividend` 接口）；ISSUE-010 红利建议已落地（不新增表，参数进 `strategy_param` 的 `DIVIDEND` 分组 + 保底分红约束 + 4 个 `/dividend/advice` 接口）；ISSUE-011 四时点调度已落地（不新增表，复用 `send_record` + 启动补跑 + 时钟跳变 + 4 个 `/task` 接口）；ISSUE-012 收盘前邮件已落地（新增 `spring-boot-starter-mail` + HTML/纯文本双版 + 失败留存 `data/mail/` + 3 个 `/mail` 接口），M9 里程碑达成；**ISSUE-013 参数设置页已落地**（前端从零补齐：双模式主题 token + 三栏布局壳 + 6 个基础组件 + 参数设置页；后端新增 `SettingService` 字段级校验 + `SecretsWriter` 只写不读 + 5 个 `/setting` 接口）；**ISSUE-014 持仓录入页已落地**（新增第 11 张表 `holding_change` + 买入校验/卖出先进先出/品种聚合总览 + 6 个 `/holding` 接口 + 消歧候选带注册态回显 + 前端持仓录入页）；**ISSUE-015 早/午盘总览页已落地**（前端新增 Pinia 总览仓库 + 五路数据并发编排 + 早盘预估表与不可预估区块 + 午盘走势与 RSI/MACD 状态 + localStorage 快照与 Service Worker 双层断网降级 + 数据截止时间标注，后端零改动），M10 进行中 |
 
 ## 这个工具做什么
 
@@ -76,12 +76,15 @@ fund/
 │   │   ├── composables/          # 组合式状态（主题与侧栏折叠）
 │   │   ├── layout/               # 布局壳（顶栏 / 行情条 / 侧栏 / 保存条 / 右栏块）
 │   │   ├── router/               # 路由
-│   │   ├── services/             # 页面级数据编排（不碰 src/api/）
+│   │   ├── services/             # 页面级数据编排与指标计算（不碰 src/api/）
+│   │   ├── stores/               # Pinia 数据仓库（取数、缓存回放、断网补取）
 │   │   ├── styles/               # 主题 token（双模式 CSS 变量）
 │   │   ├── ui/                   # 基础组件与全局消息
+│   │   ├── utils/                # 格式化与配色映射
 │   │   ├── views/                # 页面
 │   │   ├── request.ts            # 统一请求封装
 │   │   └── main.ts
+│   ├── public/sw.js              # Service Worker，断网时保住页面外壳
 │   ├── index.html                # 含首屏定主题脚本，避免深色闪烁
 │   ├── vite.config.mjs           # 构建产物落 frontend/dist，不写入后端 static
 │   └── openapi.config.js         # 从 Apifox 拉取 schema 生成接口代码
@@ -182,7 +185,7 @@ docs/06-features/web/ISSUE-015-早午盘总览页.md
 | 排期 | [`docs/03-plan/ROADMAP.md`](docs/03-plan/ROADMAP.md)、[`docs/03-plan/ISSUES.md`](docs/03-plan/ISSUES.md) |
 | 研究 | [`docs/04-research/`](docs/04-research/) |
 | 规范 | [`docs/05-conventions/README.md`](docs/05-conventions/README.md)、[`前端主题规范.md`](docs/05-conventions/前端主题规范.md) |
-| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md)、[`docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md`](docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md)、[`docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md`](docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md)、[`docs/06-features/engine/ISSUE-007-预估引擎.md`](docs/06-features/engine/ISSUE-007-预估引擎.md)、[`docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md`](docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md)、[`docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md`](docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md)、[`docs/06-features/strategy/ISSUE-010-红利加减仓建议.md`](docs/06-features/strategy/ISSUE-010-红利加减仓建议.md)、[`docs/06-features/task/ISSUE-011-四时点调度与补跑.md`](docs/06-features/task/ISSUE-011-四时点调度与补跑.md)、[`docs/06-features/task/ISSUE-012-收盘前提醒邮件.md`](docs/06-features/task/ISSUE-012-收盘前提醒邮件.md)、[`docs/06-features/web/ISSUE-013-参数设置页.md`](docs/06-features/web/ISSUE-013-参数设置页.md)、[`docs/06-features/web/ISSUE-014-持仓录入页.md`](docs/06-features/web/ISSUE-014-持仓录入页.md)、[`docs/06-features/holding/FIX-026-持仓录入三问题修复.md`](docs/06-features/holding/FIX-026-持仓录入三问题修复.md) |
+| 功能实现 | [`docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md`](docs/06-features/domain/ISSUE-003-数据层落库与实体建模.md)、[`docs/06-features/adapter/ISSUE-004-基金全集与消歧.md`](docs/06-features/adapter/ISSUE-004-基金全集与消歧.md)、[`docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md`](docs/06-features/adapter/ISSUE-005-历史净值与重仓股.md)、[`docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md`](docs/06-features/adapter/ISSUE-006-盘中行情与多源回退.md)、[`docs/06-features/engine/ISSUE-007-预估引擎.md`](docs/06-features/engine/ISSUE-007-预估引擎.md)、[`docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md`](docs/06-features/report/ISSUE-008-晚间净值校准与档位判定.md)、[`docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md`](docs/06-features/strategy/ISSUE-009-中证指数股息率抓取与手工覆盖.md)、[`docs/06-features/strategy/ISSUE-010-红利加减仓建议.md`](docs/06-features/strategy/ISSUE-010-红利加减仓建议.md)、[`docs/06-features/task/ISSUE-011-四时点调度与补跑.md`](docs/06-features/task/ISSUE-011-四时点调度与补跑.md)、[`docs/06-features/task/ISSUE-012-收盘前提醒邮件.md`](docs/06-features/task/ISSUE-012-收盘前提醒邮件.md)、[`docs/06-features/web/ISSUE-013-参数设置页.md`](docs/06-features/web/ISSUE-013-参数设置页.md)、[`docs/06-features/web/ISSUE-014-持仓录入页.md`](docs/06-features/web/ISSUE-014-持仓录入页.md)、[`docs/06-features/web/ISSUE-015-早午盘总览页.md`](docs/06-features/web/ISSUE-015-早午盘总览页.md)、[`docs/06-features/holding/FIX-026-持仓录入三问题修复.md`](docs/06-features/holding/FIX-026-持仓录入三问题修复.md) |
 
 ## 与 TECH-PRD 的偏差（待裁定）
 
