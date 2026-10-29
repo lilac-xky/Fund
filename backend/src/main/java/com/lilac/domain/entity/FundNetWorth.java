@@ -34,4 +34,9 @@ public class FundNetWorth extends BaseEntity {
      * 当日净值回报，单位百分点
      */
     private BigDecimal equityReturn;
+
+    /**
+     * 累计净值，含历史现金分红；上游不提供时为 null
+     */
+    private BigDecimal accumulatedNetWorth;
 }

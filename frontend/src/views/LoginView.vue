@@ -21,10 +21,6 @@
         </div>
 
         <h1 class="app-login__h1">登录</h1>
-        <p class="app-login__lede">
-          单层登录即是全部防线。用户名与口令都在服务器的 <code>config/secrets.env</code> 里，
-          不存数据库、不进 Git、也不会通过任何接口回显。
-        </p>
 
         <AppAlert v-if="!checking && !configured" kind="warn" title="尚未配置登录凭据">
           请在服务器的 <code>config/secrets.env</code> 里填写 <code>AUTH_USERNAME</code> 与
@@ -38,7 +34,7 @@
               :model-value="username"
               :numeric="false"
               inputmode="text"
-              placeholder="config/secrets.env 里的 AUTH_USERNAME"
+              placeholder="AUTH_USERNAME"
               autocomplete="username"
               @update:model-value="username = $event"
             />
@@ -69,10 +65,6 @@
             <span v-if="lockedHint" class="app-login__hint">{{ lockedHint }}</span>
           </div>
         </form>
-
-        <p class="app-login__foot">
-          连续输错 {{ maxNote }} 次会临时锁定。会话有效期内无需重复登录，过期后自动回到本页。
-        </p>
       </div>
     </main>
 
@@ -120,9 +112,6 @@ const submitting = computed(() => auth.submitting)
 
 /** 锁定与失败提示 */
 const lockedHint = ref('')
-
-/** 阈值说明，与后端默认配置保持一致 */
-const maxNote = '5'
 
 /**
  * 提交登录，成功后回跳来源页
@@ -260,14 +249,6 @@ onMounted(async () => {
   color: var(--t1);
 }
 
-.app-login__lede {
-  margin-top: 8px;
-  margin-bottom: 18px;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--t3);
-}
-
 .app-login__lede code,
 :deep(code) {
   padding: 1px 4px;
@@ -277,7 +258,7 @@ onMounted(async () => {
 }
 
 .app-login__form {
-  margin-top: 8px;
+  margin-top: 18px;
 }
 
 .app-login__ops {
@@ -291,14 +272,5 @@ onMounted(async () => {
   font-size: 11px;
   line-height: 1.5;
   color: var(--warn);
-}
-
-.app-login__foot {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--hair);
-  font-size: 10.5px;
-  line-height: 1.65;
-  color: var(--t4);
 }
 </style>

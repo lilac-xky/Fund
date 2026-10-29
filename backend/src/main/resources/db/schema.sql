@@ -167,13 +167,14 @@ CREATE TABLE IF NOT EXISTS fund_catalog (
   DEFAULT CHARSET = utf8mb4 COMMENT ='基金全集缓存，供代码消歧查表，可随时重建';
 
 CREATE TABLE IF NOT EXISTS fund_net_worth (
-    id            BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
-    fundCode      VARCHAR(16)    NOT NULL COMMENT '6 位基金代码',
-    netWorthDate  DATE           NOT NULL COMMENT '净值日期',
-    unitNetWorth  DECIMAL(16, 6) NOT NULL COMMENT '单位净值',
-    equityReturn  DECIMAL(12, 6)          DEFAULT NULL COMMENT '当日净值回报，单位百分点',
-    createTime    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updateTime    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    id                 BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    fundCode           VARCHAR(16)    NOT NULL COMMENT '6 位基金代码',
+    netWorthDate       DATE           NOT NULL COMMENT '净值日期',
+    unitNetWorth       DECIMAL(16, 6) NOT NULL COMMENT '单位净值',
+    equityReturn       DECIMAL(12, 6)          DEFAULT NULL COMMENT '当日净值回报，单位百分点',
+    accumulatedNetWorth DECIMAL(16, 6)         DEFAULT NULL COMMENT '累计净值，含历史现金分红，上游不提供时为 null',
+    createTime         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY ukNetWorthFundDate (fundCode, netWorthDate),
     KEY idxNetWorthDate (netWorthDate)

@@ -19,7 +19,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 天天基金 pingzhongdata 适配器，解析历史净值与季末股票、债券、现金占净比
@@ -30,6 +32,7 @@ public class FundPingzhongDataAdapter {
 
     private static final ZoneId CHINA_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String NET_WORTH_VAR = "Data_netWorthTrend";
+    private static final String AC_NET_WORTH_VAR = "Data_ACWorthTrend";
     private static final String ASSET_ALLOCATION_VAR = "Data_assetAllocation";
     private static final String NAME_VAR = "fS_name";
     private static final String STOCK_SERIES = "股票占净比";
@@ -77,12 +80,60 @@ public class FundPingzhongDataAdapter {
         FundPingzhongData data = new FundPingzhongData();
         data.setCode(code);
         data.setName(parseName(text));
-        data.setNetWorthPoints(parseNetWorth(code, requireVar(text, NET_WORTH_VAR, code)));
+        List<FundNetWorthPoint> points = parseNetWorth(code, requireVar(text, NET_WORTH_VAR, code));
+        fillAccumulatedNetWorth(points, text);
+        data.setNetWorthPoints(points);
         data.setAssetAllocations(parseAssetAllocation(text));
         log.info("净值解析完成 code={} 名称={} 净值 {} 条 最新 {} 仓位 {} 期",
                 code, data.getName(), data.getNetWorthPoints().size(), data.latestNetWorthDate(),
                 data.getAssetAllocations().size());
         return data;
+    }
+
+    /**
+     * 把累计净值挂到对应日期上，缺这个变量时整列留空而不是让解析失败
+     *
+     * @param points 净值序列，原地补累计净值
+     * @param text   原始 JS 文本
+     */
+    private void fillAccumulatedNetWorth(List<FundNetWorthPoint> points, String text) {
+        String json = findVar(text, AC_NET_WORTH_VAR);
+        if (json == null || json.isBlank()) {
+            return;
+        }
+        Map<LocalDate, BigDecimal> byDate;
+        try {
+            byDate = parseAccumulated(json);
+        } catch (Exception e) {
+            // 累计净值只用于分红展示，解析不了就当没有，绝不影响单位净值与预估
+            log.warn("累计净值解析失败，按无累计净值处理：{}", e.getMessage());
+            return;
+        }
+        points.forEach(point -> point.setAccumulatedNetWorth(byDate.get(point.getNetWorthDate())));
+    }
+
+    /**
+     * 解析累计净值数组，每项是 [毫秒时间戳, 累计净值]
+     *
+     * @param json 数组原文
+     * @return 日期到累计净值的映射
+     */
+    private Map<LocalDate, BigDecimal> parseAccumulated(String json) {
+        JSONArray array = JSONUtil.parseArray(json);
+        Map<LocalDate, BigDecimal> byDate = new LinkedHashMap<>(array.size());
+        for (int i = 0; i < array.size(); i++) {
+            JSONArray row = array.getJSONArray(i);
+            if (row == null || row.size() < 2) {
+                continue;
+            }
+            Long timestamp = row.getLong(0);
+            BigDecimal value = row.getBigDecimal(1);
+            if (timestamp == null || value == null) {
+                continue;
+            }
+            byDate.put(toDate(timestamp), value);
+        }
+        return byDate;
     }
 
     /**

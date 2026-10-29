@@ -34,6 +34,11 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
         REQUIRED_COLUMNS.put("estimate_error", errorColumns);
         // 混合型只给方向与区间时没有点估计，这两列必须允许为空，否则只能写假数字
         NULLABLE_COLUMNS.put("estimate_error", List.of("estimatedChange", "errorValue"));
+
+        Map<String, String> netWorthColumns = new LinkedHashMap<>();
+        netWorthColumns.put("accumulatedNetWorth",
+                "DECIMAL(16, 6) DEFAULT NULL COMMENT '累计净值，含历史现金分红，上游不提供时为 null'");
+        REQUIRED_COLUMNS.put("fund_net_worth", netWorthColumns);
     }
 
     @Resource

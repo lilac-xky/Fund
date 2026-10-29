@@ -25,6 +25,7 @@ class FundPingzhongDataAdapterTest {
             + "var Data_netWorthTrend = [{\"x\":1265040000000,\"y\":1.0,\"equityReturn\":0,\"unitMoney\":\"\"},"
             + "{\"x\":1792598400000,\"y\":1.1329,\"equityReturn\":-0.02,\"unitMoney\":\"\"},"
             + "{\"x\":1792684800000,\"y\":1.1328,\"equityReturn\":-0.01,\"unitMoney\":\"\"}];"
+            + "var Data_ACWorthTrend = [[1265040000000,1.0],[1792598400000,1.4529],[1792684800000,1.4528]];"
             + "var Data_assetAllocation = {\"series\":[{\"name\":\"股票占净比\",\"data\":[94.49,94.33]},"
             + "{\"name\":\"债券占净比\",\"data\":[0,0]},{\"name\":\"现金占净比\",\"data\":[5.63,5.79]},"
             + "{\"name\":\"净资产\",\"data\":[26.5,23.6]}],\"categories\":[\"2026-03-31\",\"2026-06-30\"]};";
@@ -56,6 +57,24 @@ class FundPingzhongDataAdapterTest {
         assertThat(allocations.get(1).getStockRatio()).isEqualByComparingTo("94.33");
         assertThat(allocations.get(1).getCashRatio()).isEqualByComparingTo("5.79");
         assertThat(data.latestAssetAllocation().getStockRatio()).isEqualByComparingTo("94.33");
+        // 累计净值按日期挂到对应净值点上
+        assertThat(data.getNetWorthPoints().get(2).getAccumulatedNetWorth()).isEqualByComparingTo("1.4528");
+    }
+
+    /**
+     * 上游没给累计净值时整列留空，解析不因此失败
+     */
+    @Test
+    @DisplayName("缺累计净值时解析仍成功")
+    void missingAccumulatedKeepsParsing() {
+        String withoutAc = SAMPLE.replaceAll("var Data_ACWorthTrend = \\[.*?\\];", "");
+        FundPingzhongDataAdapter adapter = new FundPingzhongDataAdapter(new StubFetcher(withoutAc),
+                "https://example.com");
+
+        FundPingzhongData data = adapter.parse("090010", withoutAc);
+
+        assertThat(data.getNetWorthPoints()).hasSize(3);
+        assertThat(data.getNetWorthPoints().get(2).getAccumulatedNetWorth()).isNull();
     }
 
     /**
