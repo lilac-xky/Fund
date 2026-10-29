@@ -1,4 +1,15 @@
 declare namespace API {
+  type AuthStatusVO = {
+    /** 是否已登录 */
+    authenticated?: boolean
+    /** 登录开关是否开启，关闭时页面不做跳转 */
+    required?: boolean
+    /** 凭据是否已配置，未配置时任何人都登不进来 */
+    configured?: boolean
+    /** 会话剩余有效秒数，未登录为 0 */
+    remainingSeconds?: number
+  }
+
   type CalibrationGapVO = {
     /** 品种业务主键 */
     varietyKey?: string
@@ -623,6 +634,115 @@ declare namespace API {
     createTime?: string
   }
 
+  type GridAdviceRequest = {
+    /** 品种业务主键，为空时按全部持有中的场内 ETF */
+    varietyKey?: string
+    /** 手工指定的当前价，留空则取行情 */
+    currentPrice?: number
+    /** 手工指定的参考价，留空则取上一交易日收盘价 */
+    referencePrice?: number
+  }
+
+  type GridAdviceVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 动作，买入、卖出、未触发或已让位 */
+    action?: 'BUY' | 'SELL' | 'NONE' | 'SUPPRESSED'
+    /** 动作中文名 */
+    actionLabel?: string
+    /** 当前价，单位元 */
+    currentPrice?: number
+    /** 当前价的数据日期 */
+    priceDate?: string
+    /** 当前价的取数说明，如「行情价（实时）」 */
+    priceSource?: string
+    /** 参考价，判断穿越方向的基准，一般为上一交易日收盘价 */
+    referencePrice?: number
+    /** 参考价的数据日期 */
+    referenceDate?: string
+    /** 当前所处格子序号，从下界起算为 0；超出区间为 null */
+    currentGrid?: number
+    /** 本次越过的网格线价格，未触发为 null */
+    crossedLine?: number
+    /** 建议买卖金额，单位元，未触发为 null */
+    suggestAmount?: number
+    /** 网格线总条数 */
+    lineCount?: number
+    /** 网格下界 */
+    lowerBound?: number
+    /** 网格上界 */
+    upperBound?: number
+    /** 每格金额 */
+    amountPerGrid?: number
+    /** 是否因同标的有红利建议而让位 */
+    suppressed?: boolean
+    /** 判断依据文字，逐条可读 */
+    remarks?: string[]
+  }
+
+  type GridAdvisoryVO = {
+    /** 逐只提醒，按触发优先、再按建议金额降序 */
+    items?: GridAdviceVO[]
+    /** 未触发的标的，逐只带原因 */
+    idleItems?: GridAdviceVO[]
+    /** 本次纳入的标的数 */
+    requested?: number
+    /** 触发提醒的标的数 */
+    triggeredCount?: number
+    /** 因红利建议让位的标的数 */
+    suppressedCount?: number
+    /** 未触发的标的数 */
+    idleCount?: number
+    /** 建议买入合计，单位元 */
+    totalBuyAmount?: number
+    /** 建议卖出合计，单位元 */
+    totalSellAmount?: number
+    /** 参数是否可用，false 时整批不给提醒 */
+    paramUsable?: boolean
+    /** 参数问题清单 */
+    paramIssues?: string[]
+    /** 与红利策略的互斥口径说明 */
+    dividendNote?: string
+    /** 操作提示，如无场内 ETF 持仓 */
+    notice?: string
+    /** 汇总摘要，供邮件直接取用 */
+    summary?: string[]
+  }
+
+  type GridParamSaveRequest = {
+    /** 价格下界，单位元 */
+    lowerBound?: number
+    /** 价格上界，单位元 */
+    upperBound?: number
+    /** 相邻网格线的价格间距，单位元 */
+    step?: number
+    /** 每格金额，单位元 */
+    amountPerGrid?: number
+  }
+
+  type GridPlanVO = {
+    /** 价格下界，单位元 */
+    lowerBound?: number
+    /** 价格上界，单位元 */
+    upperBound?: number
+    /** 相邻网格线的价格间距，单位元 */
+    step?: number
+    /** 每格金额，单位元 */
+    amountPerGrid?: number
+    /** 网格线序列，参数可用时给出，供页面直接展示划格结果 */
+    lines?: number[]
+    /** 参数是否齐全且自洽 */
+    usable?: boolean
+    /** 参数问题清单，可用时为空 */
+    issues?: string[]
+  }
+
   type historyParams = {
     codes: string[]
     limit?: number
@@ -872,6 +992,13 @@ declare namespace API {
     message?: string
   }
 
+  type LoginRequest = {
+    /** 用户名 */
+    username?: string
+    /** 口令，明文传输但只在 HTTPS 下，服务端只与密钥文件比对，不落库不记日志 */
+    password?: string
+  }
+
   type MailPreviewVO = {
     /** 邮件主题 */
     subject?: string
@@ -1074,6 +1201,12 @@ declare namespace API {
     group: string
   }
 
+  type ResultAuthStatusVO = {
+    code?: number
+    msg?: string
+    data?: AuthStatusVO
+  }
+
   type ResultBoolean = {
     code?: number
     msg?: string
@@ -1152,6 +1285,24 @@ declare namespace API {
     data?: FundSnapshotVO
   }
 
+  type ResultGridAdviceVO = {
+    code?: number
+    msg?: string
+    data?: GridAdviceVO
+  }
+
+  type ResultGridAdvisoryVO = {
+    code?: number
+    msg?: string
+    data?: GridAdvisoryVO
+  }
+
+  type ResultGridPlanVO = {
+    code?: number
+    msg?: string
+    data?: GridPlanVO
+  }
+
   type ResultHoldingOverviewVO = {
     code?: number
     msg?: string
@@ -1188,6 +1339,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: number
+  }
+
+  type ResultListBigDecimal = {
+    code?: number
+    msg?: string
+    data?: number[]
   }
 
   type ResultListEstimateErrorTrendVO = {
@@ -1327,6 +1484,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: VarietyVO
+  }
+
+  type ResultVoid = {
+    code?: number
+    msg?: string
+    data?: null
   }
 
   type SendRecordQueryRequest = {

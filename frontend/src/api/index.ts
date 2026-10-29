@@ -15,6 +15,8 @@ import * as dividendAdviceController from './dividendAdviceController'
 import * as mailController from './mailController'
 import * as taskController from './taskController'
 import * as settingController from './settingController'
+import * as authController from './authController'
+import * as gridController from './gridController'
 export default {
   fundController,
   holdingController,
@@ -29,4 +31,6 @@ export default {
   mailController,
   taskController,
   settingController,
+  authController,
+  gridController,
 }

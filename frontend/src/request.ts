@@ -9,6 +9,26 @@ const CONTEXT_PATH = '/api'
 /** 请求超时，毫秒；外部数据源偶发卡住时不能把页面拖死 */
 const TIMEOUT_MS = 20000
 
+/** 后端未登录的业务码，与 HttpsCodeEnum.NEED_LOGIN 一致 */
+const NEED_LOGIN_CODE = 400001
+
+/** 登录页路径 */
+const LOGIN_PATH = '/login'
+
+/**
+ * 会话失效时跳登录页，带上当前地址以便登录后回跳
+ */
+function redirectToLogin(): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  const current = window.location.pathname + window.location.search
+  if (current.startsWith(LOGIN_PATH)) {
+    return
+  }
+  window.location.href = `${LOGIN_PATH}?redirect=${encodeURIComponent(current)}`
+}
+
 /** 后端统一返回体 */
 export interface ApiResult<T> {
   code?: number
@@ -127,6 +147,10 @@ export default async function request<T>(
       } catch {
         // body 不是 JSON 时按纯状态码处理
       }
+      // 401 或 NEED_LOGIN 一律视为会话失效，跳登录页并带回跳地址
+      if (response.status === 401 || businessCode === NEED_LOGIN_CODE) {
+        redirectToLogin()
+      }
       const detail = businessMessage || `服务端返回 ${response.status}`
       const error = new RequestError(detail, stage, businessCode ?? response.status)
       if (!silent) {
@@ -137,6 +161,9 @@ export default async function request<T>(
     const result = (await response.json()) as T
     // 业务码 200 为成功，其余一律按失败处理
     const code = (result as unknown as ApiResult<unknown>)?.code
+    if (code === NEED_LOGIN_CODE) {
+      redirectToLogin()
+    }
     if (code !== 200) {
       const error = new RequestError(
         messageOf(result as unknown as ApiResult<unknown>, stage),

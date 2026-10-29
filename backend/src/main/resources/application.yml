@@ -73,6 +73,19 @@ fund:
     port: 587
     # 连接与读取超时，毫秒；邮件服务不可用时要快速失败，不能拖住收盘前时点
     timeout-millis: 10000
+  auth:
+    # 登录开关，关闭时不做任何鉴权，仅供本机开发使用；公网部署必须为 true
+    enabled: true
+    # 会话有效期，小时；超时后需重新登录
+    session-hours: 12
+    # 连续登录失败多少次后临时锁定
+    max-failures: 5
+    # 锁定时长，分钟
+    lock-minutes: 15
+    # 会话 Cookie 名
+    cookie-name: fund_session
+    # 是否只在 HTTPS 下发送 Cookie，生产环境必须为 true
+    cookie-secure: false
   adapter:
     http:
       # 东财等公开源对无 UA 的请求直接拒绝，统一带浏览器 UA

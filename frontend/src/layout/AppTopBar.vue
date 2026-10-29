@@ -89,6 +89,20 @@
         </svg>
       </button>
 
+      <button v-if="authRequired" type="button" class="app-icobtn" title="登出" @click="onLogout">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M15 17.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1.5" />
+          <path d="M10 12h10M17 8.5 20.5 12 17 15.5" />
+        </svg>
+      </button>
+
       <span class="app-avatar">我</span>
     </div>
   </header>
@@ -96,11 +110,25 @@
 
 <script setup lang="ts">
 /**
- * 顶栏：品牌 + 全局导航 + 折叠 / 深浅色 / 头像，固定在视口顶部
+ * 顶栏：品牌 + 全局导航 + 折叠 / 深浅色 / 登出 / 头像，固定在视口顶部
  */
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
+import { useAuthStore } from '@/stores/auth'
 
 const { isDark, toggleTheme, toggleRail, toggleDrawer } = useTheme()
+const router = useRouter()
+const auth = useAuthStore()
+
+/** 登录开关打开时才显示登出按钮 */
+const authRequired = computed(() => auth.status.required !== false)
+
+/** 登出后回登录页 */
+async function onLogout(): Promise<void> {
+  await auth.logout()
+  await router.replace({ name: 'login' })
+}
 
 /** 全局导航项，模块级入口，具体页面内的分组交给侧栏 */
 const navItems = [
