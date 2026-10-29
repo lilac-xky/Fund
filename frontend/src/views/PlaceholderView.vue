@@ -22,7 +22,8 @@
         </div>
         <h1 class="text-[20px] font-semibold tracking-[-0.02em]">{{ title }}页尚未启用</h1>
         <p class="mt-3 text-[12.5px] leading-[1.75] text-[var(--t3)]">
-          该模块随对应 issue 一起交付。当前已可用的是「策略 / 参数设置」，可在顶栏切换。
+          该模块随对应 issue 一起交付。当前已可用的是「总览」「持仓」「策略 /
+          参数设置」「复盘」，可在顶栏切换。
         </p>
         <RouterLink
           to="/strategy"
@@ -47,9 +48,6 @@ const route = useRoute()
 
 /** 路由名对应的中文名 */
 const TITLES: Record<string, string> = {
-  overview: '总览',
-  holding: '持仓',
-  review: '复盘',
   task: '调度',
 }
 

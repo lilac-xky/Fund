@@ -114,3 +114,26 @@ export function sparklinePoints(closes: number[], width = 100, height = 28): str
     })
     .join(' ')
 }
+
+/**
+ * 误差序列压成折线坐标，零值落在中线，正负一眼可分
+ *
+ * @param values 误差序列，按日期升序
+ * @param width  图宽
+ * @param height 图高
+ * @returns 坐标串，样本不足返回空串
+ */
+export function zeroBaselinePoints(values: number[], width = 100, height = 28): string {
+  if (values.length < 2) {
+    return ''
+  }
+  const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 0.0001)
+  const middle = height / 2
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width
+      const y = middle - (value / maxAbs) * (middle - 1)
+      return `${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .join(' ')
+}

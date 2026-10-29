@@ -3,8 +3,13 @@
  */
 import { ref } from 'vue'
 
-/** 缓存键，改结构时同时改版本号，避免读到旧结构 */
-const STORAGE_KEY = 'fund-overview-cache-v1'
+/** 各页面的缓存键，改结构时同时改版本号，避免读到旧结构 */
+export const CACHE_KEYS = {
+  /** 总览页 */
+  overview: 'fund-overview-cache-v1',
+  /** 复盘页 */
+  review: 'fund-review-cache-v1',
+} as const
 
 /** 一份缓存快照，data 是页面需要渲染的全部内容 */
 export interface Snapshot<T> {
@@ -19,10 +24,14 @@ export interface Snapshot<T> {
 /** 当前是否处于断网状态，供页面置顶提示 */
 export const offline = ref(typeof navigator === 'undefined' ? false : !navigator.onLine)
 
-/** 读取缓存，解析失败按无缓存处理 */
-export function readSnapshot<T>(): Snapshot<T> | null {
+/**
+ * 读取缓存，解析失败按无缓存处理
+ *
+ * @param key 缓存键，不同页面各用各的
+ */
+export function readSnapshot<T>(key: string): Snapshot<T> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) {
       return null
     }
@@ -34,10 +43,15 @@ export function readSnapshot<T>(): Snapshot<T> | null {
   }
 }
 
-/** 写入缓存，写失败不影响页面主流程 */
-export function writeSnapshot<T>(snapshot: Snapshot<T>): void {
+/**
+ * 写入缓存，写失败不影响页面主流程
+ *
+ * @param key 缓存键
+ * @param snapshot 待写入的快照
+ */
+export function writeSnapshot<T>(key: string, snapshot: Snapshot<T>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    localStorage.setItem(key, JSON.stringify(snapshot))
   } catch {
     // 隐私模式或配额满时静默降级：本次不缓存，页面仍可正常显示
   }

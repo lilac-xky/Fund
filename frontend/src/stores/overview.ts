@@ -11,6 +11,7 @@ import {
   type OverviewPayload,
 } from '@/services/overview'
 import {
+  CACHE_KEYS,
   formatStamp,
   offline,
   readSnapshot,
@@ -110,12 +111,12 @@ export const useOverviewStore = defineStore('overview', () => {
       fetchedAt,
       dataDate: next.estimate.dataDate,
     }
-    writeSnapshot(snapshot)
+    writeSnapshot(CACHE_KEYS.overview, snapshot)
   }
 
   /** 从本地缓存回放，返回是否命中 */
   function replayFromCache(): boolean {
-    const snapshot = readSnapshot<OverviewPayload>()
+    const snapshot = readSnapshot<OverviewPayload>(CACHE_KEYS.overview)
     if (!snapshot) {
       return false
     }
