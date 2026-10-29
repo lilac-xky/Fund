@@ -7,11 +7,13 @@ import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateVO;
+import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.IndexDividendOverviewVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.service.DividendAdviceService;
+import com.lilac.service.GridAdviceService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
@@ -40,21 +42,26 @@ public class MailContentBuilder {
 
     private final IndexDividendService indexDividendService;
 
+    private final GridAdviceService gridAdviceService;
+
     /**
-     * 注入邮件需要的四类业务
+     * 注入邮件需要的五类业务
      *
-     * @param holdingService       持仓业务
-     * @param varietyService       品种业务
+     * @param holdingService        持仓业务
+     * @param varietyService        品种业务
      * @param dividendAdviceService 红利建议业务
-     * @param indexDividendService 股息率业务
+     * @param indexDividendService  股息率业务
+     * @param gridAdviceService     网格提醒业务
      */
     public MailContentBuilder(HoldingService holdingService, VarietyService varietyService,
                               DividendAdviceService dividendAdviceService,
-                              IndexDividendService indexDividendService) {
+                              IndexDividendService indexDividendService,
+                              GridAdviceService gridAdviceService) {
         this.holdingService = holdingService;
         this.varietyService = varietyService;
         this.dividendAdviceService = dividendAdviceService;
         this.indexDividendService = indexDividendService;
+        this.gridAdviceService = gridAdviceService;
     }
 
     /**
@@ -76,6 +83,7 @@ public class MailContentBuilder {
         varieties.forEach(variety -> varietyMap.put(variety.getVarietyKey(), variety));
         fillEstimates(content, estimate, varietyMap);
         fillDividends(content, varieties);
+        fillGrid(content, varieties);
         fillDataCutoff(content, estimate, varieties);
         return content;
     }
@@ -247,6 +255,38 @@ public class MailContentBuilder {
             builder.append("；依据：").append(advice.getRemarks().get(0));
         }
         return builder.toString();
+    }
+
+    /**
+     * 取网格到价提醒，失败时只记日志，不让一段提醒拖垮整封邮件
+     *
+     * @param content   邮件模型
+     * @param varieties 品种列表
+     */
+    private void fillGrid(MailContent content, List<VarietyVO> varieties) {
+        boolean hasEtf = varieties.stream()
+                .anyMatch(variety -> variety.getVarietyType() == com.lilac.enums.VarietyType.ETF);
+        if (!hasEtf) {
+            return;
+        }
+        try {
+            GridAdvisoryVO advisory = gridAdviceService.adviseAll();
+            content.setGridAdvisory(advisory);
+            content.setGridAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
+            List<String> summaries = new ArrayList<>();
+            if (!content.isGridAvailable()) {
+                summaries.add("网格参数未配置完整，本次不给网格提醒：" + join(advisory.getParamIssues()));
+            }
+            summaries.addAll(safe(advisory.getSummary()));
+            if (summaries.isEmpty()) {
+                summaries.add("场内 ETF 当前价未越过任何网格线，本次无网格提醒");
+            }
+            content.setGridSummary(summaries);
+        } catch (RuntimeException e) {
+            log.warn("网格提醒装配失败，邮件里标注为不可用：{}", e.getMessage());
+            content.setGridAvailable(false);
+            content.setGridSummary(List.of("网格提醒本次取数失败，请到页面查看：" + e.getMessage()));
+        }
     }
 
     /**

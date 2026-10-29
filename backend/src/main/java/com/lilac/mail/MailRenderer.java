@@ -2,6 +2,7 @@ package com.lilac.mail;
 
 import cn.hutool.core.util.EscapeUtil;
 import com.lilac.domain.vo.DividendAdvisoryVO;
+import com.lilac.domain.vo.GridAdvisoryVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -58,6 +59,7 @@ public class MailRenderer {
             appendEstimateTable(builder, content);
             appendUnavailableSection(builder, content);
             appendDividendSection(builder, content);
+            appendGridSection(builder, content);
             appendFooter(builder, content);
         }
         builder.append("</div></body></html>");
@@ -111,6 +113,14 @@ public class MailRenderer {
             lines.add("  今日无红利持仓，暂无红利加减仓建议。");
         }
         for (String summary : content.getDividendSummary()) {
+            lines.add("  " + summary);
+        }
+        lines.add("");
+        lines.add("【网格提醒】");
+        if (content.getGridSummary().isEmpty()) {
+            lines.add("  今日无场内 ETF 持仓，暂无网格提醒。");
+        }
+        for (String summary : content.getGridSummary()) {
             lines.add("  " + summary);
         }
         lines.add("");
@@ -239,6 +249,36 @@ public class MailRenderer {
             builder.append("<p style=\"font-size:13px;margin:0 0 8px;\">买入合计 ")
                     .append(escape(money(advisory.getTotalAddAmount()))).append("　卖出合计 ")
                     .append(escape(money(advisory.getTotalReduceAmount()))).append("</p>");
+        }
+    }
+
+    /**
+     * 渲染网格提醒段，参数不可用或未触发时都明确说明，不留空段
+     *
+     * @param builder 正文构建器
+     * @param content 邮件模型
+     */
+    private void appendGridSection(StringBuilder builder, MailContent content) {
+        builder.append("<h3 style=\"font-size:15px;margin:16px 0 6px;\">网格提醒</h3>");
+        if (content.getGridSummary().isEmpty()) {
+            builder.append("<p style=\"font-size:13px;color:#8a919f;margin:0 0 8px;\">")
+                    .append("今日无场内 ETF 持仓，暂无网格提醒。</p>");
+            return;
+        }
+        builder.append("<ul style=\"font-size:13px;line-height:1.8;margin:0 0 8px;padding-left:18px;\">");
+        for (String summary : content.getGridSummary()) {
+            builder.append("<li>").append(escape(summary)).append("</li>");
+        }
+        builder.append("</ul>");
+        GridAdvisoryVO advisory = content.getGridAdvisory();
+        if (advisory != null && advisory.getTotalBuyAmount() != null && advisory.getTotalSellAmount() != null) {
+            builder.append("<p style=\"font-size:13px;margin:0 0 8px;\">网格买入合计 ")
+                    .append(escape(money(advisory.getTotalBuyAmount()))).append("　卖出合计 ")
+                    .append(escape(money(advisory.getTotalSellAmount()))).append("</p>");
+        }
+        if (advisory != null && advisory.getDividendNote() != null) {
+            builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">")
+                    .append(escape(advisory.getDividendNote())).append("</p>");
         }
     }
 

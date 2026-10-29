@@ -13,6 +13,7 @@ import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.VarietyType;
 import com.lilac.service.DividendAdviceService;
+import com.lilac.service.GridAdviceService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.VarietyService;
@@ -40,10 +41,11 @@ class MailContentBuilderTest {
     private VarietyService varietyService;
     private DividendAdviceService dividendAdviceService;
     private IndexDividendService indexDividendService;
+    private GridAdviceService gridAdviceService;
     private MailContentBuilder builder;
 
     /**
-     * 四类业务全部用桩，装配逻辑单独验证
+     * 五类业务全部用桩，装配逻辑单独验证
      */
     @BeforeEach
     void setUp() {
@@ -51,8 +53,9 @@ class MailContentBuilderTest {
         varietyService = mock(VarietyService.class);
         dividendAdviceService = mock(DividendAdviceService.class);
         indexDividendService = mock(IndexDividendService.class);
+        gridAdviceService = mock(GridAdviceService.class);
         builder = new MailContentBuilder(holdingService, varietyService, dividendAdviceService,
-                indexDividendService);
+                indexDividendService, gridAdviceService);
     }
 
     /**

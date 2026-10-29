@@ -1,6 +1,7 @@
 package com.lilac.mail;
 
 import com.lilac.domain.vo.DividendAdvisoryVO;
+import com.lilac.domain.vo.GridAdvisoryVO;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -69,6 +70,21 @@ public class MailContent implements Serializable {
      * 红利建议摘要，逐条可读
      */
     private List<String> dividendSummary = new ArrayList<>();
+
+    /**
+     * 网格到价提醒汇总，无场内 ETF 持仓为空
+     */
+    private GridAdvisoryVO gridAdvisory;
+
+    /**
+     * 网格参数是否可用，false 时不给提醒
+     */
+    private boolean gridAvailable = true;
+
+    /**
+     * 网格提醒摘要，逐条可读
+     */
+    private List<String> gridSummary = new ArrayList<>();
 
     /**
      * 行情数据日期
