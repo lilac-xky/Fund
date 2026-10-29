@@ -64,6 +64,24 @@ class SecretsAndArchiveTest {
     }
 
     /**
+     * 带 UTF-8 BOM 的密钥文件首个键名必须仍能取到，否则整份配置会静默失效
+     */
+    @Test
+    @DisplayName("带 BOM 的密钥文件首个键仍可读")
+    void parsesFileWithBom() throws IOException {
+        Path file = tempDir.resolve("bom.env");
+        // 记事本与 Windows PowerShell 的 utf8 编码都会写出 BOM
+        String content = "AUTH_USERNAME=lilac" + System.lineSeparator()
+                + "AUTH_PASSWORD=s3cr3t" + System.lineSeparator();
+        Files.write(file, ("\uFEFF" + content).getBytes(StandardCharsets.UTF_8));
+
+        SecretsLoader.Secrets secrets = secretsLoader.loadAll(file.toString());
+
+        assertThat(secrets.get("AUTH_USERNAME")).isEqualTo("lilac");
+        assertThat(secrets.get("AUTH_PASSWORD")).isEqualTo("s3cr3t");
+    }
+
+    /**
      * 留存能把主题与正文写到 data/mail，失败留存按日期读出，成功留存不进补发清单
      */
     @Test

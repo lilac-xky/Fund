@@ -37,14 +37,32 @@ public class SecretsLoader {
         }
         try {
             List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-            for (String line : lines) {
-                putLine(values, line);
+            for (int index = 0; index < lines.size(); index++) {
+                // 记事本与部分编辑器会给文件加 BOM，首行键名会带上不可见字符，必须剥掉
+                putLine(values, index == 0 ? stripBom(lines.get(index)) : lines.get(index));
             }
         } catch (IOException e) {
             // 只吐路径与异常类型，异常消息里可能带内容片段
             log.warn("密钥文件读取失败 {}：{}", path, e.getClass().getSimpleName());
         }
         return new Secrets(values);
+    }
+
+    /**
+     * 去掉行首的 UTF-8 BOM，避免首个键名被污染成不可见字符开头的键
+     *
+     * @param line 原始行
+     * @return 去 BOM 后的行
+     */
+    private String stripBom(String line) {
+        if (line == null || line.isEmpty()) {
+            return line;
+        }
+        if (line.charAt(0) == '\uFEFF') {
+            log.info("密钥文件带 UTF-8 BOM，已自动剥离，建议改用无 BOM 的 UTF-8 保存");
+            return line.substring(1);
+        }
+        return line;
     }
 
     /**

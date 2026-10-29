@@ -32,6 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 src/main/resources/application-dev.yml
+src/main/resources/application-prod.yml
 # 运行期留存（未送达邮件、复盘 CSV、操作日志），随应用启动自动创建，不进 Git
 /data
 # SMTP 授权码等密钥，只在本机与服务器保存
