@@ -1,7 +1,10 @@
 package com.lilac.service.impl;
 
+import com.lilac.adapter.fund.IndexEtfRegistry;
+import com.lilac.adapter.model.FundNetWorthPoint;
 import com.lilac.adapter.model.MarketQuote;
 import com.lilac.adapter.quote.MarketQuoteAdapter;
+import com.lilac.config.GridProperties;
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
 import com.lilac.domain.dto.grid.GridAdviceRequest;
 import com.lilac.domain.dto.grid.GridParamSaveRequest;
@@ -14,13 +17,16 @@ import com.lilac.domain.vo.GridPlanVO;
 import com.lilac.domain.vo.GridWatchVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.VarietyVO;
+import com.lilac.engine.BenchmarkResolver;
 import com.lilac.enums.DividendAction;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.GridAction;
+import com.lilac.enums.GridBasis;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.VarietyType;
 import com.lilac.service.DividendAdviceService;
+import com.lilac.service.FundNetWorthService;
 import com.lilac.service.GridAdviceService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
@@ -35,6 +41,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,7 +51,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 网格到价提醒业务实现，取行情与红利建议后交给规则计算器判定是否穿越网格线
+ * 网格到价提醒业务实现，场内用实时价、场外按跟踪 ETF 在尾盘估净值，再交给规则计算器判定穿越
  */
 @Slf4j
 @Service
@@ -51,6 +60,11 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     private static final int PRICE_SCALE = 4;
     private static final String DIVIDEND_NOTE =
             "同一标的的红利建议优先于网格提醒：红利侧给出加仓或减仓时，网格提醒让位，不重复给出反向动作";
+    private static final String OUT_OF_WINDOW =
+            "场外基金按跟踪 ETF 的当日涨跌在尾盘估净值，盘中的价格还会变，故只在 "
+                    + "14:00 之后给提醒。回到这个时间点再看一次即可";
+    private static final String NO_BENCHMARK =
+            "该基金没有可用的跟踪 ETF 或对标指数，取不到可估的价格，无法参与场外网格";
 
     @Resource
     private GridPlanResolver gridPlanResolver;
@@ -69,6 +83,15 @@ public class GridAdviceServiceImpl implements GridAdviceService {
 
     @Resource
     private DividendAdviceService dividendAdviceService;
+
+    @Resource
+    private FundNetWorthService fundNetWorthService;
+
+    @Resource
+    private BenchmarkResolver benchmarkResolver;
+
+    @Resource
+    private GridProperties gridProperties;
 
     /**
      * 读取当前网格参数，连带给出划格结果
@@ -150,7 +173,7 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 对全部持有中的场内 ETF 逐只判断网格触发
+     * 对全部持有中的标的分场内与场外两组判断网格触发
      *
      * @return 提醒总览
      */
@@ -161,7 +184,7 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         List<GridAdviceVO> items = new ArrayList<>();
         List<GridAdviceVO> idle = new ArrayList<>();
         for (VarietyVO variety : varieties) {
-            // 每只标的有自己的上下界，不能拿一套价格区间套在所有 ETF 上
+            // 每只标的有自己的上下界，不能拿一套价格区间套在所有标的上
             GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
             GridAdviceVO advice = advise(variety, plan, null, null);
             if (advice.getAction() == GridAction.BUY || advice.getAction() == GridAction.SELL) {
@@ -174,7 +197,7 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 列出网格的监控对象，说明这套参数管的是哪几只 ETF
+     * 列出网格的监控对象，场内与场外都在列，并说明各自用什么价格判断
      *
      * @return 监控对象列表，含各自的参数是否可用
      */
@@ -194,6 +217,11 @@ public class GridAdviceServiceImpl implements GridAdviceService {
             vo.setVarietyCode(variety.getVarietyCode());
             vo.setVarietyName(variety.getVarietyName());
             vo.setCategoryLabel(variety.getCategory() == null ? "待确认" : variety.getCategory().getLabel());
+            vo.setVarietyType(variety.getVarietyType() == null ? null : variety.getVarietyType().name());
+            boolean onExchange = variety.getVarietyType() == VarietyType.ETF;
+            vo.setBasis(onExchange ? GridBasis.REALTIME_PRICE : GridBasis.ESTIMATED_NAV);
+            vo.setBasisLabel(vo.getBasis().getLabel());
+            vo.setProxySymbol(onExchange ? null : proxySymbolOf(variety));
             vo.setLowerBound(plan.getLowerBound());
             vo.setUpperBound(plan.getUpperBound());
             vo.setStep(plan.getStep());
@@ -203,6 +231,11 @@ public class GridAdviceServiceImpl implements GridAdviceService {
             vo.setParamNotes(plan.getNotes());
             vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
             vo.setCustomized(customized.contains(variety.getVarietyKey()));
+            if (!onExchange && (vo.getProxySymbol() == null || vo.getProxySymbol().isBlank())) {
+                // 场外没有跟踪 ETF 就推不出价格，必须在监控对象里明说，否则使用者会以为它在工作
+                vo.getParamIssues().add(NO_BENCHMARK);
+                vo.setParamUsable(Boolean.FALSE);
+            }
             result.add(vo);
         }
         return result;
@@ -221,8 +254,6 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         VarietyVO variety = findVariety(request.getVarietyKey().trim());
         ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR,
                 "未找到品种 " + request.getVarietyKey());
-        ThrowUtils.throwIf(variety.getVarietyType() != VarietyType.ETF, HttpsCodeEnum.PARAMS_ERROR,
-                "该品种为 " + variety.getVarietyType() + "，网格提醒只适用于场内 ETF");
         ThrowUtils.throwIf(request.getCurrentPrice() != null && request.getCurrentPrice().signum() <= 0,
                 HttpsCodeEnum.PARAMS_ERROR, "当前价必须大于 0");
         ThrowUtils.throwIf(request.getReferencePrice() != null && request.getReferencePrice().signum() <= 0,
@@ -243,12 +274,12 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 单只标的出提醒，行情取数与红利互斥都在这里装配
+     * 单只标的出提醒，价格口径与红利互斥都在这里装配
      *
      * @param variety        品种
      * @param plan           网格参数
-     * @param manualPrice    手工当前价，为空时取行情
-     * @param manualReference 手工参考价，为空时取上一交易日收盘
+     * @param manualPrice    手工当前价，为空时按场内行情或场外预估
+     * @param manualReference 手工参考价，为空时取上一交易日基准
      * @return 提醒
      */
     private GridAdviceVO advise(VarietyVO variety, GridPlan plan, BigDecimal manualPrice,
@@ -261,12 +292,24 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         vo.setLowerBound(plan.getLowerBound());
         vo.setUpperBound(plan.getUpperBound());
         vo.setAmountPerGrid(plan.getAmountPerGrid());
-        Price reference = priceOf(variety, manualPrice, manualReference);
+        boolean onExchange = variety.getVarietyType() == VarietyType.ETF;
+        vo.setBasis(onExchange ? GridBasis.REALTIME_PRICE : GridBasis.ESTIMATED_NAV);
+        vo.setBasisLabel(vo.getBasis().getLabel());
+        Price reference = priceOf(variety, manualPrice, manualReference, onExchange);
         vo.setCurrentPrice(reference.current);
         vo.setPriceDate(reference.date);
         vo.setPriceSource(reference.source);
         vo.setReferencePrice(reference.previous);
         vo.setReferenceDate(reference.previousDate);
+        if (reference.blocked != null) {
+            // 拿不到可比价格时直接说明原因，不进入穿越判定，避免用错价给出动作
+            vo.setAction(GridAction.NONE);
+            vo.setActionLabel(GridAction.NONE.getLabel());
+            vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
+            vo.setSuppressed(Boolean.FALSE);
+            vo.setRemarks(List.of(reference.blocked));
+            return vo;
+        }
         GridDecision decision = gridCalculator.decide(plan, reference.current, reference.previous,
                 dividendActionOf(variety));
         vo.setAction(decision.getAction());
@@ -277,6 +320,9 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         vo.setLineCount(decision.getLineCount());
         vo.setSuppressed(decision.getSuppressed());
         vo.setRemarks(decision.getRemarks());
+        if (!onExchange) {
+            vo.getRemarks().add("场外基金按跟踪 ETF 的当日涨跌估净值，尾盘判断，盘中价格还会变");
+        }
         return vo;
     }
 
@@ -303,37 +349,137 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 取当前价与参考价，手工值优先，否则取行情的最新价与昨收
+     * 取当前价与参考价，场内用实时行情，场外用跟踪 ETF 在尾盘估出的净值
      *
      * @param variety         品种
      * @param manualPrice     手工当前价
      * @param manualReference 手工参考价
-     * @return 价格组合
+     * @param onExchange      是否场内 ETF
+     * @return 价格组合，不可判断时 blocked 写明原因
      */
-    private Price priceOf(VarietyVO variety, BigDecimal manualPrice, BigDecimal manualReference) {
+    private Price priceOf(VarietyVO variety, BigDecimal manualPrice, BigDecimal manualReference,
+                          boolean onExchange) {
         if (manualPrice != null) {
             return new Price(manualPrice.setScale(PRICE_SCALE, RoundingMode.HALF_UP), null,
-                    "手工指定当前价", manualReference, null);
+                    "手工指定当前价", manualReference, null, null);
         }
         if (variety.getVarietyCode() == null) {
-            return new Price(null, null, "无代码，取不到行情", manualReference, null);
+            return new Price(null, null, "无代码，取不到价格", manualReference, null,
+                    "该品种没有代码，取不到价格，无法定位网格");
         }
+        return onExchange ? exchangePrice(variety, manualReference) : offExchangePrice(variety, manualReference);
+    }
+
+    /**
+     * 场内：直接取行情最新价与昨收
+     *
+     * @param variety         品种
+     * @param manualReference 手工参考价
+     * @return 价格组合
+     */
+    private Price exchangePrice(VarietyVO variety, BigDecimal manualReference) {
         try {
             MarketQuote quote = marketQuoteAdapter.quote(variety.getVarietyCode());
             if (quote == null || quote.getPrice() == null) {
-                return new Price(null, null, "行情取不到", manualReference, null);
+                return new Price(null, null, "行情取不到", manualReference, null,
+                        "行情取不到，无法定位网格");
             }
             String source = Boolean.TRUE.equals(quote.getRealtime()) ? "行情价（实时）" : "行情价（上一交易日）";
             return new Price(quote.getPrice(), quote.getTradeDate(), source,
-                    manualReference == null ? quote.getPreviousClose() : manualReference, quote.getTradeDate());
+                    manualReference == null ? quote.getPreviousClose() : manualReference,
+                    quote.getTradeDate(), null);
         } catch (RuntimeException e) {
             log.warn("网格行情取数失败 code={}：{}", variety.getVarietyCode(), e.getMessage());
-            return new Price(null, null, "行情取数失败：" + e.getMessage(), manualReference, null);
+            return new Price(null, null, "行情取数失败：" + e.getMessage(), manualReference, null,
+                    "行情取数失败，无法定位网格：" + e.getMessage());
         }
     }
 
     /**
-     * 取全部持有中的场内 ETF，网格只对场内可交易标的有意义
+     * 场外：只在尾盘用跟踪 ETF 的当日涨跌估出当日净值，与昨日净值比较
+     *
+     * @param variety         品种
+     * @param manualReference 手工参考价
+     * @return 价格组合
+     */
+    private Price offExchangePrice(VarietyVO variety, BigDecimal manualReference) {
+        String proxySymbol = proxySymbolOf(variety);
+        if (proxySymbol == null || proxySymbol.isBlank()) {
+            return new Price(null, null, NO_BENCHMARK, manualReference, null, NO_BENCHMARK);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalTime start = gridProperties.getTailWindowStart();
+        // 盘中价格随时会变，只有临近收盘时的估算才有决策价值
+        if (now.toLocalTime().isBefore(start)) {
+            return new Price(null, now.toLocalDate(), "未到到尾盘判断时点", manualReference, null, OUT_OF_WINDOW);
+        }
+        List<FundNetWorthPoint> points = fundNetWorthService.listRange(variety.getVarietyCode(),
+                LocalDate.now().minusDays(30), null);
+        BigDecimal previousNav = null;
+        LocalDate previousDate = null;
+        for (int i = points.size() - 1; i >= 0; i--) {
+            FundNetWorthPoint point = points.get(i);
+            if (point.getUnitNetWorth() == null || point.getNetWorthDate() == null) {
+                continue;
+            }
+            if (point.getNetWorthDate().isBefore(now.toLocalDate())) {
+                previousNav = point.getUnitNetWorth();
+                previousDate = point.getNetWorthDate();
+                break;
+            }
+        }
+        if (previousNav == null) {
+            return new Price(null, null, "无昨日净值，无法估算", manualReference, null,
+                    "库内没有该基金的可用净值，请先把持仓总览打开一次以拉取净值");
+        }
+        MarketQuote quote;
+        try {
+            quote = marketQuoteAdapter.quote(proxySymbol);
+        } catch (RuntimeException e) {
+            log.warn("场外网格取跟踪 ETF 行情失败 symbol={}：{}", proxySymbol, e.getMessage());
+            return new Price(null, null, "跟踪 ETF 行情取数失败", manualReference, null,
+                    "跟踪 ETF " + proxySymbol + " 行情取数失败：" + e.getMessage());
+        }
+        if (quote == null || quote.getChangePercent() == null) {
+            return new Price(null, null, "跟踪 ETF 无行情", manualReference, null,
+                    "跟踪 ETF " + proxySymbol + " 无行情，今日无法估算场外净值");
+        }
+        BigDecimal estimated = previousNav.multiply(BigDecimal.ONE.add(
+                        quote.getChangePercent().divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)))
+                .setScale(PRICE_SCALE, RoundingMode.HALF_UP);
+        String source = "按跟踪 ETF " + proxySymbol + " 当日 " + quote.getChangePercent()
+                .stripTrailingZeros().toPlainString() + "% 估净值";
+        return new Price(estimated, now.toLocalDate(), source,
+                manualReference == null ? previousNav : manualReference, previousDate, null);
+    }
+
+    /**
+     * 取场外基金的对标指数或跟踪 ETF 的行情代码
+     *
+     * @param variety 品种
+     * @return 带前缀完整代码，取不到返回 null
+     */
+    private String proxySymbolOf(VarietyVO variety) {
+        if (variety.getVarietyType() == VarietyType.ETF) {
+            return BenchmarkResolver.symbolOf(variety.getVarietyCode());
+        }
+        String trackIndex = variety.getTrackIndexCode();
+        if (trackIndex != null && !trackIndex.isBlank()) {
+            String symbol = BenchmarkResolver.symbolOf(trackIndex);
+            if (symbol != null) {
+                return symbol;
+            }
+            // 字母指数先换成跟踪它的 ETF，避免推不出市场
+            String etf = IndexEtfRegistry.findByIndexCode(trackIndex);
+            if (etf != null) {
+                return BenchmarkResolver.symbolOf(etf);
+            }
+        }
+        return benchmarkResolver.resolve(variety, null);
+    }
+
+    /**
+     * 取全部持有中的标的，场内 ETF 与场外基金都在列
      *
      * @return 品种列表
      */
@@ -352,8 +498,8 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         VarietyQueryRequest varietyQuery = new VarietyQueryRequest();
         List<VarietyVO> varieties = new ArrayList<>();
         for (VarietyVO variety : varietyService.listVariety(varietyQuery)) {
-            // 场外基金按净值成交，没有盘中价格可以划格
-            if (keys.contains(variety.getVarietyKey()) && variety.getVarietyType() == VarietyType.ETF) {
+            // 场外基金同样可以做网格，只在尾盘按其跟踪 ETF 的涨跌估出净值后判断
+            if (keys.contains(variety.getVarietyKey())) {
                 varieties.add(variety);
             }
         }
@@ -395,7 +541,7 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         fillTotals(vo, items, idle);
         fillSummary(vo, items, idle);
         if (requested == 0) {
-            vo.setNotice("尚无持有中的场内 ETF，网格提醒只对场内可交易标的有效");
+            vo.setNotice("尚无持有中的标的，网格提醒先录入持仓才会开始工作");
         }
         log.info("网格提醒完成 标的 {} 只 触发 {} 只 让位 {} 只 未触发 {} 只",
                 requested, vo.getTriggeredCount(), vo.getSuppressedCount(), vo.getIdleCount());
@@ -444,8 +590,8 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         for (GridAdviceVO item : items) {
             summary.add(item.getVarietyCode() + " " + item.getVarietyName() + "："
                     + item.getActionLabel() + " " + plain(item.getSuggestAmount()) + " 元，"
-                    + "触发网格线 " + plain(item.getCrossedLine()) + " 元（当前价 "
-                    + plain(item.getCurrentPrice()) + " 元）");
+                    + "触发网格线 " + plain(item.getCrossedLine()) + " 元（" + item.getBasisLabel()
+                    + " " + plain(item.getCurrentPrice()) + " 元）");
         }
         for (GridAdviceVO item : idle) {
             if (item.getAction() == GridAction.SUPPRESSED) {
@@ -513,36 +659,9 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 当前价、参考价与来源说明
+     * 当前价、参考价与来源说明，不可判断时 blocked 写明原因
      */
-    private static class Price {
-
-        private final BigDecimal current;
-
-        private final java.time.LocalDate date;
-
-        private final String source;
-
-        private final BigDecimal previous;
-
-        private final java.time.LocalDate previousDate;
-
-        /**
-         * 记录价格与来源
-         *
-         * @param current      当前价
-         * @param date         当前价日期
-         * @param source       来源说明
-         * @param previous     参考价
-         * @param previousDate 参考价日期
-         */
-        private Price(BigDecimal current, java.time.LocalDate date, String source,
-                      BigDecimal previous, java.time.LocalDate previousDate) {
-            this.current = current;
-            this.date = date;
-            this.source = source;
-            this.previous = previous;
-            this.previousDate = previousDate;
-        }
+    private record Price(BigDecimal current, LocalDate date, String source, BigDecimal previous,
+                         LocalDate previousDate, String blocked) {
     }
 }

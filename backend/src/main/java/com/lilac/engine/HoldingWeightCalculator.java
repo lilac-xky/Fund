@@ -38,9 +38,32 @@ public class HoldingWeightCalculator {
     public WeightedOutcome weighted(List<HoldingItemVO> holdings, Map<String, MarketQuote> quotes,
                                     ForexRate forex) {
         WeightedOutcome outcome = new WeightedOutcome();
-        if (holdings == null || holdings.isEmpty() || quotes == null || quotes.isEmpty()) {
+        if (holdings == null || holdings.isEmpty()) {
             outcome.setDisclosedWeight(BigDecimal.ZERO);
             outcome.setUsedWeight(BigDecimal.ZERO);
+            return outcome;
+        }
+        // 全是美股时一个行情都取不到，quotes 会是空，海外计数必须先于空值返回，否则结论会退化成「行情取不到」
+        int overseas = countOverseas(holdings);
+        outcome.setOverseasCount(overseas);
+        if (quotes == null || quotes.isEmpty()) {
+            BigDecimal total = holdings.stream()
+                    .map(item -> item.getWeight() == null ? BigDecimal.ZERO : item.getWeight())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            outcome.setDisclosedWeight(total);
+            outcome.setUsedWeight(BigDecimal.ZERO);
+            outcome.setExcludedCount(holdings.size());
+            // 行情整批为空时仍要看有没有停牌标的，否则停牌原因会被海外判断盖掉
+            List<String> suspended = new ArrayList<>();
+            for (HoldingItemVO item : holdings) {
+                if (item.getWeight() == null || item.getWeight().signum() <= 0) {
+                    continue;
+                }
+                if (!unsupportedMarket(item.getCode() == null ? null : item.getCode().trim())) {
+                    addSuspended(suspended, item);
+                }
+            }
+            outcome.setSuspendedSymbols(suspended.isEmpty() ? null : String.join("、", suspended));
             return outcome;
         }
         BigDecimal disclosed = BigDecimal.ZERO;
@@ -51,7 +74,13 @@ public class HoldingWeightCalculator {
         for (HoldingItemVO item : holdings) {
             BigDecimal weight = item.getWeight() == null ? BigDecimal.ZERO : item.getWeight();
             disclosed = disclosed.add(weight);
-            MarketQuote quote = quotes.get(symbolOf(item.getCode()));
+            String symbol = symbolOf(item.getCode());
+            if (symbol.isBlank()) {
+                // 美股这类海外标的没有行情源，单独计数，与「取不到行情」区分开
+                excluded++;
+                continue;
+            }
+            MarketQuote quote = quotes.get(symbol);
             if (quote == null || !quote.usable()) {
                 // 取不到行情或停牌的标的直接剔除，绝不当 0% 参与加权
                 excluded++;
@@ -104,9 +133,39 @@ public class HoldingWeightCalculator {
         try {
             return MarketSymbol.of(code.trim()).symbol();
         } catch (RuntimeException e) {
-            log.warn("持仓代码无法识别为行情标的：{}", code);
+            // 海外持仓（美股代码如 NVDA）本就不在行情源覆盖范围内，属已知情形，逐条打 WARN 只会刷屏
+            if (!unsupportedMarket(code.trim())) {
+                log.warn("持仓代码无法识别为行情标的：{}", code);
+            }
             return "";
         }
+    }
+
+    /**
+     * 判断是否为行情源不覆盖的海外市场代码，如美股 NVDA、AAPL
+     *
+     * @param code 持仓中的证券代码
+     * @return 海外代码返回 true
+     */
+    public static boolean unsupportedMarket(String code) {
+        // 纯数字与带 sh/sz/bj/hk 前缀的都已覆盖，其余字母代码一律视为海外标的
+        return code != null && !code.isBlank() && !code.matches("^(sh|sz|bj|hk)?\\d{5,6}$");
+    }
+
+    /**
+     * 统计披露持仓里属于海外市场（行情源不覆盖）的标的数
+     *
+     * @param holdings 披露持仓
+     * @return 海外标的数
+     */
+    private int countOverseas(List<HoldingItemVO> holdings) {
+        int overseas = 0;
+        for (HoldingItemVO item : holdings) {
+            if (unsupportedMarket(item.getCode() == null ? null : item.getCode().trim())) {
+                overseas++;
+            }
+        }
+        return overseas;
     }
 
     /**

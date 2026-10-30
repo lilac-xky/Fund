@@ -29,6 +29,7 @@ import com.lilac.service.EstimateErrorService;
 import com.lilac.service.EstimateGoldBetaService;
 import com.lilac.service.EstimateSnapshotService;
 import com.lilac.service.FundNetWorthService;
+import com.lilac.service.FundSnapshotService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
 import jakarta.annotation.Resource;
@@ -68,6 +69,9 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
     private FundNetWorthService fundNetWorthService;
 
     @Resource
+    private FundSnapshotService fundSnapshotService;
+
+    @Resource
     private HoldingService holdingService;
 
     @Resource
@@ -100,6 +104,8 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
         LocalDate tradeDate = query.getTradeDate() == null ? LocalDate.now() : query.getTradeDate();
         Map<String, EstimateSnapshotVO> snapshots = snapshotMap(tradeDate);
         List<VarietyVO> varieties = resolveVarieties(query, snapshots);
+        // 库内净值往往停在昨天的抓取时刻，不主动刷新会把「已公布但没抓」误报成「净值未公布」
+        int refreshed = refreshNetWorths(varieties);
         List<CalibrationItemVO> items = new ArrayList<>();
         List<CalibrationGapVO> gaps = new ArrayList<>();
         int written = 0;
@@ -107,8 +113,7 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
             EstimateSnapshotVO snapshot = snapshots.get(variety.getVarietyKey());
             BigDecimal actual = actualChange(variety.getVarietyCode(), tradeDate);
             if (actual == null) {
-                gaps.add(gap(variety, "当日净值未公布，上游最新净值为 "
-                        + latestNetWorthDate(variety.getVarietyCode()) + "，待净值更新后重跑校准"));
+                gaps.add(gap(variety, gapReasonOf(variety.getVarietyCode(), tradeDate)));
                 continue;
             }
             if (snapshot == null) {
@@ -154,9 +159,53 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
             // 既无持仓也无当日留存时必须说清，否则页面会显示成「校准成功但什么也没有」
             result.setNotice("本次没有可校准的基金：未指定基金、无持有中持仓、当日也无预估留存");
         }
-        log.info("晚间校准完成 日期={} 已校准 {} 只 超阈值 {} 只 未校准 {} 只",
-                tradeDate, items.size(), result.getOverThresholdCount(), gaps.size());
+        result.setNetWorthRefreshed(refreshed);
+        log.info("晚间校准完成 日期={} 已校准 {} 只 超阈值 {} 只 未校准 {} 只 刷新净值 {} 只",
+                tradeDate, items.size(), result.getOverThresholdCount(), gaps.size(), refreshed);
         return result;
+    }
+
+    /**
+     * 校准前主动刷新各基金当日净值，让「未公布」与「没抓到」能被区分开
+     *
+     * @param varieties 待校准品种
+     * @return 成功刷新的只数
+     */
+    private int refreshNetWorths(List<VarietyVO> varieties) {
+        int refreshed = 0;
+        for (VarietyVO variety : varieties) {
+            if (variety.getVarietyCode() == null || variety.getVarietyCode().isBlank()) {
+                continue;
+            }
+            try {
+                if (fundSnapshotService.refreshNetWorth(variety.getVarietyCode()) >= 0) {
+                    refreshed++;
+                }
+            } catch (RuntimeException e) {
+                // 单只刷新失败不阻断校准，缺口原因里会写明仍取不到
+                log.warn("校准前刷新净值失败 code={}：{}", variety.getVarietyCode(), e.getMessage());
+            }
+        }
+        return refreshed;
+    }
+
+    /**
+     * 拼「当日净值取不到」的具体原因，区分上游尚未公布与刷新后仍未落库
+     *
+     * @param fundCode  6 位基金代码
+     * @param tradeDate 待校准交易日
+     * @return 原因文字
+     */
+    private String gapReasonOf(String fundCode, LocalDate tradeDate) {
+        LocalDate latest = latestNetWorthDate(fundCode);
+        if (latest == null) {
+            return "该基金没有任何净值记录，请先到持仓总览刷新一次净值";
+        }
+        if (latest.equals(tradeDate)) {
+            return "当日净值已入库但缺涨跌幅字段，无法计算实际涨跌，请稍后重跑";
+        }
+        return "当日净值未公布（库里最新为 " + latest + "），已尝试主动刷新仍未取到；"
+                + "上游公布后重跑校准即可自动补上";
     }
 
     /**

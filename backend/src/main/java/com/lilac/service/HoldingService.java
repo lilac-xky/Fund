@@ -1,7 +1,9 @@
 package com.lilac.service;
 
+import com.lilac.domain.dto.holding.HoldingBatchUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
 import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
@@ -49,6 +51,22 @@ public interface HoldingService {
      * @return 转出与转入的变动后状态
      */
     HoldingConvertVO convert(HoldingConvertRequest request);
+
+    /**
+     * 更正某个持仓批次的份额、成本价与建仓日期，供录入出错时改正
+     *
+     * @param request 更正请求
+     * @return 更正后的持仓
+     */
+    HoldingVO updateBatch(HoldingBatchUpdateRequest request);
+
+    /**
+     * 撤销某个持仓批次，已卖出时拒绝并提示改为更正
+     *
+     * @param request 撤销请求
+     * @return 是否成功
+     */
+    boolean revokeBatch(HoldingChangeRevokeRequest request);
 
     /**
      * 查询持仓变动历史，按时间倒序

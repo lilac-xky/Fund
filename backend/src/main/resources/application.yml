@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: dev
+    active: prod
   application:
     name: lilac-fund
   servlet:
@@ -34,6 +34,9 @@ fund:
   data:
     # 复盘 CSV、操作日志、未送达邮件留存的本地根目录
     root: data
+  grid:
+    # 场外基金按跟踪 ETF 估净值的起点时刻；早于它一律不给场外网格提醒，因为盘中价格还会变
+    tail-window-start: "14:00"
   task:
     # 总开关，关掉后既不按时点触发也不启动补跑；手动触发接口不受影响
     enabled: true
@@ -185,10 +188,13 @@ fund:
     bond:
       # 债券代理标的，国泰上证 5 年期国债 ETF
       proxy-code: "511010"
+      # 传导系数滚动窗口，交易日；债券日波动极小，窗口太短中位数会抖
+      window: 60
+      # 传导系数最少配对样本，不足时退化为按 1 倍代理
+      min-pairs: 20
     confidence:
       # 高可信度要求的覆盖率下限，百分点
-      high-coverage: 85
-      # 高可信度允许的历史 MAE，百分点
+      high-coverage: 85      # 高可信度允许的历史 MAE，百分点
       high-mae: 0.2
       # 中可信度要求的覆盖率下限，百分点
       medium-coverage: 60

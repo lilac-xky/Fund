@@ -20,6 +20,7 @@ import com.lilac.domain.vo.HoldingItemVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BenchmarkResolver;
+import com.lilac.engine.BondBaselineEstimator;
 import com.lilac.engine.EstimateCache;
 import com.lilac.engine.EstimateConverter;
 import com.lilac.engine.EstimateEngine;
@@ -85,6 +86,9 @@ public class EstimateServiceImpl implements EstimateService {
 
     @Resource
     private GoldBetaEstimator goldBetaEstimator;
+
+    @Resource
+    private BondBaselineEstimator bondBaselineEstimator;
 
     @Resource
     private EstimateCache estimateCache;
@@ -269,11 +273,11 @@ public class EstimateServiceImpl implements EstimateService {
         }
         List<Prepared> prepared = varieties.stream().map(variety -> prepare(variety, today)).toList();
         Map<String, MarketQuote> quotes = fetchQuotes(prepared);
-        Map<String, MarketHistory> goldHistories = fetchGoldHistories(prepared);
+        Map<String, MarketHistory> proxyHistories = fetchProxyHistories(prepared);
         ForexRate forex = fetchForexIfNeeded(quotes, prepared);
         List<EstimateOutcome> outcomes = new ArrayList<>(prepared.size());
         for (Prepared item : prepared) {
-            outcomes.add(estimateOne(item, quotes, goldHistories, forex, today));
+            outcomes.add(estimateOne(item, quotes, proxyHistories, forex, today));
         }
         return outcomes;
     }
@@ -297,7 +301,8 @@ public class EstimateServiceImpl implements EstimateService {
         prepared.history = loadHistory(variety.getVarietyKey());
         prepared.previousTier = resolvePreviousTier(prepared.history);
         prepared.hkHoldings = hasHongKong(prepared.snapshot);
-        if (prepared.branch == EstimateBranch.GOLD_PROXY) {
+        // 黄金与债券都要拿基金自己的净值序列去配对代理日线，两条分支共用同一段取数
+        if (prepared.branch == EstimateBranch.GOLD_PROXY || prepared.branch == EstimateBranch.BOND_PROXY) {
             prepared.netWorthPoints = fundNetWorthService.listRange(variety.getVarietyCode(),
                     today.minusDays(HISTORY_LOOKBACK_DAYS * 2), null);
         }
@@ -442,15 +447,17 @@ public class EstimateServiceImpl implements EstimateService {
     }
 
     /**
-     * 取黄金代理标的日线，供 β 滚动估计
+     * 取代理标的日线，供黄金 β 与债券传导系数的滚动估计
      *
      * @param prepared 中间状态列表
      * @return 代理代码到日线的映射
      */
-    private Map<String, MarketHistory> fetchGoldHistories(List<Prepared> prepared) {
+    private Map<String, MarketHistory> fetchProxyHistories(List<Prepared> prepared) {
         Map<String, MarketHistory> histories = new LinkedHashMap<>();
         prepared.stream()
-                .filter(item -> item.branch == EstimateBranch.GOLD_PROXY && item.proxySymbol != null)
+                .filter(item -> item.proxySymbol != null
+                        && (item.branch == EstimateBranch.GOLD_PROXY
+                        || item.branch == EstimateBranch.BOND_PROXY))
                 .map(item -> item.proxySymbol)
                 .distinct()
                 .forEach(symbol -> histories.put(symbol, marketQuoteAdapter.history(symbol, GOLD_HISTORY_LIMIT)));
@@ -480,15 +487,16 @@ public class EstimateServiceImpl implements EstimateService {
     /**
      * 组装单只基金的上下文交给引擎
      *
-     * @param prepared     中间状态
-     * @param quotes       全部行情
-     * @param goldHistories 黄金代理日线
-     * @param forex        汇率
-     * @param today        取数当日
+     * @param prepared       中间状态
+     * @param quotes         全部行情
+     * @param proxyHistories 代理标的日线
+     * @param forex          汇率
+     * @param today          取数当日
      * @return 预估结果
      */
     private EstimateOutcome estimateOne(Prepared prepared, Map<String, MarketQuote> quotes,
-                                        Map<String, MarketHistory> goldHistories, ForexRate forex, LocalDate today) {
+                                        Map<String, MarketHistory> proxyHistories, ForexRate forex,
+                                        LocalDate today) {
         EstimateContext context = new EstimateContext();
         context.setVariety(prepared.variety);
         context.setRawFundType(prepared.rawFundType);
@@ -502,7 +510,7 @@ public class EstimateServiceImpl implements EstimateService {
         context.setHkHoldings(prepared.hkHoldings);
         context.setDegraded(prepared.degraded);
         fillProxy(prepared, context, quotes);
-        fillGoldModel(prepared, context, goldHistories);
+        fillProxyModel(prepared, context, proxyHistories);
         return estimateEngine.estimate(context);
     }
 
@@ -549,23 +557,31 @@ public class EstimateServiceImpl implements EstimateService {
     }
 
     /**
-     * 黄金基金按滚动窗口估 β 与 ρ，样本不足由引擎退化为直取
+     * 黄金按滚动窗口估 β 与 ρ，债券估自身对代理的传导系数，样本不足都退化为直取代理
      *
-     * @param prepared      中间状态
-     * @param context       上下文
-     * @param goldHistories 代理日线
+     * @param prepared       中间状态
+     * @param context        上下文
+     * @param proxyHistories 代理日线
      */
-    private void fillGoldModel(Prepared prepared, EstimateContext context, Map<String, MarketHistory> goldHistories) {
-        if (prepared.branch != EstimateBranch.GOLD_PROXY || prepared.proxySymbol == null) {
+    private void fillProxyModel(Prepared prepared, EstimateContext context,
+                                Map<String, MarketHistory> proxyHistories) {
+        if (prepared.proxySymbol == null) {
             return;
         }
-        MarketHistory history = goldHistories.get(prepared.proxySymbol);
+        MarketHistory history = proxyHistories.get(prepared.proxySymbol);
         if (history == null || history.getBars() == null) {
             return;
         }
         List<MarketBar> bars = history.getBars();
-        context.setGoldModel(goldBetaEstimator.estimate(prepared.netWorthPoints, bars,
-                thresholds.getGoldWindow(), thresholds.getGoldMinPairs()));
+        if (prepared.branch == EstimateBranch.GOLD_PROXY) {
+            context.setGoldModel(goldBetaEstimator.estimate(prepared.netWorthPoints, bars,
+                    thresholds.getGoldWindow(), thresholds.getGoldMinPairs()));
+            return;
+        }
+        if (prepared.branch == EstimateBranch.BOND_PROXY) {
+            context.setBondModel(bondBaselineEstimator.estimate(prepared.netWorthPoints, bars,
+                    thresholds.getBondWindow(), thresholds.getBondMinPairs()));
+        }
     }
 
     /**

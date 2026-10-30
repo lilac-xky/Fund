@@ -2,8 +2,10 @@ package com.lilac.controller;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.lilac.common.DeleteRequest;
+import com.lilac.domain.dto.holding.HoldingBatchUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
 import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
@@ -88,6 +90,22 @@ public class HoldingController {
     @PostMapping("/convert")
     public Result<HoldingConvertVO> convert(@RequestBody HoldingConvertRequest request) {
         return Result.success(holdingService.convert(request));
+    }
+
+    /**
+     * 更正某个持仓批次的份额、成本价与建仓日期，供录入出错时改正
+     */
+    @PostMapping("/batch/update")
+    public Result<HoldingVO> updateBatch(@RequestBody HoldingBatchUpdateRequest request) {
+        return Result.success(holdingService.updateBatch(request));
+    }
+
+    /**
+     * 撤销某个持仓批次，已卖出时拒绝并提示改为更正
+     */
+    @PostMapping("/batch/revoke")
+    public Result<Boolean> revokeBatch(@RequestBody HoldingChangeRevokeRequest request) {
+        return Result.success(holdingService.revokeBatch(request));
     }
 
     /**

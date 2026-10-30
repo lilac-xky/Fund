@@ -128,6 +128,18 @@ public class EstimateThresholds {
     private String bondProxyCode = "511010";
 
     /**
+     * 债券传导系数的滚动窗口，交易日；债券日波动极小，窗口太短中位数会抖
+     */
+    @Value("${fund.estimate.bond.window:60}")
+    private int bondWindow = 60;
+
+    /**
+     * 债券传导系数所需的最少配对样本，不足时退化为按 1 倍代理
+     */
+    @Value("${fund.estimate.bond.min-pairs:20}")
+    private int bondMinPairs = 20;
+
+    /**
      * 单次预估的持仓上限，PRD 第 9 节的上限为 30 只
      */
     @Value("${fund.estimate.max-items:30}")

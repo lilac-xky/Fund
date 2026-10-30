@@ -6,6 +6,7 @@ import com.lilac.adapter.model.MarketQuote;
 import com.lilac.domain.vo.EstimateErrorVO;
 import com.lilac.domain.vo.FundSnapshotVO;
 import com.lilac.domain.vo.VarietyVO;
+import com.lilac.engine.BondBaselineEstimator;
 import com.lilac.enums.EstimateTier;
 import lombok.Data;
 
@@ -52,6 +53,11 @@ public class EstimateContext {
      * 黄金 β 与 AR(1) 的滚动估计结果，仅黄金分支使用
      */
     private GoldBetaModel goldModel;
+
+    /**
+     * 债券传导系数估计结果，仅债券分支使用；为 null 表示按 1 倍代理
+     */
+    private BondBaselineEstimator.Model bondModel;
 
     /**
      * 持仓标的当日行情，按带前缀完整代码索引

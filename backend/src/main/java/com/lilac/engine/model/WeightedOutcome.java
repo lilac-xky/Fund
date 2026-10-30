@@ -36,6 +36,11 @@ public class WeightedOutcome {
     private String suspendedSymbols;
 
     /**
+     * 因海外市场（美股等）无行情源而被剔除的标的数
+     */
+    private int overseasCount;
+
+    /**
      * 是否所有标的都取不到行情
      *
      * @return 全部不可用返回 true

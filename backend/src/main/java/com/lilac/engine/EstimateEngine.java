@@ -39,6 +39,7 @@ public class EstimateEngine {
     private static final String NO_HOLDING = "无已披露的股票持仓，暂无法预估";
     private static final String NO_SNAPSHOT = "净值与持仓取不到，今日无法预估";
     private static final String QUOTE_MISSING = "行情取不到，今日无法预估";
+    private static final String OVERSEAS_ONLY = "持仓为海外标的，行情源不覆盖，无法预估";
     private static final String SUSPENDED = "重仓股停牌，今日无法预估";
     private static final String LOW_COVERAGE = "可用持仓覆盖率不足，暂无法预估";
     private static final String HIGH_EXCLUSION = "重仓股停牌或缺行情过多，暂无法预估";
@@ -56,24 +57,27 @@ public class EstimateEngine {
     private final TierResolver tierResolver;
     private final ConfidenceResolver confidenceResolver;
     private final ErrorHistoryCalculator errorHistoryCalculator;
+    private final BondBaselineEstimator bondBaselineEstimator;
     private final EstimateThresholds thresholds;
 
     /**
-     * 注入加权、档位、可信度与误差统计组件
+     * 注入加权、档位、可信度、误差统计与债券传导估计组件
      *
      * @param holdingWeightCalculator 持仓加权
      * @param tierResolver            档位判定
      * @param confidenceResolver      可信度判定
      * @param errorHistoryCalculator  误差统计
+     * @param bondBaselineEstimator   债券传导系数估计
      * @param thresholds              阈值配置
      */
     public EstimateEngine(HoldingWeightCalculator holdingWeightCalculator, TierResolver tierResolver,
                           ConfidenceResolver confidenceResolver, ErrorHistoryCalculator errorHistoryCalculator,
-                          EstimateThresholds thresholds) {
+                          BondBaselineEstimator bondBaselineEstimator, EstimateThresholds thresholds) {
         this.holdingWeightCalculator = holdingWeightCalculator;
         this.tierResolver = tierResolver;
         this.confidenceResolver = confidenceResolver;
         this.errorHistoryCalculator = errorHistoryCalculator;
+        this.bondBaselineEstimator = bondBaselineEstimator;
         this.thresholds = thresholds;
     }
 
@@ -102,7 +106,7 @@ public class EstimateEngine {
         switch (branch) {
             case INDEX_ONLY -> estimateByQuote(context, outcome, DISCLAIMER);
             case GOLD_PROXY -> estimateByGold(context, outcome);
-            case BOND_PROXY -> estimateByQuote(context, outcome, BOND_NOTE);
+            case BOND_PROXY -> estimateByBond(context, outcome);
             case STOCK_WEIGHTED -> estimateByHoldings(context, outcome);
             default -> {
                 outcome.setBranch(EstimateBranch.UNAVAILABLE);
@@ -216,6 +220,40 @@ public class EstimateEngine {
     }
 
     /**
+     * 债券分支，用本基金自己的历史传导系数折算债券 ETF 涨跌，缺样本时退回 1 倍代理
+     *
+     * @param context 预估输入
+     * @param outcome 输出
+     */
+    private void estimateByBond(EstimateContext context, EstimateOutcome outcome) {
+        MarketQuote quote = context.getProxyQuote();
+        if (quote == null || !quote.usable()) {
+            unavailable(outcome, QUOTE_MISSING, context.getProxyUnavailableReason());
+            return;
+        }
+        EstimateHistoryStats stats = stats(context);
+        outcome.setTier(tierResolver.resolve(outcome.getCategory(), stats, recentStats(context),
+                context.getPreviousTier(), thresholds));
+        outcome.setConfidence(confidenceResolver.resolve(HUNDRED, stats, context.isDegraded(), thresholds));
+        outcome.setQuoteDate(quote.getTradeDate());
+        outcome.setRealtime(quote.getRealtime());
+        // 债券分支用整只基金作单位，覆盖率按满额给出
+        outcome.setCoverage(HUNDRED);
+        fillSnapshotDates(context, outcome);
+        fillAllocationDate(context, outcome);
+        BondBaselineEstimator.Model model = context.getBondModel();
+        BigDecimal predicted = model == null ? scale(quote.getChangePercent())
+                : scale(bondBaselineEstimator.predict(model, quote.getChangePercent()));
+        fillPointOrTier(outcome, predicted, stats);
+        outcome.getRemarks().add(BOND_NOTE);
+        outcome.getRemarks().add(model == null
+                ? "该基金历史净值与债券代理配对样本不足，直接沿用债券 ETF 涨跌"
+                : "按本基金对债券 ETF 的传导系数 " + model.transmission().stripTrailingZeros().toPlainString()
+                        + " 折算，日均波动 " + model.fundMeanAbsChange().stripTrailingZeros().toPlainString()
+                        + " 个百分点");
+    }
+
+    /**
      * 持仓加权分支，残差按 0 计，港股按汇率折算
      *
      * @param context 预估输入
@@ -243,6 +281,16 @@ public class EstimateEngine {
                 context.getForex());
         outcome.setCoverage(weighted.getUsedWeight());
         if (weighted.empty()) {
+            // 海外持仓（QDII 买美股等）是结构性缺口，说清楚才不会被当成「等会儿再试就好」
+            // 只有「有海外标的 且 剔除的全是海外」才算纯海外，有停牌时不在此列
+            boolean overseasOnly = weighted.getOverseasCount() > 0
+                    && weighted.getOverseasCount() >= weighted.getExcludedCount();
+            if (overseasOnly) {
+                unavailable(outcome, OVERSEAS_ONLY, "披露持仓含 " + weighted.getOverseasCount()
+                        + " 只海外标的（如美股），当前行情源只覆盖 A 股、港股与北交所");
+                return;
+            }
+            // 停牌是标的自身的真实状态，必须与「行情没取到」分开说，否则会误导重试
             unavailable(outcome, weighted.getSuspendedSymbols() != null ? SUSPENDED : QUOTE_MISSING,
                     weighted.getSuspendedSymbols());
             return;

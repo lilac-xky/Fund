@@ -44,7 +44,8 @@ class EstimateEngineTest {
     void setUp() {
         thresholds = new EstimateThresholds();
         engine = new EstimateEngine(new HoldingWeightCalculator(), new TierResolver(),
-                new ConfidenceResolver(), new ErrorHistoryCalculator(), thresholds);
+                new ConfidenceResolver(), new ErrorHistoryCalculator(), new BondBaselineEstimator(),
+                thresholds);
     }
 
     /**
