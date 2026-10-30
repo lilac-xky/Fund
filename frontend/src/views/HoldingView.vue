@@ -585,78 +585,82 @@
       </div>
     </div>
 
-    <!-- 批次更正弹层：录错了要能改，改完在变动历史里留一条更正说明 -->
+    <!-- 批次更正弹层：头部与底部固定，只有批次列表滚动，避免批次一多就点不到按钮 -->
     <div v-if="batchOf" class="app-mask" @click.self="batchOf = null">
-      <div class="app-dialog app-dialog--wide">
-        <h3>{{ batchOf.varietyName }} 的持仓批次</h3>
-        <p class="app-dialog__meta">
-          这部分是录入时的原始记录。份额或成本价填错了可直接改，「撤销」只对没卖出过的批次开放；
-          改动会追加一条更正说明到变动历史，旧记录不删。分红方式选错会让现金分红差很多。
-        </p>
-        <AppField label="分红方式" description="红利再投时分红已折成份额，现金分红按 0 计">
-          <div class="app-types">
-            <button
-              v-for="option in DIVIDEND_METHODS"
-              :key="option.value"
-              type="button"
-              class="app-type"
-              :class="{ 'app-type--on': batchOf.dividendMethod === option.value }"
-              @click="onChangeDividendMethod(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </AppField>
-        <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
-        <div v-else class="app-batches">
-          <div v-for="batch in batchOf.batches" :key="batch.id" class="app-batch">
-            <div v-if="editingBatchId === batch.id" class="app-batch__form">
-              <AppField label="份额" :error="batchError">
-                <AppInput
-                  :model-value="batchDraft.shares"
-                  :numeric="true"
-                  inputmode="decimal"
-                  @update:model-value="updateBatchDraft('shares', $event)"
-                />
-                <span class="app-unit">份</span>
-              </AppField>
-              <AppField label="成本价">
-                <AppInput
-                  :model-value="batchDraft.costPrice"
-                  :numeric="true"
-                  inputmode="decimal"
-                  @update:model-value="updateBatchDraft('costPrice', $event)"
-                />
-                <span class="app-unit">元/份</span>
-              </AppField>
-              <AppField label="建仓日期">
-                <input
-                  :value="batchDraft.openDate"
-                  type="date"
-                  class="app-input app-date"
-                  @input="updateBatchDraft('openDate', ($event.target as HTMLInputElement).value)"
-                />
-              </AppField>
-              <div class="app-dialog__ops">
-                <AppButton variant="primary" :disabled="batchSaving" @click="onSaveBatch">
-                  {{ batchSaving ? '保存中…' : '保存更正' }}
-                </AppButton>
-                <AppButton @click="editingBatchId = null">取消</AppButton>
-              </div>
+      <div class="app-dialog app-dialog--wide app-dialog--split">
+        <div class="app-dialog__head">
+          <h3>{{ batchOf.varietyName }} 的持仓批次</h3>
+          <p class="app-dialog__meta">
+            这部分是录入时的原始记录。份额或成本价填错了可直接改，「撤销」只对没卖出过的批次开放；
+            改动会追加一条更正说明到变动历史，旧记录不删。分红方式选错会让现金分红差很多。
+          </p>
+          <AppField label="分红方式" description="红利再投时分红已折成份额，现金分红按 0 计">
+            <div class="app-types">
+              <button
+                v-for="option in DIVIDEND_METHODS"
+                :key="option.value"
+                type="button"
+                class="app-type"
+                :class="{ 'app-type--on': batchOf.dividendMethod === option.value }"
+                @click="onChangeDividendMethod(option.value)"
+              >
+                {{ option.label }}
+              </button>
             </div>
-            <div v-else class="app-batch__row">
-              <span class="app-batch__shares">{{ fmt(batch.shares) }} 份</span>
-              <span class="app-batch__cost">{{ fmt(batch.costPrice) }} 元/份</span>
-              <span class="app-batch__money">成本 {{ fmtMoney(batch.costAmount) }} 元</span>
-              <span class="app-batch__date">建仓 {{ batch.openDate ?? '—' }}</span>
-              <span class="app-batch__ops">
-                <AppButton size="sm" @click="startEditBatch(batch)">更正</AppButton>
-                <AppButton size="sm" @click="onRevokeBatch(batch)">撤销</AppButton>
-              </span>
+          </AppField>
+        </div>
+        <div class="app-dialog__body">
+          <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
+          <div v-else class="app-batches">
+            <div v-for="batch in batchOf.batches" :key="batch.id" class="app-batch">
+              <div v-if="editingBatchId === batch.id" class="app-batch__form">
+                <AppField label="份额" :error="batchError">
+                  <AppInput
+                    :model-value="batchDraft.shares"
+                    :numeric="true"
+                    inputmode="decimal"
+                    @update:model-value="updateBatchDraft('shares', $event)"
+                  />
+                  <span class="app-unit">份</span>
+                </AppField>
+                <AppField label="成本价">
+                  <AppInput
+                    :model-value="batchDraft.costPrice"
+                    :numeric="true"
+                    inputmode="decimal"
+                    @update:model-value="updateBatchDraft('costPrice', $event)"
+                  />
+                  <span class="app-unit">元/份</span>
+                </AppField>
+                <AppField label="建仓日期">
+                  <input
+                    :value="batchDraft.openDate"
+                    type="date"
+                    class="app-input app-date"
+                    @input="updateBatchDraft('openDate', ($event.target as HTMLInputElement).value)"
+                  />
+                </AppField>
+                <div class="app-dialog__ops">
+                  <AppButton variant="primary" :disabled="batchSaving" @click="onSaveBatch">
+                    {{ batchSaving ? '保存中…' : '保存更正' }}
+                  </AppButton>
+                  <AppButton @click="editingBatchId = null">取消</AppButton>
+                </div>
+              </div>
+              <div v-else class="app-batch__row">
+                <span class="app-batch__shares">{{ fmt(batch.shares) }} 份</span>
+                <span class="app-batch__cost">{{ fmt(batch.costPrice) }} 元/份</span>
+                <span class="app-batch__money">成本 {{ fmtMoney(batch.costAmount) }} 元</span>
+                <span class="app-batch__date">建仓 {{ batch.openDate ?? '—' }}</span>
+                <span class="app-batch__ops">
+                  <AppButton size="sm" @click="startEditBatch(batch)">更正</AppButton>
+                  <AppButton size="sm" @click="onRevokeBatch(batch)">撤销</AppButton>
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <div class="app-dialog__ops">
+        <div class="app-dialog__foot">
           <AppButton @click="batchOf = null">关闭</AppButton>
         </div>
       </div>
@@ -2263,8 +2267,11 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   z-index: 90;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* 内容比视口高时整层可滚，且不被居中裁掉顶部 */
+  overflow-y: auto;
   padding: 24px;
   background: rgba(12, 9, 6, 0.42);
   backdrop-filter: blur(3px);
@@ -2272,6 +2279,9 @@ onMounted(() => {
 
 .app-dialog {
   width: min(420px, 100%);
+  /* 内容超长时弹层自身滚动，不能把底部按钮挤出视口 */
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   padding: 22px 24px;
   border: 1px solid var(--hair);
   border-radius: 15px;
@@ -2281,6 +2291,36 @@ onMounted(() => {
 
 .app-dialog--wide {
   width: min(520px, 100%);
+}
+
+/* 头部与底部固定、中间列表滚动，长列表下底部按钮始终可见 */
+.app-dialog--split {
+  display: flex;
+  flex-direction: column;
+  /* 覆盖基础样式的整层滚动，改由内部列表滚动 */
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-dialog--split .app-dialog__head {
+  flex: none;
+  padding: 22px 24px 12px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.app-dialog--split .app-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 24px;
+}
+
+.app-dialog--split .app-dialog__foot {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  padding: 12px 24px 18px;
+  border-top: 1px solid var(--hair);
 }
 
 .app-dialog h3 {
