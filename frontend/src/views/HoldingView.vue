@@ -815,6 +815,27 @@ type HoldingVarietyDisplay = API.HoldingVarietyVO & {
   dividendDetails?: Array<API.HoldingDividendVO & { shares?: number }>
 }
 
+/**
+ * 一条持仓批次
+ *
+ * 主键是 18 位雪花 ID，后端已改为按字符串下发，故独立声明而不复用生成的
+ * `API.HoldingBatchVO`（那里 `id` 是 number，会误导类型检查）。
+ */
+interface HoldingBatchVO {
+  /** 持仓批次主键，字符串形态的雪花 ID */
+  id?: string
+  /** 持有份额 */
+  shares?: number
+  /** 成本价 */
+  costPrice?: number
+  /** 成本金额 */
+  costAmount?: number
+  /** 建仓日期 */
+  openDate?: string
+  /** 录入时间 */
+  createTime?: string
+}
+
 type HoldingOverviewDisplay = Omit<API.HoldingOverviewVO, 'items'> & {
   items?: HoldingVarietyDisplay[]
   /** 含分红的总收益合计 */
@@ -857,9 +878,11 @@ const convertTargets = computed(() =>
 const historyOf = ref<API.HoldingVarietyVO | null>(null)
 const historyRows = ref<API.HoldingChangeVO[]>([])
 
-/** 批次更正弹层状态 */
-const batchOf = ref<HoldingVarietyDisplay | null>(null)
-const editingBatchId = ref<number | null>(null)
+/** 批次更正弹层状态，批次单独用本地类型，因为主键是字符串形态的雪花 ID */
+const batchOf = ref<
+  (Omit<HoldingVarietyDisplay, 'batches'> & { batches?: HoldingBatchVO[] }) | null
+>(null)
+const editingBatchId = ref<string | null>(null)
 const batchDraft = ref({ shares: '', costPrice: '', openDate: '' })
 const batchError = ref('')
 const batchSaving = ref(false)
@@ -1305,7 +1328,8 @@ async function loadAll(): Promise<void> {
     catalog.value = statusResult.value.data ?? {}
   }
   if (overviewResult.status === 'fulfilled') {
-    overview.value = overviewResult.value.data ?? {}
+    // 生成的 typings 里批次 id 是 number，而后端已改为字符串下发，这里的转换只是对齐类型
+    overview.value = (overviewResult.value.data ?? {}) as HoldingOverviewDisplay
   }
   if (changesResult.status === 'fulfilled') {
     changes.value = (changesResult.value.data ?? []).slice(0, 8)
@@ -1314,13 +1338,14 @@ async function loadAll(): Promise<void> {
 
 /** 打开批次更正弹层 */
 function openBatches(item: HoldingVarietyDisplay): void {
-  batchOf.value = item
+  // 生成的 typings 把批次 id 标为 number，后端实际下发字符串，这里按本地类型对齐
+  batchOf.value = item as Omit<HoldingVarietyDisplay, 'batches'> & { batches?: HoldingBatchVO[] }
   editingBatchId.value = null
   batchError.value = ''
 }
 
 /** 进入某个批次的编辑态，把当前值带进表单 */
-function startEditBatch(batch: API.HoldingBatchVO): void {
+function startEditBatch(batch: HoldingBatchVO): void {
   if (batch.id == null) {
     return
   }
@@ -1357,12 +1382,13 @@ async function onSaveBatch(): Promise<void> {
   }
   batchSaving.value = true
   try {
+    // 生成的 typings 把 id 标成 number，但后端契约是字符串形式的雪花 ID，直接传字符串才不会丢精度
     await updateBatchApi({
       id,
       shares: sharesValue,
       costPrice: costValue,
       ...(batchDraft.value.openDate ? { openDate: batchDraft.value.openDate } : {}),
-    })
+    } as unknown as API.HoldingBatchUpdateRequest)
     ElMessage.success('已更正，变动历史里追加了一条说明')
     editingBatchId.value = null
     batchOf.value = null
@@ -1375,12 +1401,13 @@ async function onSaveBatch(): Promise<void> {
 }
 
 /** 撤销一个批次，后端会拒绝已卖出过的批次 */
-async function onRevokeBatch(batch: API.HoldingBatchVO): Promise<void> {
+async function onRevokeBatch(batch: HoldingBatchVO): Promise<void> {
   if (batch.id == null) {
     return
   }
   try {
-    await revokeBatchApi({ id: batch.id })
+    // 同更正接口，id 必须是字符串形态才不丢精度
+    await revokeBatchApi({ id: batch.id } as unknown as API.HoldingChangeRevokeRequest)
     ElMessage.success('已撤销该批次')
     batchOf.value = null
     await loadAll()
