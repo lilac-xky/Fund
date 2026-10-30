@@ -1,5 +1,6 @@
 package com.lilac.domain.vo;
 
+import com.lilac.enums.DividendMethod;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.VarietyType;
@@ -8,6 +9,7 @@ import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 持仓总览的单品种聚合行
@@ -106,19 +108,49 @@ public class HoldingVarietyVO implements Serializable {
     private BigDecimal profitRate;
 
     /**
+     * 含现金分红的总收益，与支付宝「持有收益」同口径；最新价缺失时为 null
+     */
+    private BigDecimal totalProfitLoss;
+
+    /**
+     * 含现金分红的总收益率，单位百分点；最新价缺失时为 null
+     */
+    private BigDecimal totalProfitRate;
+
+    /**
      * 当日涨跌幅，单位百分点；没有可用日变动时为 null
      */
     private BigDecimal dailyChangePercent;
 
     /**
-     * 持仓期间累计的现金分红金额，单位元；无累计净值数据时为 null
+     * 当日收益金额，单位元；按当日涨跌幅反推昨日市值后相减，缺日变动时为 null
+     */
+    private BigDecimal dailyProfitLoss;
+
+    /**
+     * 持仓期间累计的现金分红金额，单位元；无除息记录时为 0
      */
     private BigDecimal dividendAmount;
 
     /**
-     * 分红口径说明，如「按累计净值推算，建仓以来」
+     * 分红口径说明，如「自 2026-07-31 建仓以来共 2 次除息」
      */
     private String dividendNote;
+
+    /**
+     * 分红方式，红利再投时现金分红为 0，分红已折成份额
+     */
+    private DividendMethod dividendMethod;
+
+    /**
+     * 逐笔除息明细，页面据此与平台核对，不参与任何金额计算
+     */
+    private List<HoldingDividendVO> dividendDetails;
+
+    /**
+     * 持有中的批次，供页面更正份额、成本价与建仓日期
+     */
+    private List<HoldingBatchVO> batches;
 
     private static final long serialVersionUID = 1L;
 }

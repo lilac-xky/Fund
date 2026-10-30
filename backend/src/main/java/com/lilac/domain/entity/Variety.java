@@ -1,5 +1,6 @@
 package com.lilac.domain.entity;
 
+import com.lilac.enums.DividendMethod;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.VarietyType;
 import com.mybatisflex.annotation.Table;
@@ -43,6 +44,11 @@ public class Variety extends BaseEntity {
      * 跟踪指数代码，红利基金用于查股息率
      */
     private String trackIndexCode;
+
+    /**
+     * 分红方式，红利再投时累计净值与单位净值的差不能当现金
+     */
+    private DividendMethod dividendMethod;
 
     /**
      * 类型是否已由使用者确认，false 表示待确认

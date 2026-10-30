@@ -1,6 +1,7 @@
 package com.lilac.domain.vo;
 
 import com.lilac.enums.GridAction;
+import com.lilac.enums.GridBasis;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -43,6 +44,16 @@ public class GridAdviceVO implements Serializable {
      * 动作中文名
      */
     private String actionLabel;
+
+    /**
+     * 判断所用的价格口径，场内实时价或场外尾盘预估净值
+     */
+    private GridBasis basis;
+
+    /**
+     * 价格口径中文名
+     */
+    private String basisLabel;
 
     /**
      * 当前价，单位元

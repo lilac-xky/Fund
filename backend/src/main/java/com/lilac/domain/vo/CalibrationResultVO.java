@@ -58,6 +58,11 @@ public class CalibrationResultVO implements Serializable {
     private Integer writtenCount;
 
     /**
+     * 校准前主动刷新成功的净值只数，用于区分「没公布」与「没抓到」
+     */
+    private Integer netWorthRefreshed;
+
+    /**
      * 本次说明，如「当日预估缺失已跳过 2 只」
      */
     private String notice;

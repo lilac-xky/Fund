@@ -60,6 +60,16 @@ public class HoldingChangeVO implements Serializable {
     private LocalDate openDate;
 
     /**
+     * 买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空
+     */
+    private Long holdingId;
+
+    /**
+     * 本次变动金额，份额乘单价，供明细核对
+     */
+    private BigDecimal amount;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

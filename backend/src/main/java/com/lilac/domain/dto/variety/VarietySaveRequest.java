@@ -1,5 +1,6 @@
 package com.lilac.domain.dto.variety;
 
+import com.lilac.enums.DividendMethod;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.VarietyType;
 import lombok.Data;
@@ -41,6 +42,11 @@ public class VarietySaveRequest implements Serializable {
      * 跟踪指数代码
      */
     private String trackIndexCode;
+
+    /**
+     * 分红方式，红利再投时现金分红按 0 计
+     */
+    private DividendMethod dividendMethod;
 
     /**
      * 类型是否已确认

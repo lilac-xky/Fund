@@ -39,6 +39,16 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
         netWorthColumns.put("accumulatedNetWorth",
                 "DECIMAL(16, 6) DEFAULT NULL COMMENT '累计净值，含历史现金分红，上游不提供时为 null'");
         REQUIRED_COLUMNS.put("fund_net_worth", netWorthColumns);
+
+        Map<String, String> changeColumns = new LinkedHashMap<>();
+        changeColumns.put("holdingId",
+                "BIGINT DEFAULT NULL COMMENT '买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空'");
+        REQUIRED_COLUMNS.put("holding_change", changeColumns);
+
+        Map<String, String> varietyColumns = new LinkedHashMap<>();
+        varietyColumns.put("dividendMethod",
+                "VARCHAR(16) NOT NULL DEFAULT 'CASH' COMMENT '分红方式 CASH 现金分红 / REINVEST 红利再投'");
+        REQUIRED_COLUMNS.put("variety", varietyColumns);
     }
 
     @Resource
