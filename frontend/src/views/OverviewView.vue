@@ -224,7 +224,7 @@
               <!-- 午盘：持仓相关指数走势 -->
               <AppGroup
                 v-show="activePane === 'noon'"
-                title="持仓相关指数走势"
+                title="持仓对标的指数 / ETF 走势"
                 code="TREND"
                 :meta="store.trendAsOf ? `日线截至 ${store.trendAsOf}` : '日线未取到'"
                 :meta-ok="Boolean(store.trendAsOf)"
@@ -246,6 +246,10 @@
                         {{ signedPercent(item.change) }}
                       </span>
                     </div>
+                    <!-- 这里的数字是对标标的自己的涨跌，不是持仓基金的净值涨跌，必须写清 -->
+                    <p v-if="item.funds.length" class="app-trend__who">
+                      用于预估：{{ item.funds.join('、') }}
+                    </p>
                     <AppSparkline :points="item.points" :tone="item.change" />
                     <div class="app-trend__metrics">
                       <span>
@@ -264,6 +268,11 @@
                     <p class="app-trend__note">{{ item.maNote }}</p>
                   </div>
                 </div>
+
+                <p class="app-disclaimer">
+                  卡片标题是对标指数或 ETF 的名称与代码，右侧百分比是指数自己的当日涨跌，
+                  不是基金净值涨跌。基金的当日预估见「早盘」页，两者口径不同，不要混用。
+                </p>
               </AppGroup>
 
               <!-- 午盘：指标状态 -->
@@ -1085,6 +1094,16 @@ onBeforeUnmount(() => {
   margin-top: 6px;
   font-size: 10.5px;
   color: var(--t3);
+}
+
+/* 说明这条曲线服务的是哪几只持仓基金，避免把指数涨跌误读成基金涨跌 */
+.app-trend__who {
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--t4);
 }
 
 /* ── 指标 ── */

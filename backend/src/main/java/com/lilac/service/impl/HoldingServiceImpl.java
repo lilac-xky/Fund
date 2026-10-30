@@ -636,7 +636,6 @@ public class HoldingServiceImpl implements HoldingService {
             return;
         }
         // 每个批次各自从自己的建仓日起算，早批能拿到它应得的分红，再合并成一行
-        BigDecimal total = BigDecimal.ZERO;
         BigDecimal perShareSum = BigDecimal.ZERO;
         // 每份分红是基金层面的全局值，同日多个批次必须去重，绝不能相加
         Map<LocalDate, BigDecimal> perShareByDate = new LinkedHashMap<>();
@@ -654,7 +653,6 @@ public class HoldingServiceImpl implements HoldingService {
             if (result == null) {
                 return;
             }
-            total = total.add(result.amount());
             for (DividendCalculator.Distribution distribution : result.distributions()) {
                 // 同一除息日只留一次每份金额，重复批次不再覆盖
                 perShareByDate.putIfAbsent(distribution.date(), distribution.perShare());
@@ -664,6 +662,8 @@ public class HoldingServiceImpl implements HoldingService {
                 }
             }
         }
+        // 总额由明细累加得出，避免「逐批四舍五入之和」与「按日汇总」差一分而对不上账
+        BigDecimal total = BigDecimal.ZERO;
         List<HoldingDividendVO> details = new ArrayList<>();
         for (Map.Entry<LocalDate, BigDecimal> entry : perShareByDate.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList()) {
@@ -674,6 +674,7 @@ public class HoldingServiceImpl implements HoldingService {
             detail.setAmount(entry.getValue().multiply(heldShares).setScale(MONEY_SCALE, RoundingMode.HALF_UP));
             detail.setShares(heldShares.setScale(2, RoundingMode.HALF_UP));
             details.add(detail);
+            total = total.add(detail.getAmount());
             perShareSum = perShareSum.add(entry.getValue());
         }
         LocalDate since = holdings.stream().map(Holding::getOpenDate)

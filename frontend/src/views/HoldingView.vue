@@ -272,69 +272,103 @@
 
               <div v-else class="app-rows">
                 <div v-for="item in overview.items" :key="item.varietyKey" class="app-row">
-                  <div class="app-row__id">
-                    <b class="app-row__name">{{ item.varietyName ?? item.varietyKey }}</b>
-                    <span class="app-row__key"
-                      >{{ item.varietyCode }} · {{ item.categoryLabel }}</span
-                    >
-                    <span v-if="item.confirmed === false" class="app-row__unknown">类型待确认</span>
-                  </div>
-                  <!-- 盈亏是首要信息，单独成列放在最右且用大字号 -->
-                  <div class="app-row__pnl">
-                    <template v-if="item.profitLoss != null">
-                      <b class="app-row__pnlv" :class="toneClass(item.profitLoss)">
-                        {{ signedMoney(item.profitLoss) }}
-                      </b>
-                      <span class="app-row__pnlr" :class="toneClass(item.profitLoss)">
-                        {{ signedPercent(item.profitRate) }}
+                  <div class="app-row__head">
+                    <div class="app-row__id">
+                      <b class="app-row__name">{{ item.varietyName ?? item.varietyKey }}</b>
+                      <span class="app-row__key">
+                        {{ item.varietyCode }} · {{ item.categoryLabel }}
                       </span>
-                      <span v-if="item.dailyChangePercent != null" class="app-row__day">
-                        当日
-                        <em :class="toneClass(item.dailyChangePercent)">
-                          {{ signedPercent(item.dailyChangePercent) }}
-                        </em>
-                      </span>
-                      <!-- 分红单列：现金分红会从单位净值里扣掉，不算出来会被误读成没赚 -->
-                      <span
-                        v-if="item.dividendAmount != null && item.dividendAmount > 0"
-                        class="app-row__dividend"
-                        :title="item.dividendNote ?? ''"
+                      <span v-if="item.confirmed === false" class="app-row__unknown"
+                        >类型待确认</span
                       >
-                        含分红 {{ signedMoney(item.dividendAmount) }}
+                      <span
+                        v-if="item.dividendMethod === 'REINVEST'"
+                        class="app-row__unknown"
+                        title="分红折成份额，不再单列现金"
+                      >
+                        红利再投
                       </span>
-                    </template>
-                    <span v-else class="app-row__missing">暂无净值，盈亏不可算</span>
+                    </div>
+                    <div class="app-row__ops">
+                      <AppButton size="sm" @click="openBuy(item)">买入</AppButton>
+                      <AppButton size="sm" @click="openSell(item)">卖出</AppButton>
+                      <AppButton size="sm" @click="openConvert(item)">转换</AppButton>
+                      <AppButton size="sm" @click="showChanges(item)">变动</AppButton>
+                      <AppButton size="sm" @click="openBatches(item)">改批次</AppButton>
+                    </div>
                   </div>
-
-                  <!-- 持仓细节降到次要层级，字号更小、颜色更淡 -->
-                  <div class="app-row__nums">
-                    <span class="app-row__val">市值 {{ fmtMoney(item.marketValue) }}</span>
-                    <span>{{ fmt(item.totalShares) }} 份</span>
-                    <span>成本 {{ fmt(item.avgCostPrice) }} / {{ fmtMoney(item.costAmount) }}</span>
-                    <span v-if="item.latestPrice != null">
-                      {{ item.priceSource }} {{ fmt(item.latestPrice) }}
-                    </span>
-                  </div>
-
-                  <div class="app-row__ops">
-                    <AppButton size="sm" @click="openBuy(item)">买入</AppButton>
-                    <AppButton size="sm" @click="openSell(item)">卖出</AppButton>
-                    <AppButton size="sm" @click="openConvert(item)">转换</AppButton>
-                    <AppButton size="sm" @click="showChanges(item)">变动</AppButton>
+                  <!-- 每个数字都带标签，不让人猜「+2.01」是金额还是百分比 -->
+                  <div class="app-row__grid">
+                    <div class="app-cell">
+                      <span class="app-cell__k">总收益（含分红）</span>
+                      <b class="app-cell__v" :class="toneClass(item.totalProfitLoss)">
+                        {{ signedMoney(item.totalProfitLoss) }}
+                      </b>
+                      <span class="app-cell__sub" :class="toneClass(item.totalProfitRate)">
+                        {{ signedPercent(item.totalProfitRate) }}
+                      </span>
+                    </div>
+                    <div class="app-cell">
+                      <span class="app-cell__k">今日收益</span>
+                      <b class="app-cell__v" :class="toneClass(item.dailyProfitLoss)">
+                        {{ signedMoney(item.dailyProfitLoss) }}
+                      </b>
+                      <span class="app-cell__sub" :class="toneClass(item.dailyChangePercent)">
+                        {{ signedPercent(item.dailyChangePercent) }}
+                      </span>
+                    </div>
+                    <div class="app-cell">
+                      <span class="app-cell__k">市值</span>
+                      <b class="app-cell__v">{{ fmtMoney(item.marketValue) }}</b>
+                      <span class="app-cell__sub">{{ fmt(item.totalShares) }} 份</span>
+                    </div>
+                    <div class="app-cell">
+                      <span class="app-cell__k">成本</span>
+                      <b class="app-cell__v">{{ fmtMoney(item.costAmount) }}</b>
+                      <span class="app-cell__sub">{{ fmt(item.avgCostPrice) }} 元/份</span>
+                    </div>
+                    <div class="app-cell">
+                      <span class="app-cell__k">最新净值</span>
+                      <b class="app-cell__v">{{ fmt(item.latestPrice) }}</b>
+                      <span class="app-cell__sub">{{ item.latestPriceDate ?? '—' }}</span>
+                    </div>
+                    <div class="app-cell">
+                      <span class="app-cell__k">现金分红</span>
+                      <b
+                        class="app-cell__v"
+                        :class="item.dividendMethod === 'REINVEST' ? '' : 'app-tone-up'"
+                      >
+                        {{
+                          item.dividendMethod === 'REINVEST'
+                            ? '折份额'
+                            : fmtMoney(item.dividendAmount)
+                        }}
+                      </b>
+                      <button
+                        v-if="item.dividendDetails?.length"
+                        type="button"
+                        class="app-cell__link"
+                        title="按每笔除息发生时实际持有的份额计算，已计入总收益"
+                        @click="showDividend(item)"
+                      >
+                        {{ item.dividendDetails.length }} 次除息
+                      </button>
+                      <span v-else class="app-cell__sub">无除息</span>
+                    </div>
                   </div>
                 </div>
                 <div v-if="overview.items?.length" class="app-total">
                   成本合计 <b>{{ fmtMoney(totalCost) }}</b> <span>市值合计</span>
                   <b>{{ fmtMoney(overview.totalMarketValue) }}</b>
-                  <span :class="toneClass(totalProfitLoss)">浮盈亏</span>
+                  <span :class="toneClass(totalProfitLoss)">总收益</span>
                   <b :class="toneClass(totalProfitLoss)">{{ signedMoney(totalProfitLoss) }}</b>
                   <span :class="toneClass(totalProfitRate)"
                     >({{ signedPercent(totalProfitRate) }})</span
                   >
-                  <template v-if="totalDividend > 0">
-                    <span class="app-total__dividend">含分红</span>
-                    <b class="app-total__dividend">{{ signedMoney(totalDividend) }}</b>
-                  </template>
+                  <span :class="toneClass(overview.totalDailyProfitLoss)">今日收益</span>
+                  <b :class="toneClass(overview.totalDailyProfitLoss)">
+                    {{ signedMoney(overview.totalDailyProfitLoss) }}
+                  </b>
                 </div>
               </div>
             </AppGroup>
@@ -551,6 +585,105 @@
       </div>
     </div>
 
+    <!-- 批次更正弹层：录错了要能改，改完在变动历史里留一条更正说明 -->
+    <div v-if="batchOf" class="app-mask" @click.self="batchOf = null">
+      <div class="app-dialog app-dialog--wide">
+        <h3>{{ batchOf.varietyName }} 的持仓批次</h3>
+        <p class="app-dialog__meta">
+          这部分是录入时的原始记录。份额或成本价填错了可直接改，「撤销」只对没卖出过的批次开放；
+          改动会追加一条更正说明到变动历史，旧记录不删。分红方式选错会让现金分红差很多。
+        </p>
+        <AppField label="分红方式" description="红利再投时分红已折成份额，现金分红按 0 计">
+          <div class="app-types">
+            <button
+              v-for="option in DIVIDEND_METHODS"
+              :key="option.value"
+              type="button"
+              class="app-type"
+              :class="{ 'app-type--on': batchOf.dividendMethod === option.value }"
+              @click="onChangeDividendMethod(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </AppField>
+        <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
+        <div v-else class="app-batches">
+          <div v-for="batch in batchOf.batches" :key="batch.id" class="app-batch">
+            <div v-if="editingBatchId === batch.id" class="app-batch__form">
+              <AppField label="份额" :error="batchError">
+                <AppInput
+                  :model-value="batchDraft.shares"
+                  :numeric="true"
+                  inputmode="decimal"
+                  @update:model-value="updateBatchDraft('shares', $event)"
+                />
+                <span class="app-unit">份</span>
+              </AppField>
+              <AppField label="成本价">
+                <AppInput
+                  :model-value="batchDraft.costPrice"
+                  :numeric="true"
+                  inputmode="decimal"
+                  @update:model-value="updateBatchDraft('costPrice', $event)"
+                />
+                <span class="app-unit">元/份</span>
+              </AppField>
+              <AppField label="建仓日期">
+                <input
+                  :value="batchDraft.openDate"
+                  type="date"
+                  class="app-input app-date"
+                  @input="updateBatchDraft('openDate', ($event.target as HTMLInputElement).value)"
+                />
+              </AppField>
+              <div class="app-dialog__ops">
+                <AppButton variant="primary" :disabled="batchSaving" @click="onSaveBatch">
+                  {{ batchSaving ? '保存中…' : '保存更正' }}
+                </AppButton>
+                <AppButton @click="editingBatchId = null">取消</AppButton>
+              </div>
+            </div>
+            <div v-else class="app-batch__row">
+              <span class="app-batch__shares">{{ fmt(batch.shares) }} 份</span>
+              <span class="app-batch__cost">{{ fmt(batch.costPrice) }} 元/份</span>
+              <span class="app-batch__money">成本 {{ fmtMoney(batch.costAmount) }} 元</span>
+              <span class="app-batch__date">建仓 {{ batch.openDate ?? '—' }}</span>
+              <span class="app-batch__ops">
+                <AppButton size="sm" @click="startEditBatch(batch)">更正</AppButton>
+                <AppButton size="sm" @click="onRevokeBatch(batch)">撤销</AppButton>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="app-dialog__ops">
+          <AppButton @click="batchOf = null">关闭</AppButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分红明细弹层：逐笔列出除息日与每份金额，供与平台核对 -->
+    <div v-if="dividendOf" class="app-mask" @click.self="dividendOf = null">
+      <div class="app-dialog">
+        <h3>{{ dividendOf.varietyName }} 的除息明细</h3>
+        <p class="app-dialog__meta">{{ dividendOf.dividendNote ?? '' }}</p>
+        <div class="app-history">
+          <div v-for="row in dividendOf.dividendDetails ?? []" :key="row.date" class="app-change">
+            <span class="app-change__type app-change__type--buy">{{ row.date }}</span>
+            <div class="app-change__tx">
+              <b>每份 {{ fmt(row.perShare) }} 元</b>
+              <span class="app-change__note"
+                >除息日持有 {{ fmt(row.shares) }} 份，计 {{ fmtMoney(row.amount) }} 元</span
+              >
+            </div>
+          </div>
+        </div>
+        <div class="app-dialog__ops">
+          <AppButton @click="dividendOf = null">关闭</AppButton>
+        </div>
+      </div>
+    </div>
+
     <MessageHost />
   </div>
 </template>
@@ -573,16 +706,19 @@ import { ElMessage } from '@/ui/message'
 import {
   buy as buyHolding,
   changes as holdingChanges,
+  convert as convertHolding,
   overview as holdingOverview,
+  revokeBatch as revokeBatchApi,
   sell as sellHolding,
+  updateBatch as updateBatchApi,
 } from '@/api/holdingController'
+import { save as saveVariety } from '@/api/varietyController'
 import {
   catalogStatus as catalogStatusApi,
   confirm as confirmCandidate,
   disambiguate as disambiguateApi,
   syncCatalog as syncCatalogApi,
 } from '@/api/fundController'
-import { convert as convertHolding } from '@/api/holdingController'
 
 /** 分组图标，内联 SVG 保持与全站一致 */
 const ICONS: Record<string, string> = {
@@ -596,6 +732,12 @@ const ICONS: Record<string, string> = {
   compass:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="m15.2 8.8-2 4.4-4.4 2 2-4.4z"/></svg>',
 }
+
+/** 分红方式选项，红利再投时分红已折成份额，不能再算一遍现金 */
+const DIVIDEND_METHODS = [
+  { value: 'CASH', label: '现金分红' },
+  { value: 'REINVEST', label: '红利再投' },
+] as const
 
 /** 手动指定的类型选项，只给 PRD 定义的四类 */
 const CATEGORY_OPTIONS = [
@@ -658,18 +800,29 @@ const lookupError = ref('')
 /** 基金全集状态 */
 const catalog = ref<API.FundCatalogStatusVO>({})
 
-/** 持仓总览 */
+/**
+ * 持仓总览
+ *
+ * `totalProfitLoss` / `totalProfitRate` / `dividendDetails[].shares` 是后端新增的含分红口径字段，
+ * Apifox 尚未重新生成，故在此声明；生成后删掉这些可选字段即可。
+ */
 type HoldingVarietyDisplay = API.HoldingVarietyVO & {
-  costAmount?: number
-  profitLoss?: number
-  profitRate?: number
-  dailyChangePercent?: number
-  dividendAmount?: number | null
-  dividendNote?: string | null
+  /** 含现金分红的总收益，与支付宝「持有收益」同口径 */
+  totalProfitLoss?: number
+  /** 含现金分红的总收益率，百分点 */
+  totalProfitRate?: number
+  /** 逐笔除息明细，额外带出每笔计入的份额 */
+  dividendDetails?: Array<API.HoldingDividendVO & { shares?: number }>
 }
 
 type HoldingOverviewDisplay = Omit<API.HoldingOverviewVO, 'items'> & {
   items?: HoldingVarietyDisplay[]
+  /** 含分红的总收益合计 */
+  totalProfitLoss?: number
+  /** 含分红的总收益率合计，百分点 */
+  totalProfitRate?: number
+  /** 成本合计 */
+  totalCostAmount?: number
 }
 
 const overview = ref<HoldingOverviewDisplay>({})
@@ -704,6 +857,16 @@ const convertTargets = computed(() =>
 const historyOf = ref<API.HoldingVarietyVO | null>(null)
 const historyRows = ref<API.HoldingChangeVO[]>([])
 
+/** 批次更正弹层状态 */
+const batchOf = ref<HoldingVarietyDisplay | null>(null)
+const editingBatchId = ref<number | null>(null)
+const batchDraft = ref({ shares: '', costPrice: '', openDate: '' })
+const batchError = ref('')
+const batchSaving = ref(false)
+
+/** 分红明细弹层状态 */
+const dividendOf = ref<HoldingVarietyDisplay | null>(null)
+
 /** 代码输入框引用 */
 const codeInput = ref<InstanceType<typeof AppInput> | null>(null)
 
@@ -732,28 +895,41 @@ const steps = computed(() => [
   { label: '填写份额与成本', done: Boolean(shares.value && costPrice.value) },
 ])
 
-/** 市值摘要，用于行情条 */
-const totalCost = computed(() =>
-  (overview.value.items ?? []).reduce((sum, item) => sum + (item.costAmount ?? 0), 0),
+/** 成本合计，用后端汇总值，缺省时按逐只累加兜底 */
+const totalCost = computed(
+  () =>
+    overview.value.totalCostAmount ??
+    (overview.value.items ?? []).reduce((sum, item) => sum + (item.costAmount ?? 0), 0),
 )
 
-const totalProfitLoss = computed(() =>
-  (overview.value.items ?? []).reduce((sum, item) => sum + (item.profitLoss ?? 0), 0),
+/** 含分红的总收益合计，与支付宝「持有收益」同口径 */
+const totalProfitLoss = computed(
+  () =>
+    overview.value.totalProfitLoss ??
+    (overview.value.items ?? []).reduce((sum, item) => sum + (item.totalProfitLoss ?? 0), 0),
 )
 
 const totalProfitRate = computed(() =>
-  totalCost.value > 0 ? (totalProfitLoss.value / totalCost.value) * 100 : 0,
-)
-
-/** 全部持仓的现金分红合计，用于底部汇总 */
-const totalDividend = computed(() =>
-  (overview.value.items ?? []).reduce((sum, item) => sum + (item.dividendAmount ?? 0), 0),
+  overview.value.totalProfitRate != null
+    ? overview.value.totalProfitRate
+    : totalCost.value > 0
+      ? (totalProfitLoss.value / totalCost.value) * 100
+      : 0,
 )
 
 /** 市值摘要，用于行情条 */
-const marketValueLabel = computed(() =>
-  overview.value.items?.length ? `市值 ${fmtMoney(overview.value.totalMarketValue)}` : '—',
-)
+const marketValueLabel = computed(() => {
+  const items = overview.value.items ?? []
+  if (!items.length) {
+    return '—'
+  }
+  const day = overview.value.totalDailyProfitLoss
+  const base = `市值 ${fmtMoney(overview.value.totalMarketValue)}`
+  if (day == null) {
+    return base
+  }
+  return `${base} · 今日 ${day > 0 ? '+' : ''}${fmtMoney(day)}`
+})
 
 /** 已确认品种的最新价说明 */
 const pickedLatestLabel = computed(() => {
@@ -1133,6 +1309,113 @@ async function loadAll(): Promise<void> {
   }
   if (changesResult.status === 'fulfilled') {
     changes.value = (changesResult.value.data ?? []).slice(0, 8)
+  }
+}
+
+/** 打开批次更正弹层 */
+function openBatches(item: HoldingVarietyDisplay): void {
+  batchOf.value = item
+  editingBatchId.value = null
+  batchError.value = ''
+}
+
+/** 进入某个批次的编辑态，把当前值带进表单 */
+function startEditBatch(batch: API.HoldingBatchVO): void {
+  if (batch.id == null) {
+    return
+  }
+  editingBatchId.value = batch.id
+  batchDraft.value = {
+    shares: batch.shares != null ? String(batch.shares) : '',
+    costPrice: batch.costPrice != null ? String(batch.costPrice) : '',
+    openDate: batch.openDate ?? '',
+  }
+  batchError.value = ''
+}
+
+/** 更新批次表单的某个字段 */
+function updateBatchDraft(field: 'shares' | 'costPrice' | 'openDate', value: string): void {
+  batchDraft.value = { ...batchDraft.value, [field]: value }
+  batchError.value = ''
+}
+
+/** 提交批次更正 */
+async function onSaveBatch(): Promise<void> {
+  const id = editingBatchId.value
+  if (id == null) {
+    return
+  }
+  const sharesValue = Number(batchDraft.value.shares)
+  const costValue = Number(batchDraft.value.costPrice)
+  if (!Number.isFinite(sharesValue) || sharesValue <= 0) {
+    batchError.value = '份额必须为正数'
+    return
+  }
+  if (!Number.isFinite(costValue) || costValue <= 0) {
+    batchError.value = '成本价必须为正数'
+    return
+  }
+  batchSaving.value = true
+  try {
+    await updateBatchApi({
+      id,
+      shares: sharesValue,
+      costPrice: costValue,
+      ...(batchDraft.value.openDate ? { openDate: batchDraft.value.openDate } : {}),
+    })
+    ElMessage.success('已更正，变动历史里追加了一条说明')
+    editingBatchId.value = null
+    batchOf.value = null
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    batchSaving.value = false
+  }
+}
+
+/** 撤销一个批次，后端会拒绝已卖出过的批次 */
+async function onRevokeBatch(batch: API.HoldingBatchVO): Promise<void> {
+  if (batch.id == null) {
+    return
+  }
+  try {
+    await revokeBatchApi({ id: batch.id })
+    ElMessage.success('已撤销该批次')
+    batchOf.value = null
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  }
+}
+
+/** 打开分红明细弹层 */
+function showDividend(item: HoldingVarietyDisplay): void {
+  dividendOf.value = item
+}
+
+/** 切换分红方式，红利再投时分红已折成份额，现金分红不能再算一遍 */
+async function onChangeDividendMethod(method: 'CASH' | 'REINVEST'): Promise<void> {
+  const item = batchOf.value
+  if (!item?.varietyKey || item.dividendMethod === method) {
+    return
+  }
+  try {
+    // 品种保存是按业务主键覆盖，未传的字段会被写成 null，故把已知身份字段一并回写
+    await saveVariety({
+      varietyKey: item.varietyKey,
+      dividendMethod: method,
+      ...(item.varietyCode ? { varietyCode: item.varietyCode } : {}),
+      ...(item.varietyType ? { varietyType: item.varietyType } : {}),
+      ...(item.varietyName ? { varietyName: item.varietyName } : {}),
+      ...(item.category ? { category: item.category } : {}),
+      ...(item.confirmed != null ? { confirmed: item.confirmed } : {}),
+    })
+    ElMessage.success(method === 'REINVEST' ? '已改为红利再投，现金分红按 0 计' : '已改为现金分红')
+    batchOf.value = { ...item, dividendMethod: method }
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
   }
 }
 
@@ -1590,10 +1873,11 @@ onMounted(() => {
   padding: 4px 0 8px;
 }
 
+/* 名称与按钮一行、字段网格独占一行，六格才有足够宽度放进完整数字 */
 .app-row {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
   padding: 13px 2px;
   border-bottom: 1px solid var(--hair);
 }
@@ -1602,57 +1886,96 @@ onMounted(() => {
   border-bottom: 0;
 }
 
+.app-row__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
 .app-row__id {
-  flex: 1.5;
+  flex: 1;
   min-width: 0;
 }
 
-/* 盈亏列是首要信息：大字号、加粗，与次要细节拉开层级 */
-.app-row__pnl {
+/* 字段网格独占整行，六列各得约 1/6 宽度 */
+.app-row__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px 16px;
+  min-width: 0;
+}
+
+.app-cell {
   display: flex;
-  flex: none;
+  min-width: 0;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  width: 132px;
-  text-align: right;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
 }
 
-.app-row__pnlv {
-  font-variant-numeric: tabular-nums;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
-.app-row__pnlr {
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
+.app-cell__k {
+  font-size: 10px;
   font-weight: 600;
-}
-
-.app-row__day {
-  font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
   color: var(--t4);
 }
 
-.app-row__day em {
-  font-style: normal;
-  font-weight: 600;
+.app-cell__v {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--t1);
 }
 
-.app-row__dividend {
-  margin-top: 1px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--acc-soft);
-  color: var(--acc);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  font-weight: 600;
+.app-cell__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--t4);
+}
+
+/* 除息次数不换行挤成两行，宁可省略也不把单元格撑高 */
+.app-cell__link {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--acc);
+  cursor: pointer;
+}
+
+.app-cell__link:hover {
+  text-decoration: underline;
+}
+
+/* 中栏变窄时六格会挤到放不下数字，提前折成三列两行 */
+@media (max-width: 1180px) {
+  .app-row__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .app-row__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-row__head {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 .app-row__name {
@@ -1683,24 +2006,6 @@ onMounted(() => {
   font-weight: 650;
 }
 
-/* 持仓细节退为次要层级：字号更小、颜色更淡，扫一眼先看到盈亏 */
-.app-row__nums {
-  display: flex;
-  flex: 2;
-  flex-direction: column;
-  gap: 2px;
-  font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: var(--t4);
-}
-
-.app-row__val {
-  font-size: 11.5px;
-  font-weight: 550;
-  color: var(--t2);
-}
-
 .app-row__ops {
   display: flex;
   flex: none;
@@ -1723,8 +2028,56 @@ onMounted(() => {
   color: var(--t1);
 }
 
-.app-total__dividend {
-  color: var(--acc);
+/* 批次列表：一行一批，更正与撤销都在这一行里 */
+.app-batches {
+  padding: 4px 0;
+}
+
+.app-batch {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.app-batch:last-child {
+  border-bottom: 0;
+}
+
+.app-batch__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--t2);
+}
+
+.app-batch__shares,
+.app-batch__cost,
+.app-batch__money,
+.app-batch__date {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-batch__shares {
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.app-batch__money,
+.app-batch__date {
+  color: var(--t4);
+}
+
+.app-batch__ops {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.app-batch__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
 }
 
 /* 转换弹层的下拉与输入框视觉对齐 */

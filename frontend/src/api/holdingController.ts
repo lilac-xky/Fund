@@ -14,6 +14,36 @@ export async function add(body: API.HoldingAddRequest, options?: { [key: string]
   })
 }
 
+/** 撤销某个持仓批次，已卖出时拒绝并提示改为更正 POST /api/holding/batch/revoke */
+export async function revokeBatch(
+  body: API.HoldingChangeRevokeRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultBoolean>('/api/holding/batch/revoke', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 更正某个持仓批次的份额、成本价与建仓日期，供录入出错时改正 POST /api/holding/batch/update */
+export async function updateBatch(
+  body: API.HoldingBatchUpdateRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultHoldingVO>('/api/holding/batch/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 买入入库，校验失败拒绝并指出原因 POST /api/holding/buy */
 export async function buy(body: API.HoldingBuyRequest, options?: { [key: string]: any }) {
   return request<API.ResultHoldingVO>('/api/holding/buy', {

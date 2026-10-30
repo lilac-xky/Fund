@@ -50,13 +50,15 @@ export interface LoadFailure {
 export interface TrendItem {
   /** 带前缀完整代码 */
   symbol: string
-  /** 标的名称 */
+  /** 对标标的名称，如「中证银行」「红利低波 ETF」，不是持仓基金名称 */
   name: string
+  /** 用这个对标标的做预估的持仓基金名称，可能多只 */
+  funds: string[]
   /** 最新收盘价 */
   latestClose: number | null
   /** 最近交易日 */
   latestDate?: string
-  /** 当日涨跌幅，百分点 */
+  /** 对标标的当日涨跌幅，百分点；不是基金净值涨跌 */
   change: number | null
   /** 缩略图坐标串 */
   points: string
@@ -100,6 +102,24 @@ function messageOf(error: unknown): string {
     return `${error.message}（${error.happenedAt}）`
   }
   return error instanceof Error ? error.message : '未知错误'
+}
+
+/**
+ * 给代理标的起个可读名字，说明这条曲线是「哪只指数 / ETF 的涨跌」而不是「哪只基金的涨跌」
+ *
+ * @param item 预估行
+ * @returns 对标标的名称
+ */
+function proxyLabel(item: API.EstimateVO): string {
+  const code = (item.proxySymbol ?? '').replace(/^[a-z]{2}/i, '')
+  const branch = item.branch
+  if (branch === 'GOLD_PROXY') {
+    return `黄金 ETF ${code}`
+  }
+  if (branch === 'BOND_PROXY') {
+    return `债券 ETF ${code}`
+  }
+  return `指数 ${code}`
 }
 
 /** 记录一次失败，环节名与时间都留在页面上 */
@@ -146,6 +166,7 @@ async function loadIndexes(): Promise<IndexPulse[]> {
 function buildTrend(
   symbol: string,
   name: string,
+  funds: string[],
   history: API.MarketHistoryVO,
   closes: number[],
   params: IndicatorParams,
@@ -165,6 +186,7 @@ function buildTrend(
   return {
     symbol,
     name,
+    funds,
     latestClose: latest,
     latestDate: history.latestDate,
     change,
@@ -178,11 +200,12 @@ function buildTrend(
   }
 }
 
-/** 取持仓相关指数的日线，代码去重后一次批量拉取 */
+/** 取持仓相关指数的日线，代码去重后一次批量拉取，同一对标标的下的多只基金合并展示 */
 async function loadTrends(
   symbols: string[],
   params: IndicatorParams,
   names: Map<string, string>,
+  fundsBySymbol: Map<string, string[]>,
 ): Promise<TrendItem[]> {
   if (symbols.length === 0) {
     return []
@@ -197,7 +220,16 @@ async function loadTrends(
     if (!symbol || closes.length < 2) {
       return
     }
-    items.push(buildTrend(symbol, names.get(symbol) ?? symbol, history, closes, params))
+    items.push(
+      buildTrend(
+        symbol,
+        names.get(symbol) ?? symbol,
+        fundsBySymbol.get(symbol) ?? [],
+        history,
+        closes,
+        params,
+      ),
+    )
   })
   return items
 }
@@ -243,20 +275,30 @@ export async function loadOverview(refresh = false): Promise<OverviewPayload> {
     failures.push(failureOf('拉取指标参数', paramResult.reason))
   }
 
-  // 代理标的正是这只基金对标的指数，拿它取日线就不必再猜跟踪标的
-  const nameBySymbol = new Map<string, string>()
+  // 代理标的是「对标指数或跟踪 ETF」，不是基金本身，卡片标题必须写它的名字
+  const labelBySymbol = new Map<string, string>()
+  const fundsBySymbol = new Map<string, string[]>()
   const symbols: string[] = []
   ;[...(estimate.items ?? []), ...(estimate.unavailableItems ?? [])].forEach((item) => {
     const symbol = item.proxySymbol
-    if (!symbol || nameBySymbol.has(symbol)) {
+    if (!symbol) {
       return
     }
-    nameBySymbol.set(symbol, item.varietyName ?? symbol)
-    symbols.push(symbol)
+    if (!labelBySymbol.has(symbol)) {
+      labelBySymbol.set(symbol, proxyLabel(item))
+      fundsBySymbol.set(symbol, [])
+      symbols.push(symbol)
+    }
+    const name = item.varietyName
+    const held = fundsBySymbol.get(symbol) ?? []
+    if (name && !held.includes(name)) {
+      held.push(name)
+    }
+    fundsBySymbol.set(symbol, held)
   })
   let trends: TrendItem[] = []
   try {
-    trends = await loadTrends(symbols, indicatorParams, nameBySymbol)
+    trends = await loadTrends(symbols, indicatorParams, labelBySymbol, fundsBySymbol)
   } catch (error) {
     failures.push(failureOf('拉取指数日线', error))
   }

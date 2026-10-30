@@ -112,6 +112,8 @@ declare namespace API {
     gapCount?: number
     /** 净利润落库条数，含覆盖写 */
     writtenCount?: number
+    /** 校准前主动刷新成功的净值只数，用于区分「没公布」与「没抓到」 */
+    netWorthRefreshed?: number
     /** 本次说明，如「当日预估缺失已跳过 2 只」 */
     notice?: string
   }
@@ -539,6 +541,7 @@ declare namespace API {
     note?: string
     /** 是否已写入品种注册表，已确认过的代码不再重复询问 */
     registered?: boolean
+    /** 该品种当前的持有状态，未注册时为 null */
     holdingSummary?: HoldingSummaryVO
   }
 
@@ -703,6 +706,10 @@ declare namespace API {
     action?: 'BUY' | 'SELL' | 'NONE' | 'SUPPRESSED'
     /** 动作中文名 */
     actionLabel?: string
+    /** 判断所用的价格口径，场内实时价或场外尾盘预估净值 */
+    basis?: 'REALTIME_PRICE' | 'ESTIMATED_NAV'
+    /** 价格口径中文名 */
+    basisLabel?: string
     /** 当前价，单位元 */
     currentPrice?: number
     /** 当前价的数据日期 */
@@ -807,6 +814,14 @@ declare namespace API {
     varietyName?: string
     /** 基金类型中文名 */
     categoryLabel?: string
+    /** 品种类型，OF 场外 / ETF 场内 */
+    varietyType?: string
+    /** 判断所用的价格口径，场内实时价或场外尾盘预估净值 */
+    basis?: 'REALTIME_PRICE' | 'ESTIMATED_NAV'
+    /** 价格口径中文名 */
+    basisLabel?: string
+    /** 场外基金用来估净值的跟踪 ETF 或指数行情代码 */
+    proxySymbol?: string
     /** 该标的的价格下界，单位元 */
     lowerBound?: number
     /** 该标的的价格上界，单位元 */
@@ -845,6 +860,32 @@ declare namespace API {
     status?: 'HOLDING' | 'CLOSED'
   }
 
+  type HoldingBatchUpdateRequest = {
+    /** 持仓批次主键 */
+    id?: number
+    /** 更正后的份额，必须为正数 */
+    shares?: number
+    /** 更正后的成本价，必须为正数 */
+    costPrice?: number
+    /** 更正后的建仓日期，为空则不改 */
+    openDate?: string
+  }
+
+  type HoldingBatchVO = {
+    /** 持仓批次主键 */
+    id?: number
+    /** 持有份额 */
+    shares?: number
+    /** 成本价 */
+    costPrice?: number
+    /** 成本金额，份额乘成本价 */
+    costAmount?: number
+    /** 建仓日期 */
+    openDate?: string
+    /** 录入时间 */
+    createTime?: string
+  }
+
   type HoldingBuyRequest = {
     /** 所持品种的业务主键，如 OF:000001 */
     varietyKey?: string
@@ -863,6 +904,11 @@ declare namespace API {
     changeType?: 'BUY' | 'SELL'
     /** 返回条数上限，为空时取默认值 */
     limit?: number
+  }
+
+  type HoldingChangeRevokeRequest = {
+    /** 持仓批次主键 */
+    id?: number
   }
 
   type HoldingChangeVO = {
@@ -884,6 +930,10 @@ declare namespace API {
     note?: string
     /** 业务日期，买入为建仓日期，卖出为操作当日 */
     openDate?: string
+    /** 买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空 */
+    holdingId?: number
+    /** 本次变动金额，份额乘单价，供明细核对 */
+    amount?: number
     /** 创建时间 */
     createTime?: string
   }
@@ -916,6 +966,17 @@ declare namespace API {
     note?: string
   }
 
+  type HoldingDividendVO = {
+    /** 除息日，即单位净值被扣掉分红的那一天 */
+    date?: string
+    /** 每份现金分红金额，单位元 */
+    perShare?: number
+    /** 该次除息实际计入的持有份额，除息日之后才买入的批次不计入 */
+    shares?: number
+    /** 该次除息对应到当前持有份额的金额，单位元 */
+    amount?: number
+  }
+
   type HoldingItemVO = {
     /** 证券代码 */
     code?: string
@@ -932,6 +993,14 @@ declare namespace API {
     items?: HoldingVarietyVO[]
     /** 持仓市值合计，单位元；净值或行情缺失的品种按 0 计 */
     totalMarketValue?: number
+    /** 当日收益合计，单位元；缺当日涨跌幅的品种不计入 */
+    totalDailyProfitLoss?: number
+    /** 含现金分红的总收益合计，与支付宝「持有收益」同口径 */
+    totalProfitLoss?: number
+    /** 成本合计，单位元 */
+    totalCostAmount?: number
+    /** 含分红的总收益率合计，单位百分点 */
+    totalProfitRate?: number
     /** 汇总说明，如部分品种净值缺失 */
     notice?: string
   }
@@ -1009,12 +1078,24 @@ declare namespace API {
     profitLoss?: number
     /** 浮盈亏比例，单位百分点；最新价缺失时为 null */
     profitRate?: number
+    /** 含现金分红的总收益，与支付宝「持有收益」同口径；最新价缺失时为 null */
+    totalProfitLoss?: number
+    /** 含现金分红的总收益率，单位百分点；最新价缺失时为 null */
+    totalProfitRate?: number
     /** 当日涨跌幅，单位百分点；没有可用日变动时为 null */
     dailyChangePercent?: number
+    /** 当日收益金额，单位元；按当日涨跌幅反推昨日市值后相减，缺日变动时为 null */
+    dailyProfitLoss?: number
     /** 持仓期间累计的现金分红金额，单位元；无累计净值数据时为 null */
     dividendAmount?: number
     /** 分红口径说明，如「按累计净值推算，建仓以来」 */
     dividendNote?: string
+    /** 分红方式，红利再投时现金分红为 0，分红已折成份额 */
+    dividendMethod?: 'CASH' | 'REINVEST'
+    /** 逐笔除息明细，页面据此与平台核对，不参与任何金额计算 */
+    dividendDetails?: HoldingDividendVO[]
+    /** 持有中的批次，供页面更正份额、成本价与建仓日期 */
+    batches?: HoldingBatchVO[]
   }
 
   type HoldingVO = {
@@ -1342,6 +1423,7 @@ declare namespace API {
   type ResultDividendAdviceVO = {
     code?: number
     msg?: string
+    /** 单只红利品种的加减仓建议，金额已取整到元并带数据日期 */
     data?: DividendAdviceVO
   }
 
@@ -1378,6 +1460,7 @@ declare namespace API {
   type ResultEstimateVO = {
     code?: number
     msg?: string
+    /** 单只基金的预估结果，带出档位、可信度与全部依据日期 */
     data?: EstimateVO
   }
 
@@ -1414,6 +1497,7 @@ declare namespace API {
   type ResultGridAdviceVO = {
     code?: number
     msg?: string
+    /** 单只标的的网格到价提醒，含当前格子、穿越的网格线与建议金额 */
     data?: GridAdviceVO
   }
 
@@ -1444,6 +1528,7 @@ declare namespace API {
   type ResultHoldingSummaryVO = {
     code?: number
     msg?: string
+    /** 该品种当前的持有状态，未注册时为 null */
     data?: HoldingSummaryVO
   }
 
@@ -1578,6 +1663,7 @@ declare namespace API {
   type ResultMarketQuoteVO = {
     code?: number
     msg?: string
+    /** 单只标的的行情视图，带可用性状态、数据日期与来源 */
     data?: MarketQuoteVO
   }
 
@@ -1874,6 +1960,8 @@ EVENING :晚间净值校准，约 20:00 至 22:00 */
     category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 跟踪指数代码 */
     trackIndexCode?: string
+    /** 分红方式，红利再投时现金分红按 0 计 */
+    dividendMethod?: 'CASH' | 'REINVEST'
     /** 类型是否已确认 */
     confirmed?: boolean
   }
@@ -1893,6 +1981,8 @@ EVENING :晚间净值校准，约 20:00 至 22:00 */
     category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
     /** 跟踪指数代码 */
     trackIndexCode?: string
+    /** 分红方式，红利再投时现金分红按 0 计 */
+    dividendMethod?: 'CASH' | 'REINVEST'
     /** 类型是否已确认 */
     confirmed?: boolean
     /** 创建时间 */
