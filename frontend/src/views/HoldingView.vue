@@ -25,7 +25,7 @@
         :active="activePane"
         footer-label="刷新基金全集"
         :footer-icon="ICONS.refresh"
-        @select="activePane = $event"
+        @select="onPaneSelect"
         @footer="onSyncCatalog"
       />
 
@@ -38,11 +38,26 @@
                 <b class="app-crumb__b">{{ activePane === 'entry' ? '录入' : '总览' }}</b>
               </div>
               <div class="app-eyebrow">Holdings</div>
-              <h1 class="app-h1">持仓录入</h1>
+              <h1 class="app-h1">{{ activePane === 'entry' ? '录入持仓' : '当前持仓' }}</h1>
               <p class="app-lede">
-                只输入基金或 ETF
-                代码，名称、类型与最新净值自动带出。多义代码会列出候选并要求确认，确认后写入本地品种注册表。
+                {{
+                  activePane === 'entry'
+                    ? '只输入基金或 ETF 代码，名称、类型与最新净值自动带出。多义代码会列出候选并要求确认，确认后写入本地品种注册表。'
+                    : '按品种聚合的持有中份额、成本与收益，买入、卖出、转换与批次更正都在这里完成；新持仓请到「录入持仓」页。'
+                }}
               </p>
+              <div class="app-daybar">
+                <AppButton size="sm" @click="goEntry">
+                  {{ activePane === 'entry' ? '查看当前持仓' : '录入新持仓' }}
+                </AppButton>
+                <span class="app-daybar__meta">
+                  {{
+                    activePane === 'entry'
+                      ? '录入完成会自动跳回持仓列表'
+                      : '卖出支持填写实际成交日期，补录早前的卖出不会记成今天'
+                  }}
+                </span>
+              </div>
             </div>
 
             <!-- 空状态引导：尚未录入任何持仓 -->
@@ -50,7 +65,7 @@
               <div class="app-empty__ico" v-html="ICONS.compass" />
               <b>尚未录入持仓</b>
               <p>录入第一只基金或 ETF 后，总览、预估与邮件才会开始工作。输入 6 位代码开始。</p>
-              <button type="button" class="app-empty__btn" @click="focusCode">开始录入</button>
+              <button type="button" class="app-empty__btn" @click="goEntry">开始录入</button>
             </div>
 
             <!-- 第一步：输入代码 -->
@@ -408,9 +423,9 @@
                 <div class="app-change__tx">
                   <b>{{ change.varietyName ?? change.varietyKey }}</b>
                   <span>{{ fmt(change.shares) }} 份 @ {{ fmt(change.unitPrice) }}</span>
-                  <span v-if="change.openDate" class="app-change__bizdate"
-                    >建仓 {{ change.openDate }}</span
-                  >
+                  <span v-if="change.openDate" class="app-change__bizdate">
+                    {{ change.changeType === 'BUY' ? '建仓' : '卖出' }} {{ change.openDate }}
+                  </span>
                 </div>
                 <span class="app-change__time">{{ shortTime(change.createTime) }}</span>
               </div>
@@ -446,6 +461,7 @@
         <h3>卖出 {{ selling.varietyName }}</h3>
         <p class="app-dialog__meta">
           当前持有 {{ fmt(selling.totalShares) }} 份，按先进先出扣减，历史逐笔保留。
+          补录早前的成交请改卖出日期，只会扣减建仓日不晚于该日的批次。
         </p>
         <AppField label="卖出份额" description="不超过当前持有合计" :error="sellError">
           <AppInput
@@ -456,6 +472,14 @@
             @update:model-value="sellShares = $event"
           />
           <span class="app-unit">份</span>
+        </AppField>
+        <AppField label="卖出日期" description="留空默认今天，补录时填实际成交日">
+          <input
+            :value="sellDate"
+            type="date"
+            class="app-input app-date"
+            @input="sellDate = ($event.target as HTMLInputElement).value"
+          />
         </AppField>
         <div class="app-dialog__ops">
           <AppButton variant="primary" :disabled="!sellShares" @click="onSell">确认卖出</AppButton>
@@ -696,7 +720,8 @@
 /**
  * 持仓录入页：输入代码带出身份、候选确认、份额成本保存、卖出与变动历史
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/ui/AppButton.vue'
 import AppField from '@/ui/AppField.vue'
 import AppGroup from '@/ui/AppGroup.vue'
@@ -752,14 +777,38 @@ const CATEGORY_OPTIONS = [
   { value: 'DIVIDEND', label: '红利' },
 ]
 
-/** 侧栏锚点 */
+/** 侧栏锚点：默认展示当前持仓，录入是独立页面 */
 const railItems = [
-  { key: 'entry', label: '录入持仓', icon: ICONS.search! },
   { key: 'list', label: '当前持仓', icon: ICONS.list! },
+  { key: 'entry', label: '录入持仓', icon: ICONS.search! },
 ]
 
-/** 当前侧栏页 */
-const activePane = ref('entry')
+/** 路由，用于在「当前持仓」与「录入持仓」两个地址间切换 */
+const route = useRoute()
+const router = useRouter()
+
+/** 当前侧栏页，从路由初始化，/holding/entry 直接落到录入页 */
+const activePane = ref(route.name === 'holding-entry' ? 'entry' : 'list')
+
+/** 切换侧栏页并同步地址，录入与持仓是两个独立入口 */
+function onPaneSelect(key: string | number): void {
+  const pane = String(key)
+  activePane.value = pane
+  void router.push({ name: pane === 'entry' ? 'holding-entry' : 'holding' })
+}
+
+/** 头部按钮：在两个页面间往返 */
+function goEntry(): void {
+  onPaneSelect(activePane.value === 'entry' ? 'list' : 'entry')
+}
+
+// 直达 /holding 时同步回列表页，浏览器前进后退也跟随
+watch(
+  () => route.name,
+  (name) => {
+    activePane.value = name === 'holding-entry' ? 'entry' : 'list'
+  },
+)
 
 /** 输入中的代码 */
 const code = ref('')
@@ -858,6 +907,7 @@ const changes = ref<API.HoldingChangeVO[]>([])
 /** 卖出弹层状态 */
 const selling = ref<HoldingVarietyDisplay | null>(null)
 const sellShares = ref('')
+const sellDate = ref('')
 
 /** 加仓弹层状态 */
 const buying = ref<HoldingVarietyDisplay | null>(null)
@@ -1142,7 +1192,7 @@ async function onSave(): Promise<void> {
     ElMessage.success(`已保存 ${picked.value.varietyName} ${sharesValue} 份`)
     resetEntry()
     await loadAll()
-    activePane.value = 'list'
+    onPaneSelect('list')
   } catch {
     // request 层已弹出具体原因
   } finally {
@@ -1154,6 +1204,7 @@ async function onSave(): Promise<void> {
 function openSell(item: API.HoldingVarietyVO): void {
   selling.value = item
   sellShares.value = ''
+  sellDate.value = ''
   sellError.value = ''
 }
 
@@ -1255,7 +1306,7 @@ async function onConvert(): Promise<void> {
   }
 }
 
-/** 提交卖出 */
+/** 提交卖出，日期留空时后端按今天记账 */
 async function onSell(): Promise<void> {
   if (!selling.value?.varietyKey) {
     return
@@ -1267,7 +1318,12 @@ async function onSell(): Promise<void> {
   }
   sellError.value = ''
   try {
-    await sellHolding({ varietyKey: selling.value.varietyKey, shares: value })
+    // tradeDate 是本轮新增字段，生成层尚未带上，这里按本地扩展类型直传
+    await sellHolding({
+      varietyKey: selling.value.varietyKey,
+      shares: value,
+      ...(sellDate.value ? { tradeDate: sellDate.value } : {}),
+    } as API.HoldingSellRequest)
     ElMessage.success(`已卖出 ${selling.value.varietyName} ${value} 份`)
     selling.value = null
     await loadAll()
@@ -1316,9 +1372,11 @@ function resetEntry(): void {
 
 /** 聚焦代码输入框 */
 function focusCode(): void {
-  activePane.value = 'entry'
-  const element = document.querySelector<HTMLInputElement>('input.app-code')
-  element?.focus()
+  onPaneSelect('entry')
+  void nextTick(() => {
+    const element = document.querySelector<HTMLInputElement>('input.app-code')
+    element?.focus()
+  })
 }
 
 /** 拉取页面全部数据 */

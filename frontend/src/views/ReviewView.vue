@@ -223,7 +223,7 @@
                         >
                       </span>
                       <span v-if="row.pending" class="app-remark app-remark--dim">
-                        晚间净值公布后会自动补上，不用手工干预
+                        净值公布后会自动补一次校准，不用手工干预
                       </span>
                     </div>
                   </div>

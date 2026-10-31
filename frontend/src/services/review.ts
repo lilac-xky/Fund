@@ -52,9 +52,7 @@ export interface ReviewRow {
   pending: boolean
   /** 待校准原因，仅 pending 时有值 */
   pendingReason?: string
-}
-
-/** 一路数据的失败记录 */
+} /** 一路数据的失败记录 */
 export interface LoadFailure {
   /** 出错环节 */
   stage: string
@@ -101,6 +99,19 @@ export function today(): string {
 }
 
 /**
+ * 判断某交易日的净值大概率已经可取：过去的交易日，或今天已过 20 点
+ *
+ * @param tradeDate 复盘交易日
+ */
+export function netWorthLikelyPublished(tradeDate: string): boolean {
+  if (tradeDate < today()) {
+    return true
+  }
+  const now = new Date()
+  return now.getHours() >= 20
+}
+
+/**
  * 把持仓名单与当日误差记录合成逐只对照，缺记录的一律标为待校准
  *
  * @param roster  持仓品种
@@ -127,7 +138,7 @@ function merge(roster: API.HoldingVarietyVO[], records: API.EstimateErrorVO[]): 
         categoryLabel: item.categoryLabel,
         overThreshold: false,
         pending: true,
-        pendingReason: '当日误差记录尚未生成，待晚间净值公布后校准',
+        pendingReason: '该品种当日还没有误差记录，等待校准出数',
       }
       return pendingRow
     }
@@ -203,12 +214,19 @@ export async function loadReview(tradeDate: string): Promise<ReviewPayload> {
 }
 
 /**
- * 主动运行某一交易日的晚间校准，返回结果里带出逐只缺口原因
+ * 运行某一交易日的校准，只补指定基金；缺省补全部持有中的持仓
  *
- * @param tradeDate 校准交易日
+ * @param tradeDate   校准交易日
+ * @param varietyKeys 待补校准的品种，留空补全部
  */
-export async function runCalibrationFor(tradeDate: string): Promise<API.CalibrationResultVO> {
-  const result = await runCalibration({ tradeDate })
+export async function runCalibrationFor(
+  tradeDate: string,
+  varietyKeys?: string[],
+): Promise<API.CalibrationResultVO> {
+  const result = await runCalibration({
+    tradeDate,
+    ...(varietyKeys && varietyKeys.length ? { varietyKeys } : {}),
+  })
   return result.data ?? {}
 }
 

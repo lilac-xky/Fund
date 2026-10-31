@@ -8,6 +8,7 @@ import {
   hasContent,
   loadReview,
   loadTrend,
+  netWorthLikelyPublished,
   runCalibrationFor,
   today,
 } from '@/services/review'
@@ -121,6 +122,9 @@ export const useReviewStore = defineStore('review', () => {
   /** 最近一次校准返回的缺口原因，键为品种主键；缺口只在运行结果里，不落库 */
   const gapReasons = ref<Record<string, string>>({})
 
+  /** 本会话已自动补过校准的交易日，同一天最多补一次，避免反复打上游 */
+  const autoFilledDates = ref<Set<string>>(new Set())
+
   /** 待校准行的原因，取最近一次校准的缺口说明，没有则用通用文案 */
   function reasonOf(varietyKey: string): string {
     return (
@@ -195,6 +199,60 @@ export const useReviewStore = defineStore('review', () => {
       loading.value = false
       busy.value = false
     }
+    // 净值已经公布但误差还没出的，补跑一次校准再回读，这就是「已公布却不刷新」的修复点
+    if (hasContent(payload.value) && shouldAutoFill()) {
+      await autoFillPending()
+    }
+  }
+
+  /**
+   * 是否满足自动补校准条件：净值大概率已公布、本会话没补过这一天、且有待校准行
+   */
+  function shouldAutoFill(): boolean {
+    if (autoFilledDates.value.has(tradeDate.value)) {
+      return false
+    }
+    if (!netWorthLikelyPublished(tradeDate.value)) {
+      return false
+    }
+    return rows.value.some((row) => row.pending)
+  }
+
+  /**
+   * 只对待校准的基金补跑一次校准，跑完把缺口原因补回行上
+   */
+  async function autoFillPending(): Promise<void> {
+    autoFilledDates.value.add(tradeDate.value)
+    const keys = rows.value.filter((row) => row.pending).map((row) => row.varietyKey)
+    try {
+      const result = await runCalibrationFor(tradeDate.value, keys)
+      const next: Record<string, string> = {}
+      ;(result.gaps ?? []).forEach((gap) => {
+        if (gap.varietyKey && gap.reason) {
+          next[gap.varietyKey] = gap.reason
+        }
+      })
+      gapReasons.value = { ...gapReasons.value, ...next }
+      busy.value = true
+      try {
+        const refreshed = await loadReview(tradeDate.value)
+        const fetchedAt = new Date().toISOString()
+        payload.value = refreshed
+        shownAt.value = fetchedAt
+        stale.value = false
+        persist(refreshed, fetchedAt)
+        // 校准结果里的缺口原因只在本次运行里有，补到待校准行上再渲染
+        payload.value = {
+          ...payload.value,
+          notice: result.notice,
+          rows: applyGapReasons(payload.value.rows, result.gaps ?? []),
+        }
+      } finally {
+        busy.value = false
+      }
+    } catch {
+      // 补校准失败不影响页面既有结果，行上的通用文案仍可读
+    }
   }
 
   /**
@@ -214,7 +272,8 @@ export const useReviewStore = defineStore('review', () => {
         }
       })
       gapReasons.value = next
-      // load 会整体替换 payload，notice 必须在它之后再补
+      // load 会整体替换 payload，notice 必须在它之后再补；手动跑过的当天不再自动补
+      autoFilledDates.value.add(tradeDate.value)
       await load(true)
       payload.value = {
         ...payload.value,
@@ -253,6 +312,7 @@ export const useReviewStore = defineStore('review', () => {
     shownAt.value = null
     stale.value = false
     failures.value = []
+    gapReasons.value = {}
   }
 
   /** 首次进页面：同交易日的缓存先渲染，再后台补取 */

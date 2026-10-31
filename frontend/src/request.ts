@@ -44,6 +44,8 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   params?: Record<string, unknown>
   /** 静默模式，失败时不弹右下角提示，由调用方自行展示 */
   silent?: boolean
+  /** 生成层会带 umi 风格的 requestType，本封装按 FormData 自带边界处理，此处仅做兼容声明 */
+  requestType?: 'json' | 'form'
 }
 
 /** 请求错误，带上出错环节与发生时间，页面据此显示「哪里出错、什么时候」 */
@@ -101,7 +103,9 @@ export default async function request<T>(
   options: RequestOptions = {},
   stage = '请求',
 ): Promise<T> {
-  const { data, params, silent, ...rest } = options
+  const { data, params, silent, requestType, ...rest } = options
+  // requestType 是生成层的 umi 风格标记；上传走 FormData 时 body 已是 FormData，不做 JSON 序列化
+  const isFormData = typeof FormData !== 'undefined' && data instanceof FormData
   const query = new URLSearchParams()
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -131,10 +135,11 @@ export default async function request<T>(
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        ...(data !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        // FormData 自带 multipart 边界，手工设置 Content-Type 会破坏边界
+        ...(data !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(rest.headers ?? {}),
       },
-      body: data === undefined ? undefined : JSON.stringify(data),
+      body: data === undefined ? undefined : isFormData ? (data as FormData) : JSON.stringify(data),
     })
     if (!response.ok) {
       // 业务异常也走统一 Result 结构，非 2xx 时尽量读出 body 里的 msg，不丢后端原因
