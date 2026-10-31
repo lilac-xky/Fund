@@ -143,6 +143,11 @@ public class HoldingVarietyVO implements Serializable {
     private DividendMethod dividendMethod;
 
     /**
+     * 逐次除息的分红方式覆盖原文，JSON 日期到 CASH/REINVEST，页面回显用
+     */
+    private String dividendOverrides;
+
+    /**
      * 逐笔除息明细，页面据此与平台核对，不参与任何金额计算
      */
     private List<HoldingDividendVO> dividendDetails;

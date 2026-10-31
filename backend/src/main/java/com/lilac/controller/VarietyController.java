@@ -60,4 +60,12 @@ public class VarietyController {
     public Result<Integer> assignCategory(@RequestBody CategoryBatchRequest request) {
         return Result.success(varietyService.assignCategory(request));
     }
+
+    /**
+     * 重置某品种的全部本地数据：清空持仓、变动、预估留存、误差与黄金 β，注册信息保留
+     */
+    @PostMapping("/reset")
+    public Result<String> reset(@RequestParam("varietyKey") String varietyKey) {
+        return Result.success(varietyService.resetVariety(varietyKey));
+    }
 }

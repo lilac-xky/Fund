@@ -18,14 +18,19 @@ public class HoldingBuyRequest implements Serializable {
     private String varietyKey;
 
     /**
-     * 买入份额，必须为正数
+     * 买入份额，必须为正数；与 amount 二选一，都传时以份额为准
      */
     private BigDecimal shares;
 
     /**
-     * 买入成本价，必须为正数
+     * 买入成本价，必须为正数；缺省时按当日或之前最近净值自动带出
      */
     private BigDecimal costPrice;
+
+    /**
+     * 买入金额，元；支付宝订单只有金额时用它，份额按当日净值折算
+     */
+    private BigDecimal amount;
 
     /**
      * 建仓日期，为空时取当日

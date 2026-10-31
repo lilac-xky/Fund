@@ -49,6 +49,11 @@ public class VarietySaveRequest implements Serializable {
     private DividendMethod dividendMethod;
 
     /**
+     * 逐次除息的分红方式覆盖，JSON 日期到 CASH/REINVEST，null 表示不改
+     */
+    private String dividendOverrides;
+
+    /**
      * 类型是否已确认
      */
     private Boolean confirmed;

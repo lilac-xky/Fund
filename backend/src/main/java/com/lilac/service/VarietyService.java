@@ -44,4 +44,13 @@ public interface VarietyService {
      * @return 实际处理的只数
      */
     int assignCategory(CategoryBatchRequest request);
+
+    /**
+     * 重置某品种的全部本地数据：清空持仓批次、变动历史、预估留存、误差历史、黄金 β，
+     * 品种注册行保留（类型与名称不丢），用于录入错得太多时整只推倒重录
+     *
+     * @param varietyKey 品种业务主键
+     * @return 各表清理行数的说明
+     */
+    String resetVariety(String varietyKey);
 }

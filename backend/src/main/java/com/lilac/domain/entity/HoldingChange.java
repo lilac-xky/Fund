@@ -55,4 +55,9 @@ public class HoldingChange extends BaseEntity {
      * 买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空
      */
     private Long holdingId;
+
+    /**
+     * 卖出发生前的合计份额，供更正卖出时核对与回放
+     */
+    private BigDecimal beforeShares;
 }

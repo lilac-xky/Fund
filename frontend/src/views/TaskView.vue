@@ -203,38 +203,11 @@ import {
 } from '@/api/taskController'
 
 /**
- * 时点状态与邮件留存是本轮新增字段，生成层尚未更新，
- * 在此声明补充结构；接口重新生成后可删掉这组本地类型。
+ * 页面直接用生成的 `API.TaskOverviewVO` / `API.TaskPointStatusVO` / `API.MailArchiveVO`。
+ *
+ * 历史上 `mailArchiveDir` / `mailPendingResendCount` / `mailArchives` 在本地扩展过，
+ * 2026-10-31 Apifox 重新生成后全部进了生成层，扩展已删。
  */
-type TaskPointStatusVO = API.TaskPointStatusVO
-
-interface TaskOverviewDisplay {
-  tradeDate?: string
-  tradingDay?: boolean
-  tradingDayNote?: string
-  items?: TaskPointStatusVO[]
-  sentCount?: number
-  failedCount?: number
-  overdueCount?: number
-  clockJump?: boolean
-  clockJumpSeconds?: number
-  notice?: string
-  mailArchiveDir?: string
-  mailPendingResendCount?: number
-  mailArchives?: MailArchiveDisplay[]
-}
-
-/** 一份本地邮件留存 */
-interface MailArchiveDisplay {
-  fileName?: string
-  subject?: string
-  tradeDate?: string
-  sentAt?: string
-  failed?: boolean
-  resent?: boolean
-  sizeBytes?: number
-  archivedAt?: string
-}
 
 /** 四个时点各自是干嘛的一句话说明 */
 const PURPOSES: Record<string, string> = {
@@ -267,7 +240,7 @@ const busy = ref(false)
 const queryDate = ref(today())
 
 /** 总览 */
-const overview = ref<TaskOverviewDisplay | null>(null)
+const overview = ref<API.TaskOverviewVO | null>(null)
 
 /** 最近 14 天留痕 */
 const records = ref<API.SendRecordVO[]>([])
@@ -300,7 +273,7 @@ const mailMeta = computed(() =>
 )
 
 /** 时点分组右上角状态 */
-function metaOf(item: TaskPointStatusVO): string {
+function metaOf(item: API.TaskPointStatusVO): string {
   if (item.failReason) {
     return '失败，原因见下方'
   }
@@ -348,7 +321,7 @@ function statusLabel(status?: string): string {
 }
 
 /** 时点状态徽标 */
-function pillClass(item: TaskPointStatusVO): string {
+function pillClass(item: API.TaskPointStatusVO): string {
   if (item.status === 'SENT' || item.status === 'RESENT') {
     return 'app-pill--ok'
   }
@@ -378,7 +351,7 @@ function shortTime(value?: string | null): string {
 }
 
 /** 留存时间兜底取文件修改时间 */
-function mailArchivedAt(mail: MailArchiveDisplay): string {
+function mailArchivedAt(mail: API.MailArchiveVO): string {
   return mail.archivedAt ? shortTime(mail.archivedAt) : '—'
 }
 
@@ -413,7 +386,7 @@ async function load(): Promise<void> {
     }),
   ])
   if (overviewResult.status === 'fulfilled') {
-    overview.value = (overviewResult.value.data ?? {}) as TaskOverviewDisplay
+    overview.value = (overviewResult.value.data ?? {}) as API.TaskOverviewVO
   } else {
     overview.value = null
     ElMessage.error('调度总览读取失败，请确认已登录')
@@ -437,7 +410,7 @@ function onDateChange(value: string): void {
  * @param item   时点
  * @param resend 是否携带未送达补发
  */
-async function onTrigger(item: TaskPointStatusVO, resend: boolean): Promise<void> {
+async function onTrigger(item: API.TaskPointStatusVO, resend: boolean): Promise<void> {
   if (!item.point) {
     return
   }

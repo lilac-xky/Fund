@@ -44,6 +44,21 @@ export async function pending(
   })
 }
 
+/** 重置某品种的全部本地数据：清空持仓、变动、预估留存、误差与黄金 β，注册信息保留 POST /api/variety/reset */
+export async function reset(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.resetParams,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultString>('/api/variety/reset', {
+    method: 'POST',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
 /** 新增或按业务主键更新品种 POST /api/variety/save */
 export async function save(body: API.VarietySaveRequest, options?: { [key: string]: any }) {
   return request<API.ResultBoolean>('/api/variety/save', {

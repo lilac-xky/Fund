@@ -4,6 +4,7 @@ import com.lilac.domain.dto.holding.HoldingBatchUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
 import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
+import com.lilac.domain.dto.holding.HoldingChangeUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
@@ -99,6 +100,14 @@ public class HoldingController {
     @PostMapping("/batch/revoke")
     public Result<Boolean> revokeBatch(@RequestBody HoldingChangeRevokeRequest request) {
         return Result.success(holdingService.revokeBatch(request));
+    }
+
+    /**
+     * 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减
+     */
+    @PostMapping("/change/update")
+    public Result<Boolean> updateChange(@RequestBody HoldingChangeUpdateRequest request) {
+        return Result.success(holdingService.updateSellChange(request));
     }
 
     /**

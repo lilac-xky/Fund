@@ -195,22 +195,12 @@ const startDate = ref(isoOf(-7))
 const endDate = ref(isoOf(0))
 
 /**
- * 数据源统计的补充字段：无数据次数与失败标的明细是本轮新增，
- * 生成层尚未更新，故在此扩展；接口重新生成后可删掉。
+ * 健康度直接用生成的 `API.SourceHealthVO`。
+ *
+ * 历史上 `noDataCount` / `failureTargets` 在本地扩展过，
+ * 2026-10-31 Apifox 重新生成后进了生成层，扩展已删。
  */
-type SourceStatDisplay = API.SourceStatVO & {
-  noDataCount?: number
-  failureTargets?: Array<{
-    source?: string
-    target?: string
-    failureKind?: string
-    count?: number
-    latestMessage?: string
-    latestAt?: string
-  }>
-}
-
-const health = ref<(API.SourceHealthVO & { sources?: SourceStatDisplay[] }) | null>(null)
+const health = ref<API.SourceHealthVO | null>(null)
 
 /** 各源统计 */
 const rows = computed(() => health.value?.sources ?? [])

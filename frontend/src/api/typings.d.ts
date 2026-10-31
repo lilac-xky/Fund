@@ -1036,6 +1036,8 @@ declare namespace API {
     shares?: number
     /** 买入成本价，必须为正数 */
     costPrice?: number
+    /** 买入金额，元；支付宝订单只有金额时用它，份额按当日净值折算 */
+    amount?: number
     /** 建仓日期，为空时取当日 */
     openDate?: string
   }
@@ -1052,6 +1054,15 @@ declare namespace API {
   type HoldingChangeRevokeRequest = {
     /** 持仓批次主键 */
     id?: number
+  }
+
+  type HoldingChangeUpdateRequest = {
+    /** 变动记录主键 */
+    id?: number
+    /** 更正后的卖出日期，为空则不改 */
+    tradeDate?: string
+    /** 更正后的卖出净值，为空则不改 */
+    unitPrice?: number
   }
 
   type HoldingChangeVO = {
@@ -1162,6 +1173,8 @@ declare namespace API {
     shares?: number
     /** 卖出业务日期，为空时取当日；补录早前的卖出用它还原真实顺序 */
     tradeDate?: string
+    /** 卖出净值，元/份；补录时按支付宝订单填写，留空按 FIFO 加权成本记账 */
+    unitPrice?: number
   }
 
   type HoldingSummaryVO = {
@@ -1224,6 +1237,8 @@ declare namespace API {
     dividendNote?: string
     /** 分红方式，红利再投时现金分红为 0，分红已折成份额 */
     dividendMethod?: 'CASH' | 'REINVEST'
+    /** 逐次除息的分红方式覆盖原文，JSON 日期到 CASH/REINVEST，页面回显用 */
+    dividendOverrides?: string
     /** 逐笔除息明细，页面据此与平台核对，不参与任何金额计算 */
     dividendDetails?: HoldingDividendVO[]
     /** 持有中的批次，供页面更正份额、成本价与建仓日期 */
@@ -1866,6 +1881,10 @@ declare namespace API {
 
   type resetParams = {
     group: string
+  }
+
+  type resetParams = {
+    varietyKey: string
   }
 
   type ResultAuthStatusVO = {
@@ -2603,6 +2622,8 @@ EVENING :晚间净值校准，约 20:00 至 22:00 */
     trackIndexCode?: string
     /** 分红方式，红利再投时现金分红按 0 计 */
     dividendMethod?: 'CASH' | 'REINVEST'
+    /** 逐次除息的分红方式覆盖，JSON 日期到 CASH/REINVEST，null 表示不改 */
+    dividendOverrides?: string
     /** 类型是否已确认 */
     confirmed?: boolean
   }

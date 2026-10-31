@@ -44,6 +44,21 @@ export async function buy(body: API.HoldingBuyRequest, options?: { [key: string]
   })
 }
 
+/** 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减 POST /api/holding/change/update */
+export async function updateChange(
+  body: API.HoldingChangeUpdateRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultBoolean>('/api/holding/change/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 查询持仓变动历史，按时间倒序 POST /api/holding/changes */
 export async function changes(
   body: API.HoldingChangeQueryRequest,

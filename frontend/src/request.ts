@@ -3,8 +3,8 @@
  */
 import { ElMessage } from './ui/message'
 
-/** 应用上下文路径，与后端 server.servlet.context-path 保持一致 */
-const CONTEXT_PATH = '/api'
+/** 应用上下文路径，与后端 server.servlet.context-path 保持一致；页面拼图片直链时复用 */
+export const CONTEXT_PATH = '/api'
 
 /** 请求超时，毫秒；外部数据源偶发卡住时不能把页面拖死 */
 const TIMEOUT_MS = 20000

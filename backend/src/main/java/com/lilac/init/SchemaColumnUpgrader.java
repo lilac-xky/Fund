@@ -43,11 +43,15 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
         Map<String, String> changeColumns = new LinkedHashMap<>();
         changeColumns.put("holdingId",
                 "BIGINT DEFAULT NULL COMMENT '买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空'");
+        changeColumns.put("beforeShares",
+                "DECIMAL(20, 4) DEFAULT NULL COMMENT '卖出发生前的合计份额，供更正卖出时核对；买入行为空'");
         REQUIRED_COLUMNS.put("holding_change", changeColumns);
 
         Map<String, String> varietyColumns = new LinkedHashMap<>();
         varietyColumns.put("dividendMethod",
                 "VARCHAR(16) NOT NULL DEFAULT 'CASH' COMMENT '分红方式 CASH 现金分红 / REINVEST 红利再投'");
+        varietyColumns.put("dividendOverrides",
+                "VARCHAR(1024) DEFAULT NULL COMMENT '逐次除息的分红方式覆盖，JSON：日期到 CASH/REINVEST'");
         REQUIRED_COLUMNS.put("variety", varietyColumns);
     }
 

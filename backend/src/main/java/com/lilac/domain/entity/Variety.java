@@ -51,6 +51,11 @@ public class Variety extends BaseEntity {
     private DividendMethod dividendMethod;
 
     /**
+     * 逐次除息的分红方式覆盖，JSON 日期到 CASH/REINVEST，覆盖不到的跟随 dividendMethod
+     */
+    private String dividendOverrides;
+
+    /**
      * 类型是否已由使用者确认，false 表示待确认
      */
     private Boolean confirmed;

@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 现金分红推算器，逐日识别除息日并把每笔分红拆成「日期 + 每份金额」
@@ -35,6 +36,24 @@ public class DividendCalculator {
      */
     public Result calculate(BigDecimal shares, LocalDate since, FundNetWorthPoint latest,
                             List<FundNetWorthPoint> history, DividendMethod method) {
+        return calculate(shares, since, latest, history, method, Map.of());
+    }
+
+    /**
+     * 推算建仓以来的现金分红，支持按次覆盖分红方式：
+     * 品种是现金分红但某次选了再投时，该次现金按 0 计
+     *
+     * @param shares    合计持有份额
+     * @param since     建仓日期
+     * @param latest    最新净值点，需带单位净值
+     * @param history   建仓日附近的净值序列，按日期升序
+     * @param method    品种级默认分红方式
+     * @param overrides 除息日到分红方式的覆盖表，只对该次生效
+     * @return 分红结果，无法推算返回 null
+     */
+    public Result calculate(BigDecimal shares, LocalDate since, FundNetWorthPoint latest,
+                            List<FundNetWorthPoint> history, DividendMethod method,
+                            Map<LocalDate, DividendMethod> overrides) {
         if (shares == null || shares.signum() <= 0 || since == null || latest == null) {
             return null;
         }
@@ -46,21 +65,30 @@ public class DividendCalculator {
             return null;
         }
         List<Distribution> distributions = distributions(since, history);
+        Map<LocalDate, DividendMethod> effective = overrides == null ? Map.of() : overrides;
+        // 逐次判定口径：该次覆盖优先，未覆盖的跟随品种默认
+        List<Distribution> cash = distributions.stream()
+                .filter(item -> effective.getOrDefault(item.date(), method) == DividendMethod.CASH)
+                .toList();
+        List<Distribution> reinvested = distributions.stream()
+                .filter(item -> effective.getOrDefault(item.date(), method) == DividendMethod.REINVEST)
+                .toList();
         if (distributions.isEmpty()) {
             return new Result(BigDecimal.ZERO.setScale(MONEY_SCALE, RoundingMode.HALF_UP),
                     "自 " + since + " 建仓以来无除息记录", List.of(), DividendMethod.CASH);
         }
-        if (method == DividendMethod.REINVEST) {
-            // 红利再投的分红已经折成份额，再算一遍现金会与份额口径重复
+        if (cash.isEmpty()) {
             return new Result(BigDecimal.ZERO.setScale(MONEY_SCALE, RoundingMode.HALF_UP),
-                    "分红方式为红利再投，分红已折成份额，不计入现金", distributions, DividendMethod.REINVEST);
+                    "共 " + distributions.size() + " 次除息，全部为红利再投，分红已折成份额，不计入现金",
+                    distributions, DividendMethod.REINVEST);
         }
-        BigDecimal perShare = distributions.stream().map(Distribution::perShare)
+        BigDecimal perShare = cash.stream().map(Distribution::perShare)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal amount = shares.multiply(perShare).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-        return new Result(amount, "自 " + since + " 建仓以来共 " + distributions.size()
-                + " 次除息，每份合计 " + plain(perShare) + " 元，不含在浮盈亏内", distributions,
-                DividendMethod.CASH);
+        String note = "自 " + since + " 建仓以来共 " + distributions.size() + " 次除息，现金分红 "
+                + cash.size() + " 次，每份合计 " + plain(perShare) + " 元，不含在浮盈亏内"
+                + (reinvested.isEmpty() ? "" : "；另有 " + reinvested.size() + " 次红利再投已折成份额");
+        return new Result(amount, note, distributions, DividendMethod.CASH);
     }
 
     /**

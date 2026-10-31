@@ -6,6 +6,11 @@ import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.CategoryBatchRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.dto.variety.VarietySaveRequest;
+import com.lilac.domain.entity.EstimateError;
+import com.lilac.domain.entity.EstimateGoldBeta;
+import com.lilac.domain.entity.EstimateSnapshot;
+import com.lilac.domain.entity.Holding;
+import com.lilac.domain.entity.HoldingChange;
 import com.lilac.domain.entity.Variety;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.PendingCategoryVO;
@@ -14,6 +19,11 @@ import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.mapper.EstimateErrorMapper;
+import com.lilac.mapper.EstimateGoldBetaMapper;
+import com.lilac.mapper.EstimateSnapshotMapper;
+import com.lilac.mapper.HoldingChangeMapper;
+import com.lilac.mapper.HoldingMapper;
 import com.lilac.mapper.VarietyMapper;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
@@ -22,6 +32,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,6 +48,21 @@ public class VarietyServiceImpl implements VarietyService {
 
     @Resource
     private VarietyMapper varietyMapper;
+
+    @Resource
+    private HoldingMapper holdingMapper;
+
+    @Resource
+    private HoldingChangeMapper holdingChangeMapper;
+
+    @Resource
+    private EstimateSnapshotMapper estimateSnapshotMapper;
+
+    @Resource
+    private EstimateErrorMapper estimateErrorMapper;
+
+    @Resource
+    private EstimateGoldBetaMapper estimateGoldBetaMapper;
 
     @Resource
     private FundCategoryResolver resolver;
@@ -179,6 +205,40 @@ public class VarietyServiceImpl implements VarietyService {
         }
         log.info("批量指定类型完成 类型={} 处理 {} 只", request.getCategory(), updated);
         return updated;
+    }
+
+    /**
+     * 重置某品种的全部本地数据：清空持仓批次、变动历史、预估留存、误差历史与黄金 β，
+     * 品种注册行保留，用于录入错得太多时整只推倒重录
+     *
+     * @param varietyKey 品种业务主键
+     * @return 各表清理行数的说明
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String resetVariety(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(),
+                HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
+        String key = varietyKey.trim();
+        Variety variety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(Variety::getVarietyKey, key));
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR, "品种 " + key + " 不存在");
+
+        int holdings = holdingMapper.deleteByQuery(QueryWrapper.create()
+                .eq(Holding::getVarietyKey, key));
+        int changes = holdingChangeMapper.deleteByQuery(QueryWrapper.create()
+                .eq(HoldingChange::getVarietyKey, key));
+        int snapshots = estimateSnapshotMapper.deleteByQuery(QueryWrapper.create()
+                .eq(EstimateSnapshot::getVarietyKey, key));
+        int errors = estimateErrorMapper.deleteByQuery(QueryWrapper.create()
+                .eq(EstimateError::getVarietyKey, key));
+        int beta = estimateGoldBetaMapper.deleteByQuery(QueryWrapper.create()
+                .eq(EstimateGoldBeta::getVarietyKey, key));
+        log.info("品种重置完成 key={} 持仓 {} 变动 {} 留存 {} 误差 {} β {}",
+                key, holdings, changes, snapshots, errors, beta);
+        return "已重置 " + variety.getVarietyName() + "：持仓批次 " + holdings + " 条、变动历史 "
+                + changes + " 条、预估留存 " + snapshots + " 条、误差历史 " + errors + " 条、"
+                + "黄金 β " + beta + " 条；品种注册信息保留，可重新录入。";
     }
 
     /**

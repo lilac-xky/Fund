@@ -15,7 +15,7 @@
       :estimable-count="check?.rows?.length ?? 0"
       :total-count="check?.rows?.length ?? 0"
       :market-mood="current ? '待人工核对' : '未选择截图'"
-      :next-note="current ? current.fileName : ''"
+      :next-note="current ? (current.fileName ?? '') : ''"
     />
 
     <div class="app-body">
@@ -57,9 +57,9 @@
                 </AppButton>
                 <span v-if="pickedName" class="app-upload__name">{{ pickedName }}</span>
               </div>
-              <p class="app-hint">
-                上传接口（`POST /screenshot/upload`）尚未生成到 `src/api/`，
-                重新生成后这里可以直接选文件上传。
+              <p v-if="uploadError" class="app-upload__error">{{ uploadError }}</p>
+              <p v-else class="app-hint">
+                选图后立刻上传留存，文件名按上传时间生成；原图不改写、不压缩。
               </p>
             </AppGroup>
 
@@ -68,8 +68,10 @@
                 <span v-html="ICONS.gallery" />
               </template>
 
-              <div v-if="!shots.length" class="app-listempty">
-                还没有截图。上传接口生成后，传一张就能在这里对照。
+              <div v-if="loading" class="app-loading">正在读取截图列表…</div>
+              <AppAlert v-else-if="loadError" kind="error">{{ loadError }}</AppAlert>
+              <div v-else-if="!shots.length" class="app-listempty">
+                还没有截图。点上面的「选择图片」传一张，就能在这里对照。
               </div>
 
               <div v-else class="app-shots">
@@ -82,7 +84,7 @@
                   @click="select(shot)"
                 >
                   <b>{{ shot.fileName }}</b>
-                  <span>{{ sizeText(shot.size) }} · {{ shot.uploadedAt }}</span>
+                  <span>{{ sizeText(shot.size) }} · {{ shortTime(shot.uploadedAt) }}</span>
                 </button>
               </div>
             </AppGroup>
@@ -92,19 +94,36 @@
               title="并排核对"
               code="CHECK"
               :meta="`${check?.rows?.length ?? 0} 只待比对`"
-              :meta-ok="false"
             >
               <template #icon>
                 <span v-html="ICONS.compare" />
               </template>
 
-              <div class="app-compare">
+              <div v-if="checking" class="app-loading">正在读取核对数据…</div>
+              <AppAlert v-else-if="checkError" kind="error">{{ checkError }}</AppAlert>
+
+              <div v-else class="app-compare">
                 <div class="app-compare__left">
                   <p class="app-compare__cap">截图</p>
-                  <div class="app-compare__img">
-                    <span>{{ current.fileName }}</span>
-                    <span class="app-compare__tip">
-                      取图接口（`GET /screenshot/raw`）生成后此处直接显示图片
+                  <a
+                    v-if="rawUrl && !imageError"
+                    class="app-compare__img app-compare__img--link"
+                    :href="rawUrl"
+                    target="_blank"
+                    rel="noopener"
+                    title="点击查看原图"
+                  >
+                    <img
+                      class="app-compare__pic"
+                      :src="rawUrl"
+                      :alt="current.fileName ?? '持仓截图'"
+                      @error="onImageError"
+                    />
+                  </a>
+                  <div v-else class="app-compare__img">
+                    <span>{{ imageError ? '图片读取失败' : '未选择截图' }}</span>
+                    <span v-if="imageError" class="app-compare__tip">
+                      刷新列表再试；仍失败请确认文件还在 data/screenshot 下
                     </span>
                   </div>
                 </div>
@@ -150,12 +169,20 @@
 /**
  * 持仓截图核对页：留存截图并与已录入持仓并排展示，由使用者人工比对
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppAlert from '@/ui/AppAlert.vue'
 import AppButton from '@/ui/AppButton.vue'
 import AppGroup from '@/ui/AppGroup.vue'
 import AppPulseBar from '@/layout/AppPulseBar.vue'
 import AppTopBar from '@/layout/AppTopBar.vue'
+import {
+  check as fetchCheck,
+  list as fetchList,
+  upload as uploadShot,
+} from '@/api/screenshotController'
+import { CONTEXT_PATH } from '@/request'
+import { shortTime } from '@/utils/format'
+import { ElMessage } from '@/ui/message'
 
 /** 内联图标 */
 const ICONS: Record<string, string> = {
@@ -167,81 +194,174 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="8" height="14" rx="1.6"/><rect x="13.5" y="5" width="8" height="14" rx="1.6"/></svg>',
 }
 
-const loading = ref(false)
+/** 后端允许的扩展名，与 ScreenshotServiceImpl 保持一致 */
+const ALLOWED_EXT = ['png', 'jpg', 'jpeg', 'webp']
+
+/** 后端上传上限，10MB */
+const MAX_BYTES = 10 * 1024 * 1024
+
+const loading = ref(true)
 const uploading = ref(false)
+const checking = ref(false)
 const pickedName = ref('')
+const loadError = ref('')
+const uploadError = ref('')
+const checkError = ref('')
+const imageError = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-const shots = ref<Shot[]>([])
-const current = ref<Shot | null>(null)
-const check = ref<Check | null>(null)
+const shots = ref<API.ScreenshotVO[]>([])
+const current = ref<API.ScreenshotVO | null>(null)
+const check = ref<API.ScreenshotCheckVO | null>(null)
+
+/** 核对请求序号，连续点选时只认最后一次的响应 */
+let checkSeq = 0
+
+/** 图片直链，img 标签直接取字节；带 Cookie 的同源请求，不经过 JSON 封装的 request */
+const rawUrl = computed(() => {
+  const fileName = current.value?.fileName
+  return fileName ? `${CONTEXT_PATH}/screenshot/raw?fileName=${encodeURIComponent(fileName)}` : ''
+})
 
 /**
- * 本地类型：接口生成后应换成 API.ScreenshotVO。
- * 现在生成层还没有这两个类型，先在页面里定义，字段与后端 VO 一一对应。
- */
-interface Shot {
-  fileName?: string
-  originalName?: string
-  size?: number
-  uploadedAt?: string
-  path?: string
-}
-
-/** 本地类型：接口生成后应换成 API.ScreenshotCheckVO */
-interface Check {
-  screenshot?: Shot
-  rows?: CheckRow[]
-  diffCount?: number
-  notice?: string
-}
-
-/** 核对行：接口生成后应换成 API 里对应的内部类 */
-interface CheckRow {
-  varietyKey?: string
-  varietyCode?: string
-  varietyName?: string
-  shares?: number
-  avgCostPrice?: number
-  marketValue?: number
-  status?: string
-  hints?: string[]
-}
-
-/**
- * 读取已留存列表
+ * 读取已留存列表并选中一张
  *
+ * @param prefer 优先选中的文件名，缺省时保持当前选中或选最新一张
  * @returns 无
  */
-async function load(): Promise<void> {
+async function load(prefer?: string): Promise<void> {
   loading.value = true
+  loadError.value = ''
   try {
-    // 接口生成后换成 screenshot/list，当前先留空避免调用不存在的模块
+    const result = await fetchList({ silent: true })
+    shots.value = result.data ?? []
+    const keep = prefer ?? current.value?.fileName
+    const next =
+      (keep ? shots.value.find((shot) => shot.fileName === keep) : undefined) ?? shots.value[0]
+    if (next) {
+      await select(next)
+    } else {
+      current.value = null
+      check.value = null
+    }
+  } catch (error) {
     shots.value = []
+    current.value = null
+    check.value = null
+    loadError.value = `截图列表读取失败：${messageOf(error)}`
   } finally {
     loading.value = false
   }
 }
 
 /**
- * 选中一张截图
+ * 选中一张截图并读取核对视图
  *
  * @param shot 截图
  * @returns 无
  */
-function select(shot: Shot): void {
+async function select(shot: API.ScreenshotVO): Promise<void> {
+  const seq = ++checkSeq
   current.value = shot
   check.value = null
+  checkError.value = ''
+  imageError.value = false
+  checking.value = true
+  try {
+    const result = await fetchCheck({ fileName: shot.fileName ?? '' }, { silent: true })
+    // 连续点选时旧响应可能晚到，不能覆盖新选中那张的核对表
+    if (seq !== checkSeq) {
+      return
+    }
+    check.value = result.data ?? null
+  } catch (error) {
+    if (seq !== checkSeq) {
+      return
+    }
+    checkError.value = `核对数据读取失败：${messageOf(error)}`
+  } finally {
+    if (seq === checkSeq) {
+      checking.value = false
+    }
+  }
 }
 
 /**
- * 选中文件后预备上传
+ * 选中文件后先做本地校验再上传
  *
  * @param event 选择事件
  * @returns 无
  */
-function onPick(event: Event): void {
+async function onPick(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
-  pickedName.value = input.files?.[0]?.name ?? ''
+  const file = input.files?.[0]
+  // 清空 value，同一张图再选一次也能触发 change
+  input.value = ''
+  if (!file) {
+    return
+  }
+  pickedName.value = file.name
+  uploadError.value = ''
+  const ext = extensionOf(file.name)
+  if (!ALLOWED_EXT.includes(ext)) {
+    uploadError.value = `只支持 png / jpg / jpeg / webp，当前是 ${ext || '无扩展名'}`
+    return
+  }
+  if (file.size > MAX_BYTES) {
+    uploadError.value = `图片不能超过 10MB，当前 ${sizeText(file.size)}`
+    return
+  }
+  await uploadPicked(file)
+}
+
+/**
+ * 上传文件并刷新列表，选中刚留存的那张
+ *
+ * @param file 已通过本地校验的文件
+ * @returns 无
+ */
+async function uploadPicked(file: File): Promise<void> {
+  uploading.value = true
+  try {
+    const result = await uploadShot({}, file, { silent: true })
+    const saved = result.data
+    ElMessage.success(saved?.fileName ? `已留存 ${saved.fileName}` : '截图已留存')
+    pickedName.value = ''
+    await load(saved?.fileName)
+  } catch (error) {
+    uploadError.value = `上传失败：${messageOf(error)}`
+  } finally {
+    uploading.value = false
+  }
+}
+
+/**
+ * 图片读不到时给出兜底文案，不显示破图
+ *
+ * @returns 无
+ */
+function onImageError(): void {
+  imageError.value = true
+}
+
+/**
+ * 取扩展名，无扩展名返回空串
+ *
+ * @param name 文件名
+ * @returns 小写扩展名
+ */
+function extensionOf(name: string): string {
+  const index = name.lastIndexOf('.')
+  return index < 0 ? '' : name.slice(index + 1).toLowerCase()
+}
+
+/**
+ * 从异常里取可读文案
+ *
+ * @param error 异常
+ * @returns 文案
+ */
+function messageOf(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : '未知错误'
 }
 
 /**
@@ -276,7 +396,9 @@ function num(value?: number | null): string {
   return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 4 })
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+})
 </script>
 
 <style scoped>
@@ -295,6 +417,12 @@ onMounted(load)
 .app-upload__name {
   font-size: 12px;
   color: var(--t3);
+}
+
+.app-upload__error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--up);
 }
 
 .app-shots {
@@ -354,6 +482,21 @@ onMounted(load)
   font-size: 12px;
   color: var(--t3);
   text-align: center;
+}
+
+.app-compare__img--link {
+  padding: 6px;
+  border-style: solid;
+  background: var(--s1);
+  cursor: zoom-in;
+}
+
+.app-compare__pic {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .app-compare__tip {

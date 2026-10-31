@@ -4,6 +4,7 @@ import com.lilac.domain.dto.holding.HoldingBatchUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
 import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
+import com.lilac.domain.dto.holding.HoldingChangeUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
@@ -67,6 +68,14 @@ public interface HoldingService {
      * @return 是否成功
      */
     boolean revokeBatch(HoldingChangeRevokeRequest request);
+
+    /**
+     * 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减
+     *
+     * @param request 更正请求
+     * @return 是否成功
+     */
+    boolean updateSellChange(HoldingChangeUpdateRequest request);
 
     /**
      * 查询持仓变动历史，按时间倒序

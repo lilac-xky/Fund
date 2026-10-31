@@ -27,5 +27,10 @@ public class HoldingSellRequest implements Serializable {
      */
     private LocalDate tradeDate;
 
+    /**
+     * 卖出净值，元/份；补录时按支付宝订单填写，留空按 FIFO 加权成本记账
+     */
+    private BigDecimal unitPrice;
+
     private static final long serialVersionUID = 1L;
 }

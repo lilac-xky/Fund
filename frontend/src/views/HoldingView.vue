@@ -473,13 +473,23 @@
           />
           <span class="app-unit">份</span>
         </AppField>
-        <AppField label="卖出日期" description="留空默认今天，补录时填实际成交日">
+        <AppField label="卖出日期" description="默认今天，补录时填实际成交日">
           <input
             :value="sellDate"
             type="date"
             class="app-input app-date"
             @input="sellDate = ($event.target as HTMLInputElement).value"
           />
+        </AppField>
+        <AppField label="卖出净值" description="元/份，按支付宝订单填；留空按先进先出加权成本记账">
+          <AppInput
+            :model-value="sellUnitPrice"
+            :numeric="true"
+            inputmode="decimal"
+            :placeholder="selling.latestPrice != null ? String(selling.latestPrice) : '1.5000'"
+            @update:model-value="sellUnitPrice = $event"
+          />
+          <span class="app-unit">元/份</span>
         </AppField>
         <div class="app-dialog__ops">
           <AppButton variant="primary" :disabled="!sellShares" @click="onSell">确认卖出</AppButton>
@@ -494,26 +504,47 @@
         <h3>加仓 {{ buying.varietyName }}</h3>
         <p class="app-dialog__meta">
           当前持有 {{ fmt(buying.totalShares) }} 份，加权成本 {{ fmt(buying.avgCostPrice) }}。
-          这里只补充份额与成本，名称与类型仍来自品种注册表。
+          按支付宝订单补录：只填金额时，份额与成本价按当日净值自动折算。
         </p>
-        <AppField label="买入份额" description="必须为正数" :error="buyError">
+        <AppField label="买入日期" description="默认今天，补录时填实际成交日">
+          <input
+            :value="buyDate"
+            type="date"
+            class="app-input app-date"
+            @input="buyDate = ($event.target as HTMLInputElement).value"
+          />
+        </AppField>
+        <AppField
+          label="买入金额"
+          description="元，与份额二选一；填了金额按净值自动折算"
+          :error="buyError"
+        >
+          <AppInput
+            :model-value="buyAmount"
+            :numeric="true"
+            :invalid="Boolean(buyError)"
+            inputmode="decimal"
+            placeholder="10.00"
+            @update:model-value="buyAmount = $event"
+          />
+          <span class="app-unit">元</span>
+        </AppField>
+        <AppField label="买入份额" description="与金额二选一；手填份额时金额只作参考">
           <AppInput
             :model-value="buyShares"
             :numeric="true"
-            :invalid="Boolean(buyError)"
             inputmode="decimal"
             placeholder="100"
             @update:model-value="buyShares = $event"
           />
           <span class="app-unit">份</span>
         </AppField>
-        <AppField label="买入成本价" description="成交价或当日净值" :error="buyError">
+        <AppField label="买入成本价" description="留空按当日净值带出">
           <AppInput
             :model-value="buyCostPrice"
             :numeric="true"
-            :invalid="Boolean(buyError)"
             inputmode="decimal"
-            placeholder="1.5000"
+            :placeholder="buying.latestPrice != null ? String(buying.latestPrice) : '1.5000'"
             @update:model-value="buyCostPrice = $event"
           />
           <span class="app-unit">元/份</span>
@@ -543,6 +574,14 @@
             @update:model-value="convertShares = $event"
           />
           <span class="app-unit">份</span>
+        </AppField>
+        <AppField label="转换日期" description="默认今天，补录时填实际确认日">
+          <input
+            :value="convertDate"
+            type="date"
+            class="app-input app-date"
+            @input="convertDate = ($event.target as HTMLInputElement).value"
+          />
         </AppField>
         <AppField label="转入基金" description="从当前持仓里选，不含转出这一只">
           <select
@@ -598,9 +637,44 @@
             </span>
             <div class="app-change__tx">
               <b>{{ fmt(row.shares) }} 份 @ {{ fmt(row.unitPrice) }}</b>
+              <span v-if="row.openDate" class="app-change__bizdate">
+                {{ row.changeType === 'BUY' ? '建仓' : '卖出' }} {{ row.openDate }}
+              </span>
               <span class="app-change__note">{{ row.note }}</span>
             </div>
-            <span class="app-change__time">{{ shortTime(row.createTime) }}</span>
+            <span class="app-change__ops">
+              <button
+                v-if="row.changeType === 'SELL' && row.note && !row.note.includes('更正卖出记录')"
+                type="button"
+                class="app-cell__link"
+                @click="startEditSell(row)"
+              >
+                更正
+              </button>
+              <span>{{ shortTime(row.createTime) }}</span>
+            </span>
+          </div>
+        </div>
+        <div v-if="editingSell" class="app-selledit">
+          <b>更正卖出记录 {{ editingSell.id }}</b>
+          <div class="app-selledit__row">
+            <label>卖出日期</label>
+            <input v-model="sellEditDate" type="date" class="app-input app-date" />
+          </div>
+          <div class="app-selledit__row">
+            <label>订单净值</label>
+            <AppInput
+              :model-value="sellEditPrice"
+              :numeric="true"
+              inputmode="decimal"
+              @update:model-value="sellEditPrice = $event"
+            />
+          </div>
+          <div class="app-dialog__ops">
+            <AppButton variant="primary" :disabled="sellEditSaving" @click="onSaveSellEdit">
+              {{ sellEditSaving ? '保存中…' : '保存更正' }}
+            </AppButton>
+            <AppButton @click="editingSell = null">取消</AppButton>
           </div>
         </div>
         <div class="app-dialog__ops">
@@ -690,9 +764,9 @@
       </div>
     </div>
 
-    <!-- 分红明细弹层：逐笔列出除息日与每份金额，供与平台核对 -->
+    <!-- 分红明细弹层：逐笔列出除息日与每份金额，供与平台核对；每笔可单独改现金/再投 -->
     <div v-if="dividendOf" class="app-mask" @click.self="dividendOf = null">
-      <div class="app-dialog">
+      <div class="app-dialog app-dialog--wide">
         <h3>{{ dividendOf.varietyName }} 的除息明细</h3>
         <p class="app-dialog__meta">{{ dividendOf.dividendNote ?? '' }}</p>
         <div class="app-history">
@@ -700,10 +774,23 @@
             <span class="app-change__type app-change__type--buy">{{ row.date }}</span>
             <div class="app-change__tx">
               <b>每份 {{ fmt(row.perShare) }} 元</b>
-              <span class="app-change__note"
-                >除息日持有 {{ fmt(row.shares) }} 份，计 {{ fmtMoney(row.amount) }} 元</span
-              >
+              <span class="app-change__note">
+                {{
+                  overrideOf(row.date) === 'REINVEST' ? '红利再投（折份额，不计现金）' : '现金分红'
+                }}
+                · 除息日持有 {{ fmt(row.shares) }} 份，计
+                {{ overrideOf(row.date) === 'REINVEST' ? '0' : fmtMoney(row.amount) }} 元
+              </span>
             </div>
+            <span class="app-change__ops">
+              <button
+                type="button"
+                class="app-cell__link"
+                @click="toggleDividendOverride(row.date as string)"
+              >
+                {{ overrideOf(row.date) === 'REINVEST' ? '改为现金' : '改为再投' }}
+              </button>
+            </span>
           </div>
         </div>
         <div class="app-dialog__ops">
@@ -740,8 +827,9 @@ import {
   revokeBatch as revokeBatchApi,
   sell as sellHolding,
   updateBatch as updateBatchApi,
+  updateChange as updateSellChangeApi,
 } from '@/api/holdingController'
-import { save as saveVariety } from '@/api/varietyController'
+import { reset as resetVarietyApi, save as saveVariety } from '@/api/varietyController'
 import {
   catalogStatus as catalogStatusApi,
   confirm as confirmCandidate,
@@ -854,19 +942,13 @@ const lookupError = ref('')
 const catalog = ref<API.FundCatalogStatusVO>({})
 
 /**
- * 持仓总览
+ * 持仓总览行直接用生成的 `API.HoldingVarietyVO`。
  *
- * `totalProfitLoss` / `totalProfitRate` / `dividendDetails[].shares` 是后端新增的含分红口径字段，
- * Apifox 尚未重新生成，故在此声明；生成后删掉这些可选字段即可。
+ * 历史上 `totalProfitLoss` / `dividendDetails[].shares` / `dividendOverrides` 都在本地扩展过，
+ * 2026-10-31 Apifox 重新生成后全部进了生成层，扩展已删；以后再遇生成层缺字段，
+ * 仍按「本地扩展 + 交付文档标注」的惯例处理，生成后记得删。
  */
-type HoldingVarietyDisplay = API.HoldingVarietyVO & {
-  /** 含现金分红的总收益，与支付宝「持有收益」同口径 */
-  totalProfitLoss?: number
-  /** 含现金分红的总收益率，百分点 */
-  totalProfitRate?: number
-  /** 逐笔除息明细，额外带出每笔计入的份额 */
-  dividendDetails?: Array<API.HoldingDividendVO & { shares?: number }>
-}
+type HoldingVarietyDisplay = API.HoldingVarietyVO
 
 /**
  * 一条持仓批次
@@ -908,16 +990,20 @@ const changes = ref<API.HoldingChangeVO[]>([])
 const selling = ref<HoldingVarietyDisplay | null>(null)
 const sellShares = ref('')
 const sellDate = ref('')
+const sellUnitPrice = ref('')
 
 /** 加仓弹层状态 */
 const buying = ref<HoldingVarietyDisplay | null>(null)
 const buyShares = ref('')
+const buyAmount = ref('')
+const buyDate = ref('')
 const buyCostPrice = ref('')
 const buyError = ref('')
 
 /** 转换弹层状态 */
 const converting = ref<HoldingVarietyDisplay | null>(null)
 const convertShares = ref('')
+const convertDate = ref('')
 const convertTarget = ref('')
 const convertToShares = ref('')
 const convertToCost = ref('')
@@ -931,6 +1017,12 @@ const convertTargets = computed(() =>
 /** 变动历史弹层状态 */
 const historyOf = ref<API.HoldingVarietyVO | null>(null)
 const historyRows = ref<API.HoldingChangeVO[]>([])
+
+/** 卖出记录更正状态，只改业务日期与订单净值 */
+const editingSell = ref<API.HoldingChangeVO | null>(null)
+const sellEditDate = ref('')
+const sellEditPrice = ref('')
+const sellEditSaving = ref(false)
 
 /** 批次更正弹层状态，批次单独用本地类型，因为主键是字符串形态的雪花 ID */
 const batchOf = ref<
@@ -1068,6 +1160,13 @@ function shortTime(value?: string | null): string {
   return value.replace('T', ' ').slice(5, 16)
 }
 
+/** 今天的本地日期 yyyy-MM-dd，供日期输入框默认值 */
+function today(): string {
+  const now = new Date()
+  const pad = (input: number) => String(input).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
 /** 代码输入：只留数字并清空上一轮结果 */
 function onCodeInput(value: string): void {
   code.value = value.replace(/\D/g, '').slice(0, 6)
@@ -1200,45 +1299,55 @@ async function onSave(): Promise<void> {
   }
 }
 
-/** 打开卖出弹层 */
+/** 打开卖出弹层，日期默认今天 */
 function openSell(item: API.HoldingVarietyVO): void {
   selling.value = item
   sellShares.value = ''
-  sellDate.value = ''
+  sellDate.value = today()
+  sellUnitPrice.value = ''
   sellError.value = ''
 }
 
-/** 打开加仓弹层，默认带上当前净值与成本价便于快速加仓 */
+/** 打开加仓弹层，日期默认今天、成本价默认当前净值便于快速加仓 */
 function openBuy(item: HoldingVarietyDisplay): void {
   buying.value = item
   buyShares.value = ''
+  buyAmount.value = ''
+  buyDate.value = today()
   buyCostPrice.value = item.latestPrice != null ? String(item.latestPrice) : ''
   buyError.value = ''
 }
 
-/** 提交加仓 */
+/** 提交加仓：金额与份额至少一项，成本价留空由后端按当日净值带出 */
 async function onBuy(): Promise<void> {
   if (!buying.value?.varietyKey) {
     return
   }
-  const sharesValue = Number(buyShares.value)
-  const costValue = Number(buyCostPrice.value)
-  if (!Number.isFinite(sharesValue) || sharesValue <= 0) {
+  const sharesValue = buyShares.value.trim() === '' ? null : Number(buyShares.value)
+  const amountValue = buyAmount.value.trim() === '' ? null : Number(buyAmount.value)
+  if (sharesValue !== null && (!Number.isFinite(sharesValue) || sharesValue <= 0)) {
     buyError.value = '买入份额必须为正数'
     return
   }
-  if (!Number.isFinite(costValue) || costValue <= 0) {
-    buyError.value = '买入成本价必须为正数'
+  if (amountValue !== null && (!Number.isFinite(amountValue) || amountValue <= 0)) {
+    buyError.value = '买入金额必须为正数'
     return
   }
+  if (sharesValue === null && amountValue === null) {
+    buyError.value = '买入金额与买入份额至少填一个'
+    return
+  }
+  const costValue = buyCostPrice.value.trim() === '' ? null : Number(buyCostPrice.value)
   buyError.value = ''
   try {
     await buyHolding({
       varietyKey: buying.value.varietyKey,
-      shares: sharesValue,
-      costPrice: costValue,
-    })
-    ElMessage.success(`已加仓 ${buying.value.varietyName} ${sharesValue} 份`)
+      ...(sharesValue !== null ? { shares: sharesValue } : {}),
+      ...(amountValue !== null ? { amount: amountValue } : {}),
+      ...(costValue !== null && Number.isFinite(costValue) ? { costPrice: costValue } : {}),
+      ...(buyDate.value ? { openDate: buyDate.value } : {}),
+    } as API.HoldingBuyRequest)
+    ElMessage.success(`已加仓 ${buying.value.varietyName}`)
     buying.value = null
     await loadAll()
   } catch {
@@ -1246,10 +1355,11 @@ async function onBuy(): Promise<void> {
   }
 }
 
-/** 打开转换弹层 */
+/** 打开转换弹层，日期默认今天 */
 function openConvert(item: HoldingVarietyDisplay): void {
   converting.value = item
   convertShares.value = ''
+  convertDate.value = today()
   convertTarget.value = ''
   convertToShares.value = ''
   convertToCost.value = ''
@@ -1297,6 +1407,7 @@ async function onConvert(): Promise<void> {
       shares: outShares,
       toShares: inShares,
       toCostPrice: inCost,
+      ...(convertDate.value ? { openDate: convertDate.value } : {}),
     })
     ElMessage.success(result.data?.note ?? '转换已完成')
     converting.value = null
@@ -1306,7 +1417,7 @@ async function onConvert(): Promise<void> {
   }
 }
 
-/** 提交卖出，日期留空时后端按今天记账 */
+/** 提交卖出，日期默认今天；填了净值按订单记账，留空按先进先出加权成本 */
 async function onSell(): Promise<void> {
   if (!selling.value?.varietyKey) {
     return
@@ -1317,12 +1428,15 @@ async function onSell(): Promise<void> {
     return
   }
   sellError.value = ''
+  const priceValue = sellUnitPrice.value.trim() === '' ? null : Number(sellUnitPrice.value)
   try {
-    // tradeDate 是本轮新增字段，生成层尚未带上，这里按本地扩展类型直传
     await sellHolding({
       varietyKey: selling.value.varietyKey,
       shares: value,
       ...(sellDate.value ? { tradeDate: sellDate.value } : {}),
+      ...(priceValue !== null && Number.isFinite(priceValue) && priceValue > 0
+        ? { unitPrice: priceValue }
+        : {}),
     } as API.HoldingSellRequest)
     ElMessage.success(`已卖出 ${selling.value.varietyName} ${value} 份`)
     selling.value = null
@@ -1335,11 +1449,57 @@ async function onSell(): Promise<void> {
 /** 查看单品种变动历史 */
 async function showChanges(item: API.HoldingVarietyVO): Promise<void> {
   historyOf.value = item
+  editingSell.value = null
   try {
     const result = await holdingChanges({ varietyKey: item.varietyKey })
     historyRows.value = result.data ?? []
   } catch {
     historyRows.value = []
+  }
+}
+
+/** 进入卖出更正态，把当前值带进表单 */
+function startEditSell(row: API.HoldingChangeVO): void {
+  editingSell.value = row
+  sellEditDate.value = row.openDate ?? ''
+  sellEditPrice.value = row.unitPrice != null ? String(row.unitPrice) : ''
+}
+
+/** 保存卖出更正，只改业务日期与订单净值，份额扣减不动 */
+async function onSaveSellEdit(): Promise<void> {
+  const row = editingSell.value
+  if (row?.id == null) {
+    return
+  }
+  if (!sellEditDate.value && sellEditPrice.value.trim() === '') {
+    ElMessage.info('卖出日期与订单净值至少改一个')
+    return
+  }
+  const priceValue = sellEditPrice.value.trim() === '' ? null : Number(sellEditPrice.value)
+  if (priceValue !== null && (!Number.isFinite(priceValue) || priceValue <= 0)) {
+    ElMessage.error('订单净值必须为正数')
+    return
+  }
+  sellEditSaving.value = true
+  try {
+    await updateSellChangeApi(
+      {
+        id: row.id,
+        ...(sellEditDate.value ? { tradeDate: sellEditDate.value } : {}),
+        ...(priceValue !== null ? { unitPrice: priceValue } : {}),
+      },
+      { silent: true },
+    )
+    ElMessage.success('已更正，变动历史里追加了一条说明')
+    editingSell.value = null
+    if (historyOf.value) {
+      await showChanges(historyOf.value)
+    }
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    sellEditSaving.value = false
   }
 }
 
@@ -1502,6 +1662,58 @@ async function onChangeDividendMethod(method: 'CASH' | 'REINVEST'): Promise<void
     })
     ElMessage.success(method === 'REINVEST' ? '已改为红利再投，现金分红按 0 计' : '已改为现金分红')
     batchOf.value = { ...item, dividendMethod: method }
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  }
+}
+
+/** 取某次除息生效的分红方式：覆盖优先，未覆盖跟随品种默认 */
+function overrideOf(date?: string): string {
+  if (!date) {
+    return 'CASH'
+  }
+  const overrides = parseOverrides(dividendOf.value?.dividendOverrides)
+  if (overrides[date]) {
+    return overrides[date]!
+  }
+  return dividendOf.value?.dividendMethod === 'REINVEST' ? 'REINVEST' : 'CASH'
+}
+
+/** 解品种上的覆盖 JSON，坏串按空表处理 */
+function parseOverrides(raw?: string | null): Record<string, 'CASH' | 'REINVEST'> {
+  if (!raw) {
+    return {}
+  }
+  try {
+    return JSON.parse(raw) as Record<string, 'CASH' | 'REINVEST'>
+  } catch {
+    return {}
+  }
+}
+
+/** 切换某次除息的分红方式，写入品种覆盖表后整页刷新 */
+async function toggleDividendOverride(date: string): Promise<void> {
+  const item = dividendOf.value
+  if (!item?.varietyKey) {
+    return
+  }
+  const overrides = parseOverrides(item.dividendOverrides)
+  const next = overrideOf(date) === 'REINVEST' ? 'CASH' : 'REINVEST'
+  overrides[date] = next
+  try {
+    // 品种保存是按业务主键覆盖，身份字段一并回写防止被清空
+    await saveVariety({
+      varietyKey: item.varietyKey,
+      dividendOverrides: JSON.stringify(overrides),
+      ...(item.varietyCode ? { varietyCode: item.varietyCode } : {}),
+      ...(item.varietyType ? { varietyType: item.varietyType } : {}),
+      ...(item.varietyName ? { varietyName: item.varietyName } : {}),
+      ...(item.category ? { category: item.category } : {}),
+      ...(item.confirmed != null ? { confirmed: item.confirmed } : {}),
+    } as unknown as API.VarietySaveRequest)
+    ElMessage.success(`${date} 已改为${next === 'REINVEST' ? '红利再投' : '现金分红'}`)
+    dividendOf.value = { ...item, dividendOverrides: JSON.stringify(overrides) }
     await loadAll()
   } catch {
     // request 层已弹出具体原因
@@ -2297,6 +2509,38 @@ onMounted(() => {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.app-change__ops {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--t4);
+}
+
+.app-selledit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--hair-2);
+  border-radius: 10px;
+  background: var(--s2);
+  font-size: 12.5px;
+}
+
+.app-selledit__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-selledit__row label {
+  flex: none;
+  width: 64px;
+  color: var(--t3);
 }
 
 .app-change__time {
