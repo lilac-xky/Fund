@@ -139,6 +139,7 @@ const navItems = [
   { key: 'lesson', label: '教训' },
   { key: 'review', label: '复盘' },
   { key: 'task', label: '调度' },
+  { key: 'category', label: '类型' },
   { key: 'source', label: '数据源' },
 ]
 

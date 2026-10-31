@@ -3,6 +3,9 @@ package com.lilac.adapter.fund;
 import com.lilac.enums.FundCategory;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 基金类型推断器，把天天基金的三类原始类型与名称关键词折算成 PRD 的六类
  */
@@ -102,5 +105,63 @@ public class FundCategoryResolver {
      */
     public boolean isGoldEquity(String name) {
         return containsAny(name, GOLD_EQUITY_KEYWORDS);
+    }
+
+    /**
+     * 列出名称里命中的全部关键词，供页面说明推断依据
+     *
+     * @param name 基金简称
+     * @return 命中的关键词
+     */
+    public List<String> hintsOf(String name) {
+        List<String> hints = new ArrayList<>();
+        String value = name == null ? "" : name;
+        addHits(hints, value, GOLD_KEYWORDS);
+        addHits(hints, value, GOLD_EQUITY_KEYWORDS);
+        addHits(hints, value, DIVIDEND_KEYWORDS);
+        addHits(hints, value, REFORM_KEYWORDS);
+        return hints;
+    }
+
+    /**
+     * 把命中的关键词加入清单
+     *
+     * @param target   收集清单
+     * @param name     基金简称
+     * @param keywords 关键词数组
+     */
+    private void addHits(List<String> target, String name, String[] keywords) {
+        for (String keyword : keywords) {
+            if (name.contains(keyword) && !target.contains(keyword)) {
+                target.add(keyword);
+            }
+        }
+    }
+
+    /**
+     * 判断是否属于「黄金或红利无法自动识别」的高风险情形，给出可读原因
+     *
+     * @param rawType  原始类型
+     * @param fundName 基金简称
+     * @return 原因，确认不了返回 null
+     */
+    public String pendingReasonOf(String rawType, String fundName) {
+        String type = rawType == null ? "" : rawType.trim();
+        String name = fundName == null ? "" : fundName;
+        if (type.startsWith("QDII") && isGold(name)) {
+            // QDII 黄金跟踪境外金价并带汇率，不能套用国内黄金 ETF 代理
+            return "QDII 黄金跟踪境外金价并带汇率折算，不能套用国内黄金 ETF 作代理，请手工确认类型";
+        }
+        if ("指数型-其他".equals(type) && !isGold(name) && !containsAny(name, DIVIDEND_KEYWORDS)) {
+            return "指数型-其他既没命中黄金关键词也没命中红利关键词，请手工确认类型与跟踪指数";
+        }
+        if (containsAny(name, GOLD_KEYWORDS) && isGoldEquity(name)) {
+            // isGold 本身已排除黄金股，这里要直接看是否同时出现两类词，否则永远判不到
+            return "名称同时含「黄金」与「黄金股/金矿」类词，无法判断是跟踪金价还是黄金股";
+        }
+        if (type.isEmpty()) {
+            return "上游没有给出类型，只能按名称猜，请手工确认";
+        }
+        return null;
     }
 }
