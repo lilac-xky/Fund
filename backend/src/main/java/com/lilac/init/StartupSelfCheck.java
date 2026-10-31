@@ -1,5 +1,6 @@
 package com.lilac.init;
 
+import com.lilac.service.SourceHealthService;
 import com.mybatisflex.core.logicdelete.LogicDeleteManager;
 import com.mybatisflex.core.logicdelete.impl.DefaultLogicDeleteProcessor;
 import jakarta.annotation.Resource;
@@ -20,13 +21,16 @@ public class StartupSelfCheck implements ApplicationRunner {
 
     private static final List<String> REQUIRED_TABLES = List.of("variety", "holding", "strategy_param",
             "estimate_error", "estimate_snapshot", "estimate_gold_beta", "send_record", "fund_catalog",
-            "fund_net_worth", "index_dividend");
+            "fund_net_worth", "index_dividend", "source_event");
 
     @Resource
     private JdbcTemplate jdbcTemplate;
 
+    @Resource
+    private SourceHealthService sourceHealthService;
+
     /**
-     * 校验全部业务表均已建好，并确认逻辑删除处理器已生效
+     * 校验全部业务表均已建好，确认逻辑删除处理器已生效，并清理过期的取数留痕
      *
      * @param args 启动参数
      */
@@ -34,6 +38,21 @@ public class StartupSelfCheck implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         checkTables();
         checkLogicDelete();
+        purgeSourceEvents();
+    }
+
+    /**
+     * 清理超过保留期的取数留痕，失败只告警，不能阻断启动
+     */
+    private void purgeSourceEvents() {
+        try {
+            int deleted = sourceHealthService.purge();
+            if (deleted > 0) {
+                log.info("过期取数留痕已清理 {} 条", deleted);
+            }
+        } catch (RuntimeException e) {
+            log.warn("过期取数留痕清理失败：{}", e.getMessage());
+        }
     }
 
     /**

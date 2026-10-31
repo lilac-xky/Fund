@@ -5,6 +5,7 @@ import com.lilac.adapter.model.MarketHistory;
 import com.lilac.adapter.model.MarketQuote;
 import com.lilac.adapter.model.MarketSymbol;
 import com.lilac.adapter.model.QuoteStatus;
+import com.lilac.adapter.probe.SourceEventRecorder;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * 行情编排测试，核心是「单源失效自动切换」与「单只失败不影响同批」
@@ -31,6 +33,7 @@ class MarketQuoteAdapterTest {
     private FakeSource sina;
     private MarketQuoteAdapter adapter;
     private final InMemoryCache cache = new InMemoryCache();
+    private final SourceEventRecorder recorder = mock(SourceEventRecorder.class);
 
     /**
      * 按腾讯在前、新浪在后的顺序装配编排器
@@ -41,7 +44,7 @@ class MarketQuoteAdapterTest {
     void setUp() throws Exception {
         tencent = new FakeSource("tencent");
         sina = new FakeSource("sina");
-        adapter = new MarketQuoteAdapter(List.of(tencent, sina), cache, null);
+        adapter = new MarketQuoteAdapter(List.of(tencent, sina), cache, null, recorder);
         setField("batchSize", 60);
         setField("historyLimit", 60);
     }

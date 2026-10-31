@@ -5,6 +5,9 @@ import com.lilac.adapter.model.MarketHistory;
 import com.lilac.adapter.model.MarketQuote;
 import com.lilac.adapter.model.MarketSymbol;
 import com.lilac.adapter.model.QuoteStatus;
+import com.lilac.adapter.probe.SourceEventRecorder;
+import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -18,6 +21,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 行情编排适配器，负责多源回退、批量拆分、缓存与可用性标注，是取行情的唯一入口
@@ -29,6 +33,7 @@ public class MarketQuoteAdapter {
     private final List<QuoteSource> sources;
     private final QuoteCache quoteCache;
     private final SinaForexSource sinaForexSource;
+    private final SourceEventRecorder sourceEventRecorder;
 
     @Value("${fund.adapter.quote.batch-size:60}")
     private int batchSize;
@@ -39,14 +44,17 @@ public class MarketQuoteAdapter {
     /**
      * 按回退顺序注入数据源，腾讯在前、新浪在后
      *
-     * @param sources         数据源列表
-     * @param quoteCache      行情缓存
-     * @param sinaForexSource 汇率源
+     * @param sources             数据源列表
+     * @param quoteCache          行情缓存
+     * @param sinaForexSource     汇率源
+     * @param sourceEventRecorder 取数留痕
      */
-    public MarketQuoteAdapter(List<QuoteSource> sources, QuoteCache quoteCache, SinaForexSource sinaForexSource) {
+    public MarketQuoteAdapter(List<QuoteSource> sources, QuoteCache quoteCache,
+                              SinaForexSource sinaForexSource, SourceEventRecorder sourceEventRecorder) {
         this.sources = sources;
         this.quoteCache = quoteCache;
         this.sinaForexSource = sinaForexSource;
+        this.sourceEventRecorder = sourceEventRecorder;
     }
 
     /**
@@ -155,12 +163,16 @@ public class MarketQuoteAdapter {
                 MarketHistory history = source.fetchHistory(symbol, rows);
                 if (!history.enough(2)) {
                     failures.add(source.name() + ":根数不足");
+                    sourceEventRecorder.failure(source.name(), symbol.symbol(),
+                            SourceEventRecorder.FailureKind.STRUCTURE, "日线根数不足");
                     continue;
                 }
+                sourceEventRecorder.success(source.name(), symbol.symbol());
                 return history;
             } catch (RuntimeException e) {
                 failures.add(source.name() + ":" + e.getMessage());
                 log.warn("日线取数失败 {} 来自 {}：{}", symbol.symbol(), source.name(), e.getMessage());
+                sourceEventRecorder.failure(source.name(), symbol.symbol(), failureKindOf(e), e.getMessage());
             }
         }
         log.warn("日线全部数据源失败 {}：{}", symbol.symbol(), String.join("；", failures));
@@ -210,12 +222,22 @@ public class MarketQuoteAdapter {
                     }
                     if (quote.usable()) {
                         quoteCache.save(quote);
+                        sourceEventRecorder.success(source.name(), key);
+                    } else {
+                        // 取到响应但无可用行情，多半是上游字段变了或标的停牌，必须分开记
+                        sourceEventRecorder.failure(source.name(), key,
+                                quote.getStatus() == QuoteStatus.NO_DATA
+                                        ? SourceEventRecorder.FailureKind.NO_DATA
+                                        : SourceEventRecorder.FailureKind.STRUCTURE,
+                                quote.getUnavailableReason());
                     }
                 });
             } catch (RuntimeException e) {
                 // 一个源整体失效不影响后续源，这正是多源回退要保证的
                 failures.add(source.name() + ":" + e.getMessage());
                 log.warn("行情数据源整体失败 {}，切换到下一个源：{}", source.name(), e.getMessage());
+                sourceEventRecorder.failure(source.name(), String.join(",", symbolsOf(candidates)),
+                        failureKindOf(e), e.getMessage());
             }
         }
         for (MarketSymbol symbol : batch) {
@@ -230,6 +252,35 @@ public class MarketQuoteAdapter {
             });
         }
         return fetched;
+    }
+
+    /**
+     * 按异常归类失败类型，结构变化与网络问题要分开统计
+     *
+     * @param e 异常
+     * @return 失败类型
+     */
+    private String failureKindOf(RuntimeException e) {
+        if (e instanceof BusinessException business
+                && business.getCode() != null
+                && business.getCode().equals(HttpsCodeEnum.DATA_SOURCE_BROKEN.getCode())) {
+            return SourceEventRecorder.FailureKind.STRUCTURE;
+        }
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        if (message.contains("限流") || message.contains("验证页") || message.contains("拒绝访问")) {
+            return SourceEventRecorder.FailureKind.THROTTLED;
+        }
+        return SourceEventRecorder.FailureKind.NETWORK;
+    }
+
+    /**
+     * 取本批标的的完整代码，供留痕记录
+     *
+     * @param symbols 标的列表
+     * @return 逗号分隔的代码
+     */
+    private String symbolsOf(List<MarketSymbol> symbols) {
+        return symbols.stream().map(MarketSymbol::symbol).limit(5).collect(Collectors.joining(","));
     }
 
     /**
