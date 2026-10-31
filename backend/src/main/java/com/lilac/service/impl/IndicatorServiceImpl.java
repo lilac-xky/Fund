@@ -1,5 +1,6 @@
 package com.lilac.service.impl;
 
+import com.lilac.adapter.model.FundNetWorthPoint;
 import com.lilac.adapter.model.MarketBar;
 import com.lilac.adapter.model.MarketHistory;
 import com.lilac.adapter.quote.MarketQuoteAdapter;
@@ -12,9 +13,12 @@ import com.lilac.domain.vo.IndicatorVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BenchmarkResolver;
 import com.lilac.engine.IndicatorCache;
+import com.lilac.enums.IndicatorBasis;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.IndicatorSignal;
+import com.lilac.enums.VarietyType;
+import com.lilac.service.FundNetWorthService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.IndicatorService;
 import com.lilac.service.VarietyService;
@@ -29,6 +33,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,6 +47,11 @@ import java.util.Optional;
 public class IndicatorServiceImpl implements IndicatorService {
 
     private static final int MIN_LIMIT = 60;
+
+    /**
+     * 场外基金取多少天的净值，约一年交易日，够算全部指标
+     */
+    private static final int NET_WORTH_DAYS = 400;
     private static final String NO_HOLDING = "尚无持有中的标的，指标先录入持仓才会开始工作";
 
     @Resource
@@ -62,6 +72,9 @@ public class IndicatorServiceImpl implements IndicatorService {
     @Resource
     private VarietyService varietyService;
 
+    @Resource
+    private FundNetWorthService fundNetWorthService;
+
     /**
      * 对单只标的算指标，代码与品种主键二选一
      *
@@ -80,6 +93,14 @@ public class IndicatorServiceImpl implements IndicatorService {
             VarietyVO variety = findVariety(request.getVarietyKey().trim());
             ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR,
                     "未找到品种 " + request.getVarietyKey());
+            // 场外基金没有日线行情，改用净值序列算指标，否则永远取不到数据
+            if (variety.getVarietyType() != VarietyType.ETF) {
+                IndicatorVO vo = computeByNetWorth(variety, plan);
+                vo.setVarietyKey(variety.getVarietyKey());
+                vo.setVarietyCode(variety.getVarietyCode());
+                vo.setVarietyName(variety.getVarietyName());
+                return vo;
+            }
             String symbol = BenchmarkResolver.symbolOf(variety.getVarietyCode());
             ThrowUtils.throwIf(symbol == null, HttpsCodeEnum.PARAMS_ERROR,
                     "该品种的代码推不出行情市场，暂不能计算指标");
@@ -90,6 +111,65 @@ public class IndicatorServiceImpl implements IndicatorService {
             return vo;
         }
         return compute(request.getCode().trim(), plan, request.getLimit());
+    }
+
+    /**
+     * 用历史净值算场外基金的指标，净值当收盘价，缺高低价故 KDJ 不可算
+     *
+     * @param variety 品种
+     * @param plan    指标参数
+     * @return 指标视图
+     */
+    private IndicatorVO computeByNetWorth(VarietyVO variety, IndicatorPlan plan) {
+        IndicatorVO vo = new IndicatorVO();
+        vo.setSymbol(variety.getVarietyCode());
+        vo.setParamSummary(paramSummary(plan));
+        vo.setBasis(IndicatorBasis.NET_WORTH);
+        vo.setBasisLabel(IndicatorBasis.NET_WORTH.getLabel());
+        if (!plan.complete()) {
+            vo.setComplete(Boolean.FALSE);
+            vo.setCached(Boolean.FALSE);
+            vo.setUnavailableReason("指标参数不合法，暂不计算：" + String.join("；", plan.getIssues()));
+            vo.setRemarks(List.of(vo.getUnavailableReason()));
+            vo.setSignals(List.of());
+            vo.setSignalLabels(List.of());
+            return vo;
+        }
+        List<FundNetWorthPoint> points = fundNetWorthService.listRange(variety.getVarietyCode(),
+                LocalDate.now().minusDays(NET_WORTH_DAYS), null);
+        List<MarketBar> bars = toBars(points);
+        IndicatorResult result = indicatorCalculator.compute(bars, plan);
+        result.setSymbol(variety.getVarietyCode());
+        result.setAdjusted(Boolean.FALSE);
+        result.setSource("netWorth");
+        fill(vo, result, Boolean.FALSE);
+        // 净值没有最高最低价，KDJ 必然算不出，用一句面向使用者的说明替换计算器的技术措辞
+        if (result.getK() == null) {
+            vo.getRemarks().removeIf(text -> text.contains("最高价或最低价"));
+            vo.getRemarks().add("场外基金只有单位净值，没有日线最高最低价，KDJ 无法计算；"
+                    + "RSI 与 MACD 按净值序列计算");
+        }
+        if (result.complete()) {
+            indicatorCache.save(variety.getVarietyCode(), signature(plan), result);
+        }
+        return vo;
+    }
+
+    /**
+     * 净值点转成日线形状，最高最低价取净值本身，故 KDJ 判为不可算
+     *
+     * @param points 净值序列
+     * @return 日线形状
+     */
+    private List<MarketBar> toBars(List<FundNetWorthPoint> points) {
+        List<MarketBar> bars = new ArrayList<>(points.size());
+        for (FundNetWorthPoint point : points) {
+            if (point.getNetWorthDate() == null || point.getUnitNetWorth() == null) {
+                continue;
+            }
+            bars.add(new MarketBar(point.getNetWorthDate(), point.getUnitNetWorth()));
+        }
+        return bars;
     }
 
     /**
@@ -107,11 +187,15 @@ public class IndicatorServiceImpl implements IndicatorService {
         for (VarietyVO variety : varieties) {
             IndicatorVO vo;
             try {
-                String symbol = BenchmarkResolver.symbolOf(variety.getVarietyCode());
-                if (symbol == null) {
-                    vo = blank(variety.getVarietyCode(), "该品种的代码推不出行情市场，暂不能计算指标");
+                if (variety.getVarietyType() != VarietyType.ETF) {
+                    vo = computeByNetWorth(variety, plan);
                 } else {
-                    vo = compute(symbol, plan, 0);
+                    String symbol = BenchmarkResolver.symbolOf(variety.getVarietyCode());
+                    if (symbol == null) {
+                        vo = blank(variety.getVarietyCode(), "该品种的代码推不出行情市场，暂不能计算指标");
+                    } else {
+                        vo = compute(symbol, plan, 0);
+                    }
                 }
             } catch (RuntimeException e) {
                 // 单只取数失败只是这一只没指标，不能让整批指标都出不来
@@ -143,6 +227,8 @@ public class IndicatorServiceImpl implements IndicatorService {
         IndicatorVO vo = new IndicatorVO();
         vo.setSymbol(symbol);
         vo.setParamSummary(paramSummary(plan));
+        vo.setBasis(IndicatorBasis.DAILY_BAR);
+        vo.setBasisLabel(IndicatorBasis.DAILY_BAR.getLabel());
         if (!plan.complete()) {
             vo.setComplete(Boolean.FALSE);
             vo.setCached(Boolean.FALSE);
@@ -196,7 +282,8 @@ public class IndicatorServiceImpl implements IndicatorService {
         vo.setCached(cached);
         vo.setSignals(result.getSignals());
         vo.setSignalLabels(result.getSignals().stream().map(IndicatorSignal::getLabel).toList());
-        vo.setRemarks(result.getRemarks());
+        // 复制一份，调用方可能改写说明文字，不能连带改到计算器返回值与缓存
+        vo.setRemarks(new ArrayList<>(result.getRemarks()));
         vo.setUnavailableReason(result.getUnavailableReason());
     }
 

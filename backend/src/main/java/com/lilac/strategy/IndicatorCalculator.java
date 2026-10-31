@@ -62,9 +62,10 @@ public class IndicatorCalculator {
         computeRsi(result, usable, plan);
         computeKdj(result, usable, plan);
         computeMacd(result, usable, plan);
-        if (!result.complete()) {
-            result.getRemarks().add("日线仅 " + usable.size() + " 根，按当前参数算出全部三个指标需要 " + need
-                    + " 根；缺的指标暂不显示");
+        // 只在根数真的不够时才提根数，缺高低价导致的缺失由 computeKdj 自己说明
+        if (!result.complete() && usable.size() < need) {
+            result.getRemarks().add("仅有 " + usable.size() + " 个交易日数据，按当前参数算出全部三个指标需要 "
+                    + need + " 个；缺的指标暂不显示");
         }
         fillSignals(result, plan);
         return result;

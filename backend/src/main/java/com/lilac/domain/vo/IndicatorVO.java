@@ -1,5 +1,6 @@
 package com.lilac.domain.vo;
 
+import com.lilac.enums.IndicatorBasis;
 import com.lilac.enums.IndicatorSignal;
 import lombok.Data;
 
@@ -103,6 +104,16 @@ public class IndicatorVO implements Serializable {
      * 日线取数来源
      */
     private String source;
+
+    /**
+     * 本次计算的输入口径，场内日线或场外净值
+     */
+    private IndicatorBasis basis;
+
+    /**
+     * 输入口径中文名
+     */
+    private String basisLabel;
 
     /**
      * 是否算出全部三个指标
