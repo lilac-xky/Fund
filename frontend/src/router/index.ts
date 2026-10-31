@@ -8,6 +8,8 @@ import LoginView from '@/views/LoginView.vue'
 import OverviewView from '@/views/OverviewView.vue'
 import ReviewView from '@/views/ReviewView.vue'
 import IndicatorView from '@/views/IndicatorView.vue'
+import LessonView from '@/views/LessonView.vue'
+import SourceView from '@/views/SourceView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -21,6 +23,8 @@ const router = createRouter({
     { path: '/holding', name: 'holding', component: HoldingView },
     { path: '/review', name: 'review', component: ReviewView },
     { path: '/indicator', name: 'indicator', component: IndicatorView },
+    { path: '/lesson', name: 'lesson', component: LessonView },
+    { path: '/source', name: 'source', component: SourceView },
     { path: '/task', name: 'task', component: PlaceholderView },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],

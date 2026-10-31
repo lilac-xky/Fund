@@ -55,6 +55,15 @@
                   @input="onDateChange(($event.target as HTMLInputElement).value)"
                 />
                 <AppButton size="sm" :disabled="store.busy" @click="onReload">重新读取</AppButton>
+                <AppButton size="sm" :disabled="reporting" @click="onExportCompare">
+                  {{ reporting ? '导出中…' : '导出对照 CSV' }}
+                </AppButton>
+                <AppButton size="sm" :disabled="reporting" @click="onExportErrors"
+                  >导出误差历史</AppButton
+                >
+                <AppButton size="sm" :disabled="reporting" @click="onGenerateReport">
+                  生成复盘报告
+                </AppButton>
                 <span v-if="store.calibratedAt !== '—'" class="app-daybar__meta">
                   最近校准 {{ store.calibratedAt }}
                 </span>
@@ -407,6 +416,11 @@ import MessageHost from '@/ui/MessageHost.vue'
 import { ElMessage } from '@/ui/message'
 import { zeroBaselinePoints } from '@/services/indicators'
 import { today } from '@/services/review'
+import {
+  exportCompare,
+  exportErrors,
+  generate as generateReport,
+} from '@/api/reviewReportController'
 import { useReviewStore } from '@/stores/review'
 import type { ReviewRow } from '@/stores/review'
 import { fullTime, plain, signedPercent, toneClass } from '@/utils/format'
@@ -449,6 +463,9 @@ const trendLoading = ref(false)
 
 /** 趋势序列 */
 const trendSeries = ref<API.EstimateErrorVO[]>([])
+
+/** 报告导出中 */
+const reporting = ref(false)
 
 /** 监听上下线的取消函数 */
 let stopWatching: (() => void) | null = null
@@ -561,6 +578,73 @@ async function onCalibrate(): Promise<void> {
     )
   } catch {
     // request 层已弹出具体原因
+  }
+}
+
+/**
+ * 导出当日对照 CSV，文件落在服务器的 data/report 下，页面只回路径
+ *
+ * @returns 无
+ */
+async function onExportCompare(): Promise<void> {
+  reporting.value = true
+  try {
+    const result = await exportCompare({ tradeDate: store.tradeDate })
+    const data = result.data
+    if (!data?.savedPath) {
+      ElMessage.error((data?.notes ?? []).join('；') || '导出失败，未返回文件路径')
+      return
+    }
+    ElMessage.success(`已导出 ${data.rows?.length ?? 0} 行到 ${data.savedPath}`)
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    reporting.value = false
+  }
+}
+
+/**
+ * 导出误差历史 CSV，区间取当前复盘日期往前 30 天
+ *
+ * @returns 无
+ */
+async function onExportErrors(): Promise<void> {
+  reporting.value = true
+  try {
+    const end = new Date(store.tradeDate)
+    const start = new Date(end)
+    start.setDate(start.getDate() - 30)
+    const result = await exportErrors({
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    })
+    ElMessage.success(result.data ?? '已导出')
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    reporting.value = false
+  }
+}
+
+/**
+ * 生成当日复盘报告并留存在 data/report 下，供归档
+ *
+ * @returns 无
+ */
+async function onGenerateReport(): Promise<void> {
+  reporting.value = true
+  try {
+    const result = await generateReport({ tradeDate: store.tradeDate })
+    const data = result.data
+    if (!data?.savedPath) {
+      ElMessage.error('报告生成失败，未返回留存路径')
+      return
+    }
+    ElMessage.success(`报告已留存到 ${data.savedPath}`)
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    reporting.value = false
   }
 }
 

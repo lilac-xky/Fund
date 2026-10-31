@@ -1,0 +1,212 @@
+/**
+ * 页面骨架的全局样式。
+ *
+ * 这套 layout 原本是每个 page 各复制一份 scoped 定义，新页面漏写就会整页塌掉
+ * （字看不到、侧栏错位）。集中到这里后，任何新页面只要写对 class 就有正确骨架。
+ */
+
+.app-page {
+  min-height: 100vh;
+  background: var(--canvas);
+  transition: background 0.3s;
+}
+
+.app-atmos {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-atmos__a,
+.app-atmos__b {
+  position: absolute;
+  filter: blur(22px);
+}
+
+.app-atmos__a {
+  top: -320px;
+  left: -128px;
+  width: 960px;
+  height: 540px;
+  background: radial-gradient(ellipse at center, var(--atmos-a), transparent 72%);
+}
+
+.app-atmos__b {
+  top: -300px;
+  right: -200px;
+  width: 840px;
+  height: 520px;
+  background: radial-gradient(ellipse at center, var(--atmos-b), transparent 72%);
+}
+
+.app-body {
+  position: relative;
+  z-index: 2;
+  padding-top: calc(var(--topbar) + var(--pulse));
+  padding-left: var(--rail);
+  transition: padding-left 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--aside);
+  align-items: start;
+}
+
+.app-center {
+  min-width: 0;
+  padding: 26px 26px 60px;
+}
+
+.app-center__in {
+  max-width: var(--content);
+  margin: 0 auto;
+}
+
+.app-aside {
+  align-self: stretch;
+  min-height: calc(100vh - var(--topbar) - var(--pulse));
+  padding: 26px 18px 60px;
+  border-left: 1px solid var(--hair);
+  background: var(--aside-bg);
+  transition: background 0.3s;
+}
+
+/* 有侧栏的页面（策略 / 教训）不需要右栏，撑满整行 */
+.app-stage--no-aside {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 1180px) {
+  .app-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-aside {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-body {
+    padding-top: var(--topbar);
+    padding-left: 0;
+  }
+
+  .app-center {
+    padding: 20px 16px 48px;
+  }
+}
+
+/* 页面头部 */
+.app-head {
+  margin-bottom: 24px;
+}
+
+.app-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--t4);
+}
+
+.app-crumb__sl {
+  opacity: 0.55;
+}
+
+.app-crumb__b {
+  font-weight: 500;
+  color: var(--t3);
+}
+
+.app-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--acc-soft);
+  box-shadow: inset 0 0 0 1px var(--acc-line);
+  color: var(--acc);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.app-h1 {
+  margin-top: 11px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.033em;
+}
+
+.app-lede {
+  max-width: 600px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--t3);
+}
+
+/* 通用空状态与提示 */
+.app-loading {
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--t3);
+}
+
+.app-listempty {
+  padding: 18px 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--t3);
+}
+
+.app-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: var(--t3);
+}
+
+.app-disclaimer {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--t4);
+}
+
+/* 日期栏 */
+.app-daybar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.app-daybar__lab {
+  font-size: 12px;
+  color: var(--t3);
+}
+
+.app-daybar__meta {
+  font-size: 12px;
+  color: var(--t4);
+}
+
+.app-date {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--hair);
+  background: var(--inp-bg);
+  color: var(--t1);
+  font-size: 12.5px;
+}
