@@ -11,6 +11,8 @@ import IndicatorView from '@/views/IndicatorView.vue'
 import LessonView from '@/views/LessonView.vue'
 import SourceView from '@/views/SourceView.vue'
 import CategoryView from '@/views/CategoryView.vue'
+import RuleView from '@/views/RuleView.vue'
+import ScreenshotView from '@/views/ScreenshotView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -27,6 +29,8 @@ const router = createRouter({
     { path: '/lesson', name: 'lesson', component: LessonView },
     { path: '/source', name: 'source', component: SourceView },
     { path: '/category', name: 'category', component: CategoryView },
+    { path: '/rule', name: 'rule', component: RuleView },
+    { path: '/screenshot', name: 'screenshot', component: ScreenshotView },
     { path: '/task', name: 'task', component: PlaceholderView },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],

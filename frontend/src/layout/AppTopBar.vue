@@ -137,9 +137,11 @@ const navItems = [
   { key: 'strategy', label: '策略' },
   { key: 'indicator', label: '指标' },
   { key: 'lesson', label: '教训' },
+  { key: 'rule', label: '规则' },
   { key: 'review', label: '复盘' },
   { key: 'task', label: '调度' },
   { key: 'category', label: '类型' },
+  { key: 'screenshot', label: '核对' },
   { key: 'source', label: '数据源' },
 ]
 
