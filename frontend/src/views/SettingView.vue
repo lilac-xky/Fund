@@ -65,8 +65,12 @@
               :key="activeGroupMeta.group"
               :title="activeGroupMeta.label ?? ''"
               :code="activeGroupMeta.group ?? ''"
-              :meta="activeGroupMeta.group === 'INDICATOR' ? '已内置默认值，不改也能跑' : ''"
-              :meta-ok="activeGroupMeta.group === 'INDICATOR'"
+              :meta="
+                activeGroupMeta.group === 'INDICATOR' || activeGroupMeta.group === 'BOND'
+                  ? '已内置默认值，不改也能跑'
+                  : ''
+              "
+              :meta-ok="activeGroupMeta.group === 'INDICATOR' || activeGroupMeta.group === 'BOND'"
             >
               <template #icon>
                 <span v-html="GROUP_ICONS[activeGroupMeta.group ?? ''] ?? ''" />
@@ -219,6 +223,29 @@
               <p class="app-hint">
                 网格参数按标的各存一套：改某一只的格子只影响它自己，不会连带别的 ETF。
                 上方「网格策略」里的四项是尚未单独配置过的标的所使用的通用兜底值。
+              </p>
+            </AppGroup>
+
+            <!-- 债券监控：说明这套参数管的是什么，避免使用者以为它是预估 */
+            <AppGroup
+              v-if="activeGroup === 'BOND'"
+              title="债券监控说明"
+              code="BOND"
+              meta="按历史净值判断，不做当日预估"
+              :meta-ok="true"
+            >
+              <template #icon>
+                <span v-html="GROUP_ICONS.BOND" />
+              </template>
+
+              <p class="app-hint">
+                债券基金不做当日预估：债券日波动常在 0.02% 上下，小于预估本身的误差量级。
+                这里改为看<b>历史净值序列</b>——净值连续多日几乎不动（横盘），或回看窗口内
+                年化斜率转负且波动放大（趋势转弱）时，收盘前邮件会提示「考虑换仓」。
+              </p>
+              <p class="app-hint">
+                提醒里会给出横盘交易日数、区间累计涨幅、年化斜率与日波动率，
+                并与下面的阈值并列，便于判断是提示还是误报。
               </p>
             </AppGroup>
 
@@ -553,6 +580,7 @@ const GROUP_ICONS: Record<string, string> = {
   DIVIDEND:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg>',
   GRID: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18M8 3v18M16 3v18"/></svg>',
+  BOND: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-3 6 3 9 0s6-3 9 0"/><path d="M3 11h18"/><circle cx="7" cy="6" r="1.4"/><circle cx="17" cy="6" r="1.4"/></svg>',
   INDICATOR:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 4-7 5 4"/></svg>',
   ALERT:
@@ -566,6 +594,7 @@ const GROUP_ICONS: Record<string, string> = {
 const railItems = [
   { key: 'DIVIDEND', label: '红利策略', icon: GROUP_ICONS.DIVIDEND!, count: 4 },
   { key: 'GRID', label: '网格策略', icon: GROUP_ICONS.GRID!, count: 4 },
+  { key: 'BOND', label: '债券监控', icon: GROUP_ICONS.BOND!, count: 6 },
   { key: 'INDICATOR', label: '技术指标', icon: GROUP_ICONS.INDICATOR!, count: 10 },
   { key: 'ALERT', label: '警示参数', icon: GROUP_ICONS.ALERT!, count: 3 },
   { key: 'MAIL', label: '邮件与 SMTP', icon: GROUP_ICONS.MAIL!, count: 5 },
@@ -652,7 +681,7 @@ const dividendBlocked = computed(() => dividendWatch.value.filter((row) => row.u
 /** 网格的阻断项 */
 const gridBlocked = computed(() => gridWatch.value.filter((row) => row.paramUsable === false))
 /** 参数分组名称集合，邮件走独立接口 */
-const PARAM_GROUPS = ['DIVIDEND', 'GRID', 'INDICATOR', 'ALERT'] as const
+const PARAM_GROUPS = ['DIVIDEND', 'GRID', 'BOND', 'INDICATOR', 'ALERT'] as const
 
 /** 键拼装 */
 function keyOf(group: string, field: string): string {
