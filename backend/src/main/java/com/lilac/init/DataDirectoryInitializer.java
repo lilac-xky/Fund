@@ -19,7 +19,7 @@ import java.util.List;
 @Component
 public class DataDirectoryInitializer implements ApplicationRunner {
 
-    private static final List<String> SUB_DIRECTORIES = List.of("report", "op-log", "mail");
+    private static final List<String> SUB_DIRECTORIES = List.of("report", "op-log", "mail", "screenshot");
 
     @Value("${fund.data.root:data}")
     private String dataRoot;
