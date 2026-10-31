@@ -39,7 +39,8 @@ public class SinaQuoteSource implements QuoteSource {
     private static final Charset GBK = Charset.forName("GBK");
     private static final Pattern QUOTE_PATTERN = Pattern.compile("var hq_str_([a-z]{2}\\d{5,6})=\"([^\"]*)\"");
     private static final Pattern KLINE_PATTERN = Pattern.compile(
-            "\\{\"day\":\"(\\d{4}-\\d{2}-\\d{2})\",\"open\":\"[^\"]*\",\"high\":\"[^\"]*\",\"low\":\"[^\"]*\",\"close\":\"([^\"]*)\"");
+            "\\{\"day\":\"(\\d{4}-\\d{2}-\\d{2})\",\"open\":\"([^\"]*)\",\"high\":\"([^\"]*)\","
+                    + "\"low\":\"([^\"]*)\",\"close\":\"([^\"]*)\",\"volume\":\"([^\"]*)\"\\}");
     private static final int A_NAME = 0;
     private static final int A_PREV_CLOSE = 2;
     private static final int A_PRICE = 3;
@@ -260,9 +261,11 @@ public class SinaQuoteSource implements QuoteSource {
         Matcher matcher = KLINE_PATTERN.matcher(text);
         List<MarketBar> bars = new ArrayList<>();
         while (matcher.find()) {
-            BigDecimal close = toDecimal(matcher.group(2));
+            BigDecimal close = toDecimal(matcher.group(5));
             if (close != null) {
-                bars.add(new MarketBar(LocalDate.parse(matcher.group(1)), close));
+                // 分组顺序为 日期、开、高、低、收、量，新浪日线自带最高最低价
+                bars.add(new MarketBar(LocalDate.parse(matcher.group(1)), toDecimal(matcher.group(2)), close,
+                        toDecimal(matcher.group(3)), toDecimal(matcher.group(4)), toDecimal(matcher.group(6))));
             }
         }
         MarketHistory history = new MarketHistory();

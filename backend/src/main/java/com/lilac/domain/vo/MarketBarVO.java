@@ -22,5 +22,25 @@ public class MarketBarVO implements Serializable {
      */
     private BigDecimal close;
 
+    /**
+     * 开盘价，上游未提供时为 null
+     */
+    private BigDecimal open;
+
+    /**
+     * 最高价，KDJ 的 RSV 必须用它
+     */
+    private BigDecimal high;
+
+    /**
+     * 最低价，KDJ 的 RSV 必须用它
+     */
+    private BigDecimal low;
+
+    /**
+     * 成交量，上游未提供时为 null
+     */
+    private BigDecimal volume;
+
     private static final long serialVersionUID = 1L;
 }

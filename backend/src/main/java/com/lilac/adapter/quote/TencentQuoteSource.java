@@ -244,7 +244,9 @@ public class TencentQuoteSource implements QuoteSource {
                 if (row == null || row.size() < 3) {
                     continue;
                 }
-                bars.add(new MarketBar(LocalDate.parse(row.getStr(0)), row.getBigDecimal(2)));
+                // 腾讯日线列序为 日期、开、收、高、低、量，取满六列才能算 KDJ
+                bars.add(new MarketBar(LocalDate.parse(row.getStr(0)), decimalAt(row, 1), decimalAt(row, 2),
+                        decimalAt(row, 3), decimalAt(row, 4), decimalAt(row, 5)));
             }
         }
         MarketHistory history = new MarketHistory();
@@ -254,6 +256,17 @@ public class TencentQuoteSource implements QuoteSource {
         history.setSource(NAME);
         history.setFetchDate(LocalDate.now());
         return history;
+    }
+
+    /**
+     * 取日线某列的数值，列不存在返回 null
+     *
+     * @param row   日线行
+     * @param index 列下标
+     * @return 数值
+     */
+    private BigDecimal decimalAt(JSONArray row, int index) {
+        return index >= row.size() ? null : row.getBigDecimal(index);
     }
 
     /**
