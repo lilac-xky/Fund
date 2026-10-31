@@ -37,6 +37,9 @@ fund:
   grid:
     # 场外基金按跟踪 ETF 估净值的起点时刻；早于它一律不给场外网格提醒，因为盘中价格还会变
     tail-window-start: "14:00"
+  indicator:
+    # 指标结果缓存保留时间，秒；日线一天才变一次，改参数会因指纹不同而自然失效
+    cache-ttl-seconds: 3600
   task:
     # 总开关，关掉后既不按时点触发也不启动补跑；手动触发接口不受影响
     enabled: true

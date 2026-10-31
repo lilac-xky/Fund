@@ -45,6 +45,16 @@ public final class RedisKeys {
      */
     public static final long ESTIMATE_TTL_SECONDS = 30 * 60L;
 
+    /**
+     * 技术指标结果前缀，结构 fund:indicator:{标的}:{参数指纹}
+     */
+    public static final String INDICATOR = "fund:indicator:";
+
+    /**
+     * 技术指标结果保留时间，秒，日线一天才变一次，一小时足够
+     */
+    public static final long INDICATOR_TTL_SECONDS = 60 * 60L;
+
     private RedisKeys() {
     }
 
@@ -77,6 +87,17 @@ public final class RedisKeys {
      */
     public static String snapshotKey(String snapshotName, String date) {
         return SNAPSHOT + snapshotName + ":" + date;
+    }
+
+    /**
+     * 拼接技术指标结果 key
+     *
+     * @param symbol    标的完整代码，如 sh510300
+     * @param signature 参数指纹，参数改了就不该命中旧结果
+     * @return 缓存 key
+     */
+    public static String indicatorKey(String symbol, String signature) {
+        return INDICATOR + symbol + ":" + signature;
     }
 
     /**
