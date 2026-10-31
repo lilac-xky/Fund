@@ -19,6 +19,9 @@ import * as indexDividendController from './indexDividendController'
 import * as strategyParamController from './strategyParamController'
 import * as dividendAdviceController from './dividendAdviceController'
 import * as estimateCalibrationController from './estimateCalibrationController'
+import * as lessonController from './lessonController'
+import * as reviewReportController from './reviewReportController'
+import * as sourceHealthController from './sourceHealthController'
 export default {
   authController,
   bondController,
@@ -37,4 +40,7 @@ export default {
   strategyParamController,
   dividendAdviceController,
   estimateCalibrationController,
+  lessonController,
+  reviewReportController,
+  sourceHealthController,
 }

@@ -135,6 +135,11 @@ fund:
       cache-ttl-seconds: 300
       # 历史日线默认返回根数，供滚动收益与 β 估计复用
       history-limit: 60
+    probe:
+      # 取数留痕开关，关掉后不再记 source_event，健康度页面会显示无记录
+      enabled: true
+      # 留痕保留天数，超过的由启动自检清理；只为判断上游改版频率，不需要长期存
+      keep-days: 90
     csindex:
       # 中证指数官网估值文件，老式 .xls，只含中证与部分深证系列，国证系列返回 404
       indicator-url: "https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/indicator/{code}indicator.xls"

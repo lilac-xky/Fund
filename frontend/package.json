@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@umijs/openapi": "^1.14.1",
+    "echarts": "^6.1.0",
     "pinia": "^4.0.3",
     "tslib": "^2.8.1",
     "vue": "^3.5.42",

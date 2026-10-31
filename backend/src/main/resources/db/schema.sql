@@ -183,6 +183,22 @@ CREATE TABLE IF NOT EXISTS fund_net_worth (
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='基金历史净值序列，供指标计算与晚间校准复用，可从上游重建';
 
+CREATE TABLE IF NOT EXISTS source_event (
+    id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
+    source      VARCHAR(32)  NOT NULL COMMENT '数据源名，如 eastmoney / tencent / sina / csindex',
+    target      VARCHAR(64)           DEFAULT NULL COMMENT '取数目标，如基金代码或标的后缀',
+    success     TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否成功',
+    failureKind VARCHAR(16)           DEFAULT NULL COMMENT '失败类型 STRUCTURE / NETWORK / NO_DATA / THROTTLED',
+    message     VARCHAR(512)          DEFAULT NULL COMMENT '失败或异常说明，截断到列宽以内',
+    happenedAt  DATETIME     NOT NULL COMMENT '发生时间',
+    createTime  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updateTime  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    KEY idxSourceHappened (source, happenedAt),
+    KEY idxSourceHappenedAt (happenedAt)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4 COMMENT ='数据源取数留痕，成功与失败都记一条，供判断上游改版频率';
+
 CREATE TABLE IF NOT EXISTS index_dividend (
     id             BIGINT         NOT NULL AUTO_INCREMENT COMMENT '主键，应用侧雪花生成，未提供时由数据库自增',
     indexCode      VARCHAR(16)    NOT NULL COMMENT '指数代码，如 000922',

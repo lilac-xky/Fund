@@ -237,6 +237,19 @@ declare namespace API {
     notice?: string
   }
 
+  type DegradationRowVO = {
+    /** 数据源名 */
+    source?: string
+    /** 数据源用途 */
+    purpose?: string
+    /** 失效后是否还有备用源 */
+    hasFallback?: boolean
+    /** 失效时受影响的功能 */
+    affected?: string[]
+    /** 页面与邮件如何提示 */
+    notice?: string
+  }
+
   type DividendAdviceRequest = {
     /** 品种业务主键，如 OF:090010 */
     varietyKey?: string
@@ -602,6 +615,15 @@ declare namespace API {
     remarks?: string[]
   }
 
+  type exportCompareParams = {
+    tradeDate?: string
+  }
+
+  type exportErrorsParams = {
+    startDate?: string
+    endDate?: string
+  }
+
   type ForexRateVO = {
     /** 汇率对，如 HKDCNY */
     pair?: string
@@ -744,6 +766,10 @@ declare namespace API {
     dataCutoffDate?: string
     /** 净值序列，按日期升序 */
     netWorthPoints?: NetWorthPointVO[]
+  }
+
+  type generateParams = {
+    tradeDate?: string
   }
 
   type goldBetaParams = {
@@ -1317,6 +1343,10 @@ declare namespace API {
     adjusted?: boolean
     /** 日线取数来源 */
     source?: string
+    /** 本次计算的输入口径，场内日线或场外净值 */
+    basis?: 'DAILY_BAR' | 'NET_WORTH'
+    /** 输入口径中文名 */
+    basisLabel?: string
     /** 是否算出全部三个指标 */
     complete?: boolean
     /** 是否命中缓存 */
@@ -1342,6 +1372,59 @@ declare namespace API {
     manualRequired?: boolean
     /** 结果说明，失败与跳过时给出原因 */
     message?: string
+  }
+
+  type LessonAdvisoryVO = {
+    /** 命中的警示 */
+    items?: LessonAlertVO[]
+    /** 本次检查的变动笔数 */
+    checkedCount?: number
+    /** 命中条数 */
+    alertCount?: number
+    /** 参数是否可用，false 时不做判定 */
+    paramUsable?: boolean
+    /** 参数问题清单 */
+    paramIssues?: string[]
+    /** 追高容忍幅度阈值，供页面回显 */
+    chaseTolerance?: number
+    /** 连续亏损天数阈值 */
+    panicLossDays?: number
+    /** 是否随邮件发出 */
+    participateInAlert?: boolean
+    /** 逐条摘要，供邮件直接取用 */
+    summary?: string[]
+    /** 操作提示，如无历史变动 */
+    notice?: string
+  }
+
+  type LessonAlertVO = {
+    /** 错误模式代码 */
+    pattern?: string
+    /** 模式中文名 */
+    patternLabel?: string
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 教训说明，取自使用者原话 */
+    lesson?: string
+    /** 触发依据文字，逐条带具体数值 */
+    remarks?: string[]
+    /** 触发所依据的数值 */
+    triggerValue?: number
+    /** 参照值 */
+    referenceValue?: number
+    /** 触发日期 */
+    triggerDate?: string
+  }
+
+  type LessonQueryRequest = {
+    /** 只检查该品种，为空时检查全部 */
+    varietyKey?: string
+    /** 回看天数，为空时取默认值 */
+    days?: number
   }
 
   type LoginRequest = {
@@ -1557,6 +1640,33 @@ declare namespace API {
     tradingHours?: boolean
   }
 
+  type ReportRowVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 输出档位 */
+    outputTier?: string
+    /** 预估涨跌幅，百分点；无点估计为空 */
+    estimatedChange?: number
+    /** 实际涨跌幅，百分点 */
+    actualChange?: number
+    /** 误差，预估减实际，百分点 */
+    errorValue?: number
+    /** 本次判定所用阈值，百分点 */
+    thresholdValue?: number
+    /** 是否超阈值 */
+    overThreshold?: boolean
+    /** 方向是否命中 */
+    directionHit?: boolean
+    /** 状态说明，如未校准的原因 */
+    status?: string
+  }
+
   type resendParams = {
     tradeDate?: string
   }
@@ -1745,6 +1855,12 @@ declare namespace API {
     data?: number
   }
 
+  type ResultLessonAdvisoryVO = {
+    code?: number
+    msg?: string
+    data?: LessonAdvisoryVO
+  }
+
   type ResultListBigDecimal = {
     code?: number
     msg?: string
@@ -1859,6 +1975,12 @@ declare namespace API {
     data?: QuoteBatchVO
   }
 
+  type ResultReviewReportVO = {
+    code?: number
+    msg?: string
+    data?: ReviewReportVO
+  }
+
   type ResultSettingOverviewVO = {
     code?: number
     msg?: string
@@ -1869,6 +1991,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: SettingSaveVO
+  }
+
+  type ResultSourceHealthVO = {
+    code?: number
+    msg?: string
+    data?: SourceHealthVO
   }
 
   type ResultString = {
@@ -1893,6 +2021,33 @@ declare namespace API {
     code?: number
     msg?: string
     data?: null
+  }
+
+  type ReviewReportVO = {
+    /** 交易日 */
+    tradeDate?: string
+    /** 报告生成时间 */
+    generatedAt?: string
+    /** 逐只对照明细 */
+    rows?: ReportRowVO[]
+    /** 预估只数 */
+    estimatedCount?: number
+    /** 已对照只数 */
+    calibratedCount?: number
+    /** 超阈值只数 */
+    overThresholdCount?: number
+    /** 误差绝对值中位数，百分点 */
+    medianAbsError?: number
+    /** 误差绝对值 P90，百分点 */
+    p90AbsError?: number
+    /** 最大单只误差绝对值，百分点 */
+    maxAbsError?: number
+    /** 方向命中率，百分点 */
+    directionAccuracy?: number
+    /** 报告正文里的说明文字 */
+    notes?: string[]
+    /** 报告留存路径，写入失败时为 null */
+    savedPath?: string
   }
 
   type SendRecordQueryRequest = {
@@ -2012,6 +2167,45 @@ declare namespace API {
 
   type snapshotParams = {
     code: string
+  }
+
+  type SourceEventQueryRequest = {
+    /** 区间起始日，含 */
+    startDate?: string
+    /** 区间截止日，含 */
+    endDate?: string
+  }
+
+  type SourceHealthVO = {
+    /** 各数据源的统计，按失败次数降序 */
+    sources?: SourceStatVO[]
+    /** 降级矩阵，说明每个源失效时哪些功能降级 */
+    matrix?: DegradationRowVO[]
+    /** 当前是否存在明显异常的数据源 */
+    hasTrouble?: boolean
+    /** 总结说明 */
+    note?: string
+    /** 统计区间起点 */
+    startDate?: string
+    /** 统计区间终点 */
+    endDate?: string
+  }
+
+  type SourceStatVO = {
+    /** 数据源名 */
+    source?: string
+    /** 事件总数 */
+    totalCount?: number
+    /** 成功次数 */
+    successCount?: number
+    /** 失败次数 */
+    failureCount?: number
+    /** 失败率，百分点 */
+    failureRate?: number
+    /** 出现过的失败类型 */
+    failures?: string[]
+    /** 最近一次事件时间 */
+    lastHappenedAt?: string
   }
 
   type StrategyParamVO = {
