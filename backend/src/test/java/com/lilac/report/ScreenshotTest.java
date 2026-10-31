@@ -37,7 +37,8 @@ class ScreenshotTest {
     @BeforeEach
     void setUp() {
         service = new ScreenshotServiceImpl(mock(HoldingService.class));
-        ReflectionTestUtils.setField(service, "dataRoot", tempDir.toString());
+        ReflectionTestUtils.setField(service, "dataRootResolver",
+                new com.lilac.config.DataRootResolver(tempDir.toString()));
         service.initDirectory();
     }
 

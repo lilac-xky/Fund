@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -41,8 +40,8 @@ public class OperationLogServiceImpl implements OperationLogService {
     private static final String SOURCE_SEND = "SEND";
     private static final String SOURCE_CHANGE = "CHANGE";
 
-    @Value("${fund.data.root:data}")
-    private String dataRoot;
+    @Resource
+    private com.lilac.config.DataRootResolver dataRootResolver;
 
     @Resource
     private SendRecordService sendRecordService;
@@ -95,7 +94,7 @@ public class OperationLogServiceImpl implements OperationLogService {
         List<OperationLogVO> logs = list(query);
         LocalDate end = query.getEndDate() == null ? LocalDate.now() : query.getEndDate();
         LocalDate start = query.getStartDate() == null ? end.minusDays(DEFAULT_DAYS) : query.getStartDate();
-        Path target = Paths.get(dataRoot).toAbsolutePath().normalize()
+        Path target = dataRootResolver.root()
                 .resolve("op-log").resolve("op-log-" + start + "_" + end + ".csv");
         try {
             int written = csvWriter.write(target, header(), rows(logs));

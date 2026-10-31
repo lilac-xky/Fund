@@ -1,15 +1,15 @@
 package com.lilac.mail;
 
+import com.lilac.config.DataRootResolver;
 import com.lilac.domain.vo.MailArchiveVO;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,8 +37,8 @@ public class MailArchive {
      */
     private static final String RESENT_MARK = ".resent";
 
-    @Value("${fund.data.root:data}")
-    private String dataRoot;
+    @Resource
+    private DataRootResolver dataRootResolver;
 
     /**
      * 留存一封邮件，返回相对 data 目录的路径；留存失败只记日志，不改变发送结论
@@ -144,7 +144,7 @@ public class MailArchive {
      * @return 目录路径
      */
     private Path mailDir() {
-        return Paths.get(dataRoot).toAbsolutePath().normalize().resolve("mail");
+        return dataRootResolver.root().resolve("mail");
     }
 
     /**
@@ -289,7 +289,7 @@ public class MailArchive {
      * @return 相对路径
      */
     private String relativeOf(Path file) {
-        Path root = Paths.get(dataRoot).toAbsolutePath().normalize();
+        Path root = dataRootResolver.root();
         return root.relativize(file).toString().replace('\\', '/');
     }
 

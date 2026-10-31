@@ -62,7 +62,8 @@ class OperationLogTest {
         ReflectionTestUtils.setField(service, "holdingService", holdingService);
         ReflectionTestUtils.setField(service, "varietyService", varietyService);
         ReflectionTestUtils.setField(service, "csvWriter", new CsvWriter());
-        ReflectionTestUtils.setField(service, "dataRoot", tempDir.toString());
+        ReflectionTestUtils.setField(service, "dataRootResolver",
+                new com.lilac.config.DataRootResolver(tempDir.toString()));
         stub();
     }
 

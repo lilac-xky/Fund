@@ -1,7 +1,8 @@
 package com.lilac.init;
 
+import com.lilac.config.DataRootResolver;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -9,7 +10,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -21,18 +21,18 @@ public class DataDirectoryInitializer implements ApplicationRunner {
 
     private static final List<String> SUB_DIRECTORIES = List.of("report", "op-log", "mail", "screenshot");
 
-    @Value("${fund.data.root:data}")
-    private String dataRoot;
+    @Resource
+    private DataRootResolver dataRootResolver;
 
     /**
-     * 创建 data 根目录与三个子目录，已存在则跳过
+     * 创建 data 根目录与四个子目录，已存在则跳过
      *
      * @param args 启动参数
      * @throws IOException 目录创建失败
      */
     @Override
     public void run(ApplicationArguments args) throws IOException {
-        Path root = Paths.get(dataRoot).toAbsolutePath().normalize();
+        Path root = dataRootResolver.root();
         Files.createDirectories(root);
         for (String sub : SUB_DIRECTORIES) {
             Files.createDirectories(root.resolve(sub));

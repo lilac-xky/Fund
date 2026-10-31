@@ -12,7 +12,6 @@ import com.lilac.service.ReviewReportService;
 import com.lilac.service.VarietyService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -21,7 +20,6 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,8 +41,8 @@ public class ReviewReportServiceImpl implements ReviewReportService {
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String GROUP_LABEL = "复盘";
 
-    @Value("${fund.data.root:data}")
-    private String dataRoot;
+    @Resource
+    private com.lilac.config.DataRootResolver dataRootResolver;
 
     @Resource
     private EstimateErrorService estimateErrorService;
@@ -359,7 +357,7 @@ public class ReviewReportServiceImpl implements ReviewReportService {
      * @return 目录路径
      */
     private Path reportDir() {
-        return Paths.get(dataRoot).toAbsolutePath().normalize().resolve("report");
+        return dataRootResolver.root().resolve("report");
     }
 
     /**

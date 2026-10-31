@@ -142,7 +142,8 @@ class SecretsAndArchiveTest {
      */
     private MailArchive archiveAt(Path root) {
         MailArchive archive = new MailArchive();
-        org.springframework.test.util.ReflectionTestUtils.setField(archive, "dataRoot", root.toString());
+        org.springframework.test.util.ReflectionTestUtils.setField(archive, "dataRootResolver",
+                new com.lilac.config.DataRootResolver(root.toString()));
         return archive;
     }
 }

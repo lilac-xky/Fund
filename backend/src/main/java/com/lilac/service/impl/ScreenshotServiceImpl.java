@@ -10,8 +10,8 @@ import com.lilac.service.HoldingService;
 import com.lilac.service.ScreenshotService;
 import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,8 +40,8 @@ public class ScreenshotServiceImpl implements ScreenshotService {
     private static final List<String> ALLOWED_EXT = List.of("png", "jpg", "jpeg", "webp");
     private static final long MAX_BYTES = 10L * 1024 * 1024;
 
-    @Value("${fund.data.root:data}")
-    private String dataRoot;
+    @Resource
+    private com.lilac.config.DataRootResolver dataRootResolver;
 
     private final HoldingService holdingService;
 
@@ -232,7 +232,7 @@ public class ScreenshotServiceImpl implements ScreenshotService {
      * @return 目录路径
      */
     private Path dir() {
-        return Paths.get(dataRoot).toAbsolutePath().normalize().resolve("screenshot");
+        return dataRootResolver.root().resolve("screenshot");
     }
 
     /**
