@@ -190,3 +190,22 @@ docs/06-features/web/ISSUE-015-早午盘总览页.md
 ## 与 TECH-PRD 的偏差（待裁定）
 
 TECH-PRD v0.4 定案的是 Java 25 + Spring Boot 4.1.1 + Spring Data JPA，但仓库实际是 **Java 21 + Spring Boot 3.5.14 + MyBatis-Flex 1.11.1**。ISSUE-003 按「以现有代码为准」实现：实体用 `@Table` / `@Column` / `@Id`，Mapper 继承 `BaseMapper`，未引入任何 JPA 注解。该偏差待使用者裁定后统一回写 TECH-PRD。
+
+## 已删除的接口（2026-10-31 清理）
+
+以下 10 个接口在前端生成产物里从未被调用，已从 Controller 移除。**历史功能文档（`docs/06-features/`）仍按当时状态记录，不再回改**；如需对照，以本节为准。
+
+| 接口 | 归属 issue | 删除原因 |
+|------|-----------|---------|
+| `GET /api/holding/get` | ISSUE-003 | 无入口；页面用 `overview` + `list` |
+| `POST /api/holding/delete` | ISSUE-003 | 无入口；业务删除走 `sell` / `batch/revoke` |
+| `GET /api/variety/get` | ISSUE-003 | 无入口；页面用 `list` |
+| `POST /api/variety/delete` | ISSUE-003 | 无入口 |
+| `GET /api/param/get` | ISSUE-003 | 无入口；页面用 `list` |
+| `POST /api/param/delete` | ISSUE-003 | 无入口 |
+| `POST /api/grid/plan/global/save` | ISSUE-017 | 网格已改为按标的存参数；`GridPlanResolver.saveGlobal` 仍保留，`resolveFor` 靠它读全局兜底值 |
+| `POST /api/dividend/advice/plan/save` | ISSUE-010 | 与 `POST /api/setting/save` 的 `DIVIDEND` 分组重复，参数页统一走后者 |
+| `GET /api/quote/single` | ISSUE-006 | 被 `POST /api/quote/batch` 覆盖 |
+| `GET /api/estimate/single` | ISSUE-007 | 预估按持仓批量出，无单只入口 |
+
+`GET /api/estimate/calibration/gold-beta` 保留：它虽未被页面调用，但属 ISSUE-008 的黄金 β 排查入口，与上面这批「数据层副产物」性质不同。

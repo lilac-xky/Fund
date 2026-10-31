@@ -2,18 +2,6 @@
 /* eslint-disable */
 import request from '@/request'
 
-/** 新增持仓 POST /api/holding/add */
-export async function add(body: API.HoldingAddRequest, options?: { [key: string]: any }) {
-  return request<API.ResultBoolean>('/api/holding/add', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
 /** 撤销某个持仓批次，已卖出时拒绝并提示改为更正 POST /api/holding/batch/revoke */
 export async function revokeBatch(
   body: API.HoldingChangeRevokeRequest,
@@ -83,33 +71,6 @@ export async function convert(body: API.HoldingConvertRequest, options?: { [key:
   })
 }
 
-/** 按主键逻辑删除持仓 POST /api/holding/delete */
-export async function deleteUsingPost(body: API.DeleteRequest, options?: { [key: string]: any }) {
-  return request<API.ResultBoolean>('/api/holding/delete', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
-/** 按主键查询单个持仓 GET /api/holding/get */
-export async function getById(
-  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.getByIdParams,
-  options?: { [key: string]: any },
-) {
-  return request<API.ResultHoldingVO>('/api/holding/get', {
-    method: 'GET',
-    params: {
-      ...params,
-    },
-    ...(options || {}),
-  })
-}
-
 /** 统一查询持仓，各条件为空时不过滤 POST /api/holding/list */
 export async function list(body: API.HoldingQueryRequest, options?: { [key: string]: any }) {
   return request<API.ResultListHoldingVO>('/api/holding/list', {
@@ -153,18 +114,6 @@ export async function summary(
     params: {
       ...params,
     },
-    ...(options || {}),
-  })
-}
-
-/** 按主键更新持仓 POST /api/holding/update */
-export async function update(body: API.HoldingUpdateRequest, options?: { [key: string]: any }) {
-  return request<API.ResultBoolean>('/api/holding/update', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
     ...(options || {}),
   })
 }

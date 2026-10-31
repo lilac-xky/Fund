@@ -36,18 +36,3 @@ export async function history(
     ...(options || {}),
   })
 }
-
-/** 取单只标的当日行情 GET /api/quote/single */
-export async function single(
-  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.singleParams,
-  options?: { [key: string]: any },
-) {
-  return request<API.ResultMarketQuoteVO>('/api/quote/single', {
-    method: 'GET',
-    params: {
-      ...params,
-    },
-    ...(options || {}),
-  })
-}

@@ -14,21 +14,6 @@ export async function batch(body: API.EstimateBatchRequest, options?: { [key: st
   })
 }
 
-/** 预估单只基金 POST /api/estimate/single */
-export async function single(
-  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
-  params: API.singleParams,
-  options?: { [key: string]: any },
-) {
-  return request<API.ResultEstimateVO>('/api/estimate/single', {
-    method: 'POST',
-    params: {
-      ...params,
-    },
-    ...(options || {}),
-  })
-}
-
 /** 读取整体预估的盘中轨迹，行情条据此画出当天走向 GET /api/estimate/track */
 export async function track(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)

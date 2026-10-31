@@ -10,6 +10,125 @@ declare namespace API {
     remainingSeconds?: number
   }
 
+  type BondAdvisoryVO = {
+    /** 触发换仓提醒的基金 */
+    items?: BondMonitorVO[]
+    /** 未触发提醒的基金，逐只带出当前数值 */
+    idleItems?: BondMonitorVO[]
+    /** 本次纳入的基金数 */
+    requested?: number
+    /** 触发提醒的基金数 */
+    alertCount?: number
+    /** 未触发的基金数 */
+    idleCount?: number
+    /** 数据不足无法判断的基金数 */
+    unavailableCount?: number
+    /** 参数是否可用，false 时整批不给结论 */
+    paramUsable?: boolean
+    /** 参数问题清单 */
+    paramIssues?: string[]
+    /** 横盘天数阈值，供页面回显 */
+    sidewaysDaysThreshold?: number
+    /** 转弱斜率阈值，百分点 */
+    weakSlopeThreshold?: number
+    /** 逐条摘要，供邮件直接取用 */
+    summary?: string[]
+    /** 操作提示，如无债券持仓 */
+    notice?: string
+  }
+
+  type BondMonitorRequest = {
+    /** 品种业务主键 */
+    varietyKey?: string
+  }
+
+  type BondMonitorVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 信号，横盘、趋势转弱、正常或数据不足 */
+    signal?: 'SIDEWAYS' | 'WEAK' | 'NORMAL' | 'UNAVAILABLE'
+    /** 信号中文名 */
+    signalLabel?: string
+    /** 是否产生换仓提醒 */
+    alerting?: boolean
+    /** 连续横盘的交易日数 */
+    sidewaysDays?: number
+    /** 横盘区间起点日期 */
+    sidewaysStart?: string
+    /** 横盘区间终点日期 */
+    sidewaysEnd?: string
+    /** 横盘区间的自然日跨度 */
+    sidewaysCalendarDays?: number
+    /** 横盘区间累计涨幅，百分点 */
+    sidewaysReturn?: number
+    /** 回看窗口的交易日数 */
+    window?: number
+    /** 回看窗口起点日期 */
+    windowStart?: string
+    /** 回看窗口终点日期 */
+    windowEnd?: string
+    /** 回看窗口累计涨幅，百分点 */
+    windowReturn?: number
+    /** 日收益回归斜率，百分点每日 */
+    slope?: number
+    /** 年化斜率，百分点每年 */
+    annualizedSlope?: number
+    /** 日收益标准差，百分点 */
+    volatility?: number
+    /** 参与计算的净值点数 */
+    samples?: number
+    /** 最新净值日期 */
+    latestNetWorthDate?: string
+    /** 当前持有金额，单位元 */
+    currentAmount?: number
+    /** 当前金额来源说明 */
+    amountSource?: string
+    /** 判定依据文字，逐条带数值 */
+    remarks?: string[]
+    /** 数据不足时的原因 */
+    unavailableReason?: string
+  }
+
+  type BondParamSaveRequest = {
+    /** 回看窗口，交易日 */
+    window?: number
+    /** 判定横盘的单日波动上限，百分点 */
+    sidewaysBand?: number
+    /** 触发换仓提醒的横盘交易日数 */
+    sidewaysDays?: number
+    /** 横盘期累计涨幅下限，百分点 */
+    sidewaysReturn?: number
+    /** 年化斜率转弱阈值，百分点 */
+    weakSlope?: number
+    /** 判定趋势转弱的波动率下限，百分点 */
+    weakVolatility?: number
+  }
+
+  type BondPlanVO = {
+    /** 回看窗口，交易日 */
+    window?: number
+    /** 判定横盘的单日波动上限，百分点 */
+    sidewaysBand?: number
+    /** 触发换仓提醒的横盘交易日数 */
+    sidewaysDays?: number
+    /** 横盘期累计涨幅下限，百分点 */
+    sidewaysReturn?: number
+    /** 年化斜率转弱阈值，百分点 */
+    weakSlope?: number
+    /** 判定趋势转弱的波动率下限，百分点 */
+    weakVolatility?: number
+    /** 参数是否齐全且自洽 */
+    usable?: boolean
+    /** 参数问题清单，可用时为空 */
+    issues?: string[]
+  }
+
   type CalibrationGapVO = {
     /** 品种业务主键 */
     varietyKey?: string
@@ -118,11 +237,6 @@ declare namespace API {
     notice?: string
   }
 
-  type DeleteRequest = {
-    /** id */
-    id?: number
-  }
-
   type DividendAdviceRequest = {
     /** 品种业务主键，如 OF:090010 */
     varietyKey?: string
@@ -229,17 +343,6 @@ declare namespace API {
     dividendYield?: number
     /** 指数中文全称，可空 */
     indexName?: string
-  }
-
-  type DividendParamSaveRequest = {
-    /** 基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 保底分红金额，单位元，不得高于基准仓位 */
-    floorAmount?: number
-    /** 加仓股息率阈值，单位百分点 */
-    addYield?: number
-    /** 减仓股息率阈值，单位百分点，必须低于加仓阈值 */
-    reduceYield?: number
   }
 
   type DividendPlanVO = {
@@ -643,18 +746,6 @@ declare namespace API {
     netWorthPoints?: NetWorthPointVO[]
   }
 
-  type getByIdParams = {
-    id?: number
-  }
-
-  type getByIdParams = {
-    id?: number
-  }
-
-  type getByIdParams = {
-    id?: number
-  }
-
   type goldBetaParams = {
     varietyKey?: string
     startDate?: string
@@ -847,19 +938,6 @@ declare namespace API {
     limit?: number
   }
 
-  type HoldingAddRequest = {
-    /** 所持品种的业务主键 */
-    varietyKey?: string
-    /** 持有份额 */
-    shares?: number
-    /** 成本价 */
-    costPrice?: number
-    /** 建仓日期 */
-    openDate?: string
-    /** 持仓状态 */
-    status?: 'HOLDING' | 'CLOSED'
-  }
-
   type HoldingBatchUpdateRequest = {
     /** 持仓批次主键 */
     id?: number
@@ -1028,19 +1106,6 @@ declare namespace API {
     avgCostPrice?: number
   }
 
-  type HoldingUpdateRequest = {
-    /** 主键 */
-    id?: number
-    /** 持有份额 */
-    shares?: number
-    /** 成本价 */
-    costPrice?: number
-    /** 建仓日期 */
-    openDate?: string
-    /** 持仓状态 */
-    status?: 'HOLDING' | 'CLOSED'
-  }
-
   type HoldingVarietyVO = {
     /** 品种业务主键 */
     varietyKey?: string
@@ -1172,6 +1237,96 @@ declare namespace API {
     sourceLabel?: string
   }
 
+  type IndicatorAdvisoryVO = {
+    /** 逐只指标结果 */
+    items?: IndicatorVO[]
+    /** 无法计算的标的，逐只带原因 */
+    unavailableItems?: IndicatorVO[]
+    /** 本次纳入的标的数 */
+    requested?: number
+    /** 算出指标的标的数 */
+    completeCount?: number
+    /** 无法计算的标的数 */
+    unavailableCount?: number
+    /** 触发信号条数 */
+    signalCount?: number
+    /** 参数是否可用，false 时整批不算指标 */
+    paramUsable?: boolean
+    /** 参数问题清单 */
+    paramIssues?: string[]
+    /** 本次生效的参数摘要 */
+    paramSummary?: string
+    /** 指标信号是否参与收盘前邮件 */
+    participateInAlert?: boolean
+    /** 逐条摘要，供邮件直接取用 */
+    summary?: string[]
+    /** 操作提示，如无持仓 */
+    notice?: string
+  }
+
+  type IndicatorQueryRequest = {
+    /** 裸代码或带前缀代码，与 varietyKey 二选一 */
+    code?: string
+    /** 品种业务主键，与 code 二选一 */
+    varietyKey?: string
+    /** 返回的日线根数，小于等于 0 时按参数需要自动取 */
+    limit?: number
+  }
+
+  type IndicatorVO = {
+    /** 带交易所前缀的完整代码 */
+    symbol?: string
+    /** 品种业务主键，按品种查询时有值 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** RSI 当前值 */
+    rsi?: number
+    /** KDJ 的 K 值 */
+    k?: number
+    /** KDJ 的 D 值 */
+    d?: number
+    /** KDJ 的 J 值 */
+    j?: number
+    /** MACD 快慢线差值 DIF */
+    dif?: number
+    /** MACD 信号线 DEA */
+    dea?: number
+    /** MACD 柱，按 (DIF−DEA)×2 口径 */
+    macdBar?: number
+    /** 触发的信号 */
+    signals?: (
+      | 'RSI_OVERBOUGHT'
+      | 'RSI_OVERSOLD'
+      | 'MACD_GOLDEN_CROSS'
+      | 'MACD_DEAD_CROSS'
+      | 'KDJ_GOLDEN_CROSS'
+      | 'KDJ_DEAD_CROSS'
+    )[]
+    /** 信号中文名，逐条可读 */
+    signalLabels?: string[]
+    /** 本次计算所用参数的中文摘要，页面必须与之一致 */
+    paramSummary?: string
+    /** 最新日线日期 */
+    barDate?: string
+    /** 参与计算的日线根数 */
+    samples?: number
+    /** 日线是否前复权 */
+    adjusted?: boolean
+    /** 日线取数来源 */
+    source?: string
+    /** 是否算出全部三个指标 */
+    complete?: boolean
+    /** 是否命中缓存 */
+    cached?: boolean
+    /** 计算说明，逐条带具体数值 */
+    remarks?: string[]
+    /** 数据不足或无法计算的原因 */
+    unavailableReason?: string
+  }
+
   type Item = {
     /** 指数代码 */
     indexCode?: string
@@ -1270,6 +1425,14 @@ declare namespace API {
     date?: string
     /** 收盘价 */
     close?: number
+    /** 开盘价，上游未提供时为 null */
+    open?: number
+    /** 最高价，KDJ 的 RSV 必须用它 */
+    high?: number
+    /** 最低价，KDJ 的 RSV 必须用它 */
+    low?: number
+    /** 成交量，上游未提供时为 null */
+    volume?: number
   }
 
   type MarketHistoryVO = {
@@ -1333,14 +1496,14 @@ declare namespace API {
 
   type ParamQueryRequest = {
     /** 参数分组 */
-    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'BOND' | 'INDICATOR' | 'ALERT'
     /** 参数名 */
     paramKey?: string
   }
 
   type ParamSaveRequest = {
     /** 参数分组 */
-    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'BOND' | 'INDICATOR' | 'ALERT'
     /** 参数名，组内唯一 */
     paramKey?: string
     /** 参数值 */
@@ -1408,6 +1571,25 @@ declare namespace API {
     data?: AuthStatusVO
   }
 
+  type ResultBondAdvisoryVO = {
+    code?: number
+    msg?: string
+    data?: BondAdvisoryVO
+  }
+
+  type ResultBondMonitorVO = {
+    code?: number
+    msg?: string
+    /** 单只债券基金的趋势监控结果，横盘天数与趋势指标必须给出具体数值 */
+    data?: BondMonitorVO
+  }
+
+  type ResultBondPlanVO = {
+    code?: number
+    msg?: string
+    data?: BondPlanVO
+  }
+
   type ResultBoolean = {
     code?: number
     msg?: string
@@ -1455,13 +1637,6 @@ declare namespace API {
     code?: number
     msg?: string
     data?: EstimateTrackVO
-  }
-
-  type ResultEstimateVO = {
-    code?: number
-    msg?: string
-    /** 单只基金的预估结果，带出档位、可信度与全部依据日期 */
-    data?: EstimateVO
   }
 
   type ResultForexRateVO = {
@@ -1550,6 +1725,18 @@ declare namespace API {
     code?: number
     msg?: string
     data?: IndexDividendRefreshVO
+  }
+
+  type ResultIndicatorAdvisoryVO = {
+    code?: number
+    msg?: string
+    data?: IndicatorAdvisoryVO
+  }
+
+  type ResultIndicatorVO = {
+    code?: number
+    msg?: string
+    data?: IndicatorVO
   }
 
   type ResultInteger = {
@@ -1660,13 +1847,6 @@ declare namespace API {
     data?: MailTestVO
   }
 
-  type ResultMarketQuoteVO = {
-    code?: number
-    msg?: string
-    /** 单只标的的行情视图，带可用性状态、数据日期与来源 */
-    data?: MarketQuoteVO
-  }
-
   type ResultPointOutcome = {
     code?: number
     msg?: string
@@ -1689,13 +1869,6 @@ declare namespace API {
     code?: number
     msg?: string
     data?: SettingSaveVO
-  }
-
-  type ResultStrategyParamVO = {
-    code?: number
-    msg?: string
-    /** 策略参数视图对象 */
-    data?: StrategyParamVO
   }
 
   type ResultString = {
@@ -1834,10 +2007,7 @@ declare namespace API {
 
   type singleParams = {
     code: string
-  }
-
-  type singleParams = {
-    varietyKey: string
+    limit?: number
   }
 
   type snapshotParams = {
@@ -1848,7 +2018,7 @@ declare namespace API {
     /** 主键 */
     id?: number
     /** 参数分组 */
-    paramGroup?: 'DIVIDEND' | 'GRID' | 'INDICATOR' | 'ALERT'
+    paramGroup?: 'DIVIDEND' | 'GRID' | 'BOND' | 'INDICATOR' | 'ALERT'
     /** 参数名 */
     paramKey?: string
     /** 参数值 */

@@ -26,21 +26,6 @@ export async function plan(options?: { [key: string]: any }) {
   })
 }
 
-/** 保存通用网格参数，供尚未逐只配置的标的兜底 POST /api/grid/plan/global/save */
-export async function saveGlobalPlan(
-  body: API.GridParamSaveRequest,
-  options?: { [key: string]: any },
-) {
-  return request<API.ResultGridPlanVO>('/api/grid/plan/global/save', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
 /** 保存指定标的的网格参数，上下界颠倒或划不出两格时拒绝并指出字段 POST /api/grid/plan/save */
 export async function savePlan(body: API.GridParamSaveRequest, options?: { [key: string]: any }) {
   return request<API.ResultGridPlanVO>('/api/grid/plan/save', {
