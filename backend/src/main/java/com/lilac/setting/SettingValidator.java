@@ -1,6 +1,7 @@
 package com.lilac.setting;
 
 import com.lilac.constant.AlertParamKey;
+import com.lilac.constant.BondParamKey;
 import com.lilac.constant.DividendParamKey;
 import com.lilac.constant.GridParamKey;
 import com.lilac.constant.IndicatorParamKey;
@@ -192,6 +193,21 @@ public class SettingValidator {
                 errors.add(SettingFieldError.of(grid, GridParamKey.STEP, "格子大小",
                         "按当前上下界与格子大小只能划出 " + grids + " 格，至少需要 2 格"));
             }
+        }
+
+        String bond = ParamGroup.BOND.name();
+        Integer bondWindow = integer(merged.get(bond + "." + BondParamKey.WINDOW));
+        Integer bondDays = integer(merged.get(bond + "." + BondParamKey.SIDEWAYS_DAYS));
+        if (bondWindow != null && bondDays != null && bondDays > bondWindow) {
+            // 横盘天数超过回看窗口时永远触发不了，属于自相矛盾的配置
+            errors.add(SettingFieldError.of(bond, BondParamKey.SIDEWAYS_DAYS, "横盘天数阈值",
+                    "横盘天数 " + bondDays + " 不得超过回看窗口 " + bondWindow + " 个交易日"));
+        }
+        BigDecimal bondBand = decimal(merged.get(bond + "." + BondParamKey.SIDEWAYS_BAND));
+        BigDecimal bondVolatility = decimal(merged.get(bond + "." + BondParamKey.WEAK_VOLATILITY));
+        if (bondBand != null && bondVolatility != null && bondVolatility.compareTo(bondBand) < 0) {
+            errors.add(SettingFieldError.of(bond, BondParamKey.WEAK_VOLATILITY, "转弱波动率下限",
+                    "转弱波动率 " + plain(bondVolatility) + "% 不应低于横盘带宽 " + plain(bondBand) + "%"));
         }
 
         String indicator = ParamGroup.INDICATOR.name();

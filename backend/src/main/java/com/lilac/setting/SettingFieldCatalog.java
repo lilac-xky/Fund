@@ -1,6 +1,7 @@
 package com.lilac.setting;
 
 import com.lilac.constant.AlertParamKey;
+import com.lilac.constant.BondParamKey;
 import com.lilac.constant.DividendParamKey;
 import com.lilac.constant.GridParamKey;
 import com.lilac.constant.IndicatorParamKey;
@@ -42,6 +43,24 @@ public final class SettingFieldCatalog {
                 GridParamKey.STEP_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
         defs.add(new FieldDef(ParamGroup.GRID, GridParamKey.AMOUNT_PER_GRID, "每格金额",
                 GridParamKey.AMOUNT_PER_GRID_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
+
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.WINDOW, "回看窗口",
+                BondParamKey.WINDOW_DESC, "日", SettingCatalog.TYPE_INTEGER, BondParamKey.DEFAULT_WINDOW));
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.SIDEWAYS_BAND, "横盘带宽",
+                BondParamKey.SIDEWAYS_BAND_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                BondParamKey.DEFAULT_SIDEWAYS_BAND));
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.SIDEWAYS_DAYS, "横盘天数阈值",
+                BondParamKey.SIDEWAYS_DAYS_DESC, "日", SettingCatalog.TYPE_INTEGER,
+                BondParamKey.DEFAULT_SIDEWAYS_DAYS));
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.SIDEWAYS_RETURN, "横盘涨幅上限",
+                BondParamKey.SIDEWAYS_RETURN_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                BondParamKey.DEFAULT_SIDEWAYS_RETURN));
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.WEAK_SLOPE, "转弱斜率阈值",
+                BondParamKey.WEAK_SLOPE_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                BondParamKey.DEFAULT_WEAK_SLOPE));
+        defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.WEAK_VOLATILITY, "转弱波动率下限",
+                BondParamKey.WEAK_VOLATILITY_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                BondParamKey.DEFAULT_WEAK_VOLATILITY));
 
         defs.add(new FieldDef(ParamGroup.INDICATOR, IndicatorParamKey.RSI_PERIOD, "RSI 周期",
                 "RSI 计算所用交易日数", "日", SettingCatalog.TYPE_INTEGER, IndicatorParamKey.DEFAULT_RSI_PERIOD));
@@ -116,7 +135,7 @@ public final class SettingFieldCatalog {
      * @return 可写返回 true
      */
     public static boolean writable(ParamGroup group) {
-        return group == ParamGroup.DIVIDEND || group == ParamGroup.GRID
+        return group == ParamGroup.DIVIDEND || group == ParamGroup.GRID || group == ParamGroup.BOND
                 || group == ParamGroup.INDICATOR || group == ParamGroup.ALERT;
     }
 

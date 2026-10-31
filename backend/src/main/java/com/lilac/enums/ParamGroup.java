@@ -16,6 +16,11 @@ public enum ParamGroup {
     GRID,
 
     /**
+     * 债券监控参数
+     */
+    BOND,
+
+    /**
      * 技术指标参数
      */
     INDICATOR,

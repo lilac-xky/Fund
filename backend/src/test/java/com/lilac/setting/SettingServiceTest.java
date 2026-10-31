@@ -53,14 +53,14 @@ class SettingServiceTest {
     }
 
     /**
-     * 概览返回四个分组，且指标分组在没有库值时能给出默认值
+     * 概览返回五个分组，且指标分组在没有库值时能给出默认值
      */
     @Test
     @DisplayName("指标参数有可用默认值，不改也能跑")
     void indicatorHasDefaults() {
         SettingOverviewVO overview = settingService.overview();
 
-        assertThat(overview.getGroups()).hasSize(4);
+        assertThat(overview.getGroups()).hasSize(5);
         SettingGroupVO indicator = group(overview, "INDICATOR");
         assertThat(indicator.getItems()).isNotEmpty();
         for (SettingItemVO item : indicator.getItems()) {
@@ -315,11 +315,11 @@ class SettingServiceTest {
      * 确认参数分组枚举与页面分组一致
      */
     @Test
-    @DisplayName("四个分组与枚举一一对应")
+    @DisplayName("五个分组与枚举一一对应")
     void groupsMatchEnum() {
         SettingOverviewVO overview = settingService.overview();
         List<String> names = overview.getGroups().stream().map(SettingGroupVO::getGroup).toList();
         assertThat(names).containsExactly(ParamGroup.DIVIDEND.name(), ParamGroup.GRID.name(),
-                ParamGroup.INDICATOR.name(), ParamGroup.ALERT.name());
+                ParamGroup.BOND.name(), ParamGroup.INDICATOR.name(), ParamGroup.ALERT.name());
     }
 }

@@ -80,6 +80,7 @@ public class SettingServiceImpl implements SettingService {
         List<SettingGroupVO> groups = new ArrayList<>();
         groups.add(buildGroup(ParamGroup.DIVIDEND, "红利策略", "股息率达标时补到基准仓位，减仓不得击穿保底金额", stored));
         groups.add(buildGroup(ParamGroup.GRID, "网格策略", "价格穿越网格线时给出买卖方向与金额", stored));
+        groups.add(buildGroup(ParamGroup.BOND, "债券监控", "净值横盘或趋势转弱达阈值时提示考虑换仓", stored));
         groups.add(buildGroup(ParamGroup.INDICATOR, "技术指标", "已内置默认值，不改也能跑", stored));
         groups.add(buildGroup(ParamGroup.ALERT, "警示参数", "误差超阈值提示与股息率过期判定", stored));
 
