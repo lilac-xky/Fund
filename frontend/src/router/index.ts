@@ -7,6 +7,7 @@ import HoldingView from '@/views/HoldingView.vue'
 import LoginView from '@/views/LoginView.vue'
 import OverviewView from '@/views/OverviewView.vue'
 import ReviewView from '@/views/ReviewView.vue'
+import IndicatorView from '@/views/IndicatorView.vue'
 import PlaceholderView from '@/views/PlaceholderView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -19,6 +20,7 @@ const router = createRouter({
     { path: '/strategy', name: 'strategy', component: SettingView },
     { path: '/holding', name: 'holding', component: HoldingView },
     { path: '/review', name: 'review', component: ReviewView },
+    { path: '/indicator', name: 'indicator', component: IndicatorView },
     { path: '/task', name: 'task', component: PlaceholderView },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],

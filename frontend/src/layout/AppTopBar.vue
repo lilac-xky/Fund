@@ -135,6 +135,7 @@ const navItems = [
   { key: 'overview', label: '总览' },
   { key: 'holding', label: '持仓' },
   { key: 'strategy', label: '策略' },
+  { key: 'indicator', label: '指标' },
   { key: 'review', label: '复盘' },
   { key: 'task', label: '调度' },
 ]
