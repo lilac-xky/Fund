@@ -47,7 +47,7 @@ public class HoldingChange extends BaseEntity {
     private String note;
 
     /**
-     * 业务日期，买入为建仓日期，卖出为操作当日
+     * 业务日期，买入为建仓日期，卖出为卖出日期，补录时可指定过去
      */
     private LocalDate openDate;
 

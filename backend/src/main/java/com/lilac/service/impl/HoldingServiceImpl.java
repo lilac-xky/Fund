@@ -197,6 +197,10 @@ public class HoldingServiceImpl implements HoldingService {
         ThrowUtils.throwIf(varietyKey == null, HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
         ThrowUtils.throwIf(request.getShares() == null || request.getShares().signum() <= 0,
                 HttpsCodeEnum.PARAMS_ERROR, "卖出份额必须为正数");
+        // 补录时可以指定过去的成交日，缺省仍是当天
+        LocalDate tradeDate = request.getTradeDate() == null ? LocalDate.now() : request.getTradeDate();
+        ThrowUtils.throwIf(tradeDate.isAfter(LocalDate.now()), HttpsCodeEnum.PARAMS_ERROR,
+                "卖出日期不能晚于今天");
 
         List<Holding> holdings = holdingMapper.selectListByQuery(QueryWrapper.create()
                 .eq(Holding::getVarietyKey, varietyKey)
@@ -211,11 +215,24 @@ public class HoldingServiceImpl implements HoldingService {
         ThrowUtils.throwIf(request.getShares().compareTo(available) > 0, HttpsCodeEnum.PARAMS_ERROR,
                 "卖出份额超过当前持有 " + plain(available) + " 份");
 
+        // 先进先出：按建仓日期从早到晚逐条扣减，补录早前的卖出只扣当时已存在的批次
+        List<Holding> deductables = holdings.stream()
+                .filter(holding -> holding.getOpenDate() == null || !holding.getOpenDate().isAfter(tradeDate))
+                .toList();
+        BigDecimal deductable = deductables.stream()
+                .map(Holding::getShares)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        ThrowUtils.throwIf(deductable.signum() <= 0, HttpsCodeEnum.PARAMS_ERROR,
+                tradeDate + " 当日尚无已建仓的批次，无法按该日期卖出");
+        ThrowUtils.throwIf(request.getShares().compareTo(deductable) > 0, HttpsCodeEnum.PARAMS_ERROR,
+                "按卖出日 " + tradeDate + " 口径只有 " + plain(deductable) + " 份已建仓，"
+                        + "请核对卖出日期或份额");
+
         // 先进先出：按建仓日期从早到晚逐条扣减
         BigDecimal remaining = request.getShares();
         List<String> deductNotes = new ArrayList<>();
         BigDecimal weightedCost = BigDecimal.ZERO;
-        for (Holding holding : holdings) {
+        for (Holding holding : deductables) {
             if (remaining.signum() <= 0) {
                 break;
             }
@@ -237,9 +254,10 @@ public class HoldingServiceImpl implements HoldingService {
         BigDecimal avgPrice = weightedCost.divide(request.getShares(), PRICE_SCALE, RoundingMode.HALF_UP);
         BigDecimal after = totalShares(varietyKey);
         saveChange(varietyKey, HoldingChangeType.SELL, request.getShares(), avgPrice, after,
-                LocalDate.now(),
+                tradeDate,
                 "按先进先出扣减 " + String.join("、", deductNotes), null);
-        log.info("卖出扣减 varietyKey={} shares={} 均价={}", varietyKey, request.getShares(), avgPrice);
+        log.info("卖出扣减 varietyKey={} shares={} 均价={} 卖出日={}", varietyKey, request.getShares(),
+                avgPrice, tradeDate);
         // 只返回仍持有中的记录，已清仓的留在历史里
         return listHolding(byVariety(varietyKey)).stream()
                 .filter(holding -> holding.getStatus() == HoldingStatus.HOLDING)
@@ -351,6 +369,7 @@ public class HoldingServiceImpl implements HoldingService {
         HoldingSellRequest sellRequest = new HoldingSellRequest();
         sellRequest.setVarietyKey(fromKey);
         sellRequest.setShares(request.getShares());
+        sellRequest.setTradeDate(request.getOpenDate());
         sell(sellRequest);
 
         HoldingBuyRequest buyRequest = new HoldingBuyRequest();
