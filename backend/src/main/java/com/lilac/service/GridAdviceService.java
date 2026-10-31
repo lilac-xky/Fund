@@ -38,14 +38,6 @@ public interface GridAdviceService {
     GridPlanVO savePlan(GridParamSaveRequest request);
 
     /**
-     * 保存通用网格参数，供尚未逐只配置时的兜底
-     *
-     * @param request 保存请求
-     * @return 保存后的参数视图
-     */
-    GridPlanVO saveGlobalPlan(GridParamSaveRequest request);
-
-    /**
      * 对全部持有中的场内 ETF 逐只判断是否触及网格线，每只用它自己的参数
      *
      * @return 提醒总览

@@ -66,17 +66,6 @@ public class MarketQuoteAppServiceImpl implements MarketQuoteAppService {
     }
 
     /**
-     * 取单只标的当日行情
-     *
-     * @param code 裸代码或带前缀代码
-     * @return 行情视图
-     */
-    @Override
-    public MarketQuoteVO quote(String code) {
-        return toVO(marketQuoteAdapter.quote(code));
-    }
-
-    /**
      * 逐只取日线，单只失败不影响其他标的
      *
      * @param codes 标的代码列表

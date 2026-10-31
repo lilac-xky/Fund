@@ -195,16 +195,16 @@ class EstimateIntegrationTest {
     }
 
     /**
-     * 单只预估不做缓存，能直接取到与批量一致的结论
+     * 单只品种走批量接口时能带出类型与档位，与批量结论一致
      */
     @Test
-    @DisplayName("单只预估带出类型与档位")
+    @DisplayName("单只品种预估带出类型与档位")
     void singleEstimateHasTier() {
         saveVariety("ETF:510300", VarietyType.ETF, "510300", "沪深300ETF", FundCategory.ETF);
         saveCatalog("510300", "沪深300ETF", "指数型-股票");
         when(marketQuoteAdapter.quotes(anyList())).thenReturn(Map.of("sh510300", okQuote("sh510300", "-0.42")));
 
-        EstimateVO vo = estimateService.estimateOne("ETF:510300");
+        EstimateVO vo = estimateService.estimateBatch(requestOf(List.of("ETF:510300"))).getItems().get(0);
 
         assertThat(vo.getVarietyKey()).isEqualTo("ETF:510300");
         assertThat(vo.getCategory()).isEqualTo(FundCategory.ETF);

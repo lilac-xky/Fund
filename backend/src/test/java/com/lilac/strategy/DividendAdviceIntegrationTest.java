@@ -22,6 +22,7 @@ import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.DividendAdviceService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.VarietyService;
+import com.lilac.strategy.model.DividendPlan;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,6 +51,9 @@ class DividendAdviceIntegrationTest {
 
     @Autowired
     private DividendAdviceService dividendAdviceService;
+
+    @Autowired
+    private DividendPlanResolver dividendPlanResolver;
 
     @Autowired
     private IndexDividendService indexDividendService;
@@ -246,7 +250,7 @@ class DividendAdviceIntegrationTest {
     void floorAboveBaseRejected() {
         DividendParamSaveRequest request = planRequestOf("100000", "150000", "5.00", "3.00");
 
-        assertThatThrownBy(() -> dividendAdviceService.savePlan(request))
+        assertThatThrownBy(() -> saveDirectly(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("保底分红金额")
                 .hasMessageContaining("不得高于基准仓位");
@@ -262,7 +266,7 @@ class DividendAdviceIntegrationTest {
     void reversedBandRejected() {
         DividendParamSaveRequest request = planRequestOf("100000", "60000", "3.00", "5.00");
 
-        assertThatThrownBy(() -> dividendAdviceService.savePlan(request))
+        assertThatThrownBy(() -> saveDirectly(request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("必须低于加仓阈值");
     }
@@ -345,7 +349,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("参数保存后可读回")
     void planRoundTrips() {
-        dividendAdviceService.savePlan(planRequestOf("120000", "70000", "5.20", "3.10"));
+        savePlan("120000", "70000", "5.20", "3.10");
 
         DividendPlanVO plan = dividendAdviceService.getPlan();
 
@@ -383,7 +387,27 @@ class DividendAdviceIntegrationTest {
      * @param reduceYield 减仓阈值
      */
     private void savePlan(String base, String floor, String addYield, String reduceYield) {
-        dividendAdviceService.savePlan(planRequestOf(base, floor, addYield, reduceYield));
+        DividendParamSaveRequest request = planRequestOf(base, floor, addYield, reduceYield);
+        DividendPlan plan = new DividendPlan();
+        plan.setBaseAmount(request.getBaseAmount());
+        plan.setFloorAmount(request.getFloorAmount());
+        plan.setAddYield(request.getAddYield());
+        plan.setReduceYield(request.getReduceYield());
+        dividendPlanResolver.save(plan);
+    }
+
+    /**
+     * 直接走参数装配器保存，用于验证校验拒绝路径；成功路径统一用 savePlan
+     *
+     * @param request 保存请求
+     */
+    private void saveDirectly(DividendParamSaveRequest request) {
+        DividendPlan plan = new DividendPlan();
+        plan.setBaseAmount(request.getBaseAmount());
+        plan.setFloorAmount(request.getFloorAmount());
+        plan.setAddYield(request.getAddYield());
+        plan.setReduceYield(request.getReduceYield());
+        dividendPlanResolver.save(plan);
     }
 
     /**

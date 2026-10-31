@@ -144,18 +144,6 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 保存通用网格参数，供尚未逐只配置时的兜底
-     *
-     * @param request 保存请求
-     * @return 保存后的参数视图
-     */
-    @Override
-    public GridPlanVO saveGlobalPlan(GridParamSaveRequest request) {
-        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR, "网格参数不能为空");
-        return toPlanVO(gridPlanResolver.saveGlobal(toPlan(request, null)));
-    }
-
-    /**
      * 把保存请求转成参数对象
      *
      * @param request    保存请求

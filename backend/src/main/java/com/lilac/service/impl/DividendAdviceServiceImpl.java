@@ -2,7 +2,6 @@ package com.lilac.service.impl;
 
 import com.lilac.adapter.model.FundNetWorthPoint;
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
-import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.dto.dividend.DividendQueryRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
@@ -77,23 +76,6 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     @Override
     public DividendPlanVO getPlan() {
         return toPlanVO(dividendPlanResolver.resolve());
-    }
-
-    /**
-     * 保存红利参数，保底高于基准或阈值顺序颠倒时拒绝保存
-     *
-     * @param request 参数保存请求
-     * @return 保存后的参数视图
-     */
-    @Override
-    public DividendPlanVO savePlan(DividendParamSaveRequest request) {
-        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR, "红利参数不能为空");
-        DividendPlan plan = new DividendPlan();
-        plan.setBaseAmount(request.getBaseAmount());
-        plan.setFloorAmount(request.getFloorAmount());
-        plan.setAddYield(request.getAddYield());
-        plan.setReduceYield(request.getReduceYield());
-        return toPlanVO(dividendPlanResolver.save(plan));
     }
 
     /**

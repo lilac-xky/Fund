@@ -95,11 +95,11 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
             <plugin>
-                <!-- JDK 21 下 Mockito 自附加被拒，显式放行并指向工作区临时目录，避免整批测试在初始化阶段报错 -->
+                <!-- JDK 21 下 Mockito 自附加被拒，显式放行；临时目录用 target 本身，mvn 保证它存在且 clean 后会重建 -->
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>-Djdk.attach.allowAttachSelf=true -Djava.io.tmpdir=${project.basedir}/../.tmp</argLine>
+                    <argLine>-Djdk.attach.allowAttachSelf=true -Djava.io.tmpdir=${project.build.directory}</argLine>
                 </configuration>
             </plugin>
             <plugin>

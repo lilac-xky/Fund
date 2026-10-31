@@ -1,7 +1,5 @@
 package com.lilac.controller;
 
-import cn.hutool.core.bean.BeanUtil;
-import com.lilac.common.DeleteRequest;
 import com.lilac.domain.dto.holding.HoldingBatchUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
@@ -9,7 +7,6 @@ import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
 import com.lilac.domain.dto.holding.HoldingConvertRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
-import com.lilac.domain.entity.Holding;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.HoldingChangeVO;
 import com.lilac.domain.vo.HoldingConvertVO;
@@ -17,7 +14,6 @@ import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.enums.HttpsCodeEnum;
-import com.lilac.mapper.HoldingMapper;
 import com.lilac.service.HoldingService;
 import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.Resource;
@@ -39,9 +35,6 @@ public class HoldingController {
 
     @Resource
     private HoldingService holdingService;
-
-    @Resource
-    private HoldingMapper holdingMapper;
 
     /**
      * 统一查询持仓，各条件为空时不过滤
@@ -114,25 +107,5 @@ public class HoldingController {
     @PostMapping("/changes")
     public Result<List<HoldingChangeVO>> changes(@RequestBody(required = false) HoldingChangeQueryRequest request) {
         return Result.success(holdingService.listChanges(request));
-    }
-
-    /**
-     * 按主键查询单个持仓
-     */
-    @GetMapping("/get")
-    public Result<HoldingVO> getById(Long id) {
-        ThrowUtils.throwIf(id == null, HttpsCodeEnum.PARAMS_ERROR);
-        Holding holding = holdingMapper.selectOneById(id);
-        ThrowUtils.throwIf(holding == null, HttpsCodeEnum.NOT_FOUND_ERROR);
-        return Result.success(BeanUtil.copyProperties(holding, HoldingVO.class));
-    }
-
-    /**
-     * 按主键逻辑删除持仓
-     */
-    @PostMapping("/delete")
-    public Result<Boolean> delete(@RequestBody DeleteRequest request) {
-        ThrowUtils.throwIf(request == null || request.getId() == null, HttpsCodeEnum.PARAMS_ERROR);
-        return Result.success(holdingMapper.deleteById(request.getId()) > 0);
     }
 }

@@ -4,7 +4,6 @@ import com.lilac.domain.dto.quote.QuoteBatchRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.ForexRateVO;
 import com.lilac.domain.vo.MarketHistoryVO;
-import com.lilac.domain.vo.MarketQuoteVO;
 import com.lilac.domain.vo.QuoteBatchVO;
 import com.lilac.service.MarketQuoteAppService;
 import jakarta.annotation.Resource;
@@ -33,14 +32,6 @@ public class MarketQuoteController {
     @PostMapping("/batch")
     public Result<QuoteBatchVO> batch(@RequestBody QuoteBatchRequest request) {
         return Result.success(marketQuoteAppService.batchQuotes(request));
-    }
-
-    /**
-     * 取单只标的当日行情
-     */
-    @GetMapping("/single")
-    public Result<MarketQuoteVO> single(@RequestParam("code") String code) {
-        return Result.success(marketQuoteAppService.quote(code));
     }
 
     /**

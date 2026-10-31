@@ -1,7 +1,6 @@
 package com.lilac.service;
 
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
-import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.DividendPlanVO;
@@ -20,14 +19,6 @@ public interface DividendAdviceService {
      * @return 参数视图
      */
     DividendPlanVO getPlan();
-
-    /**
-     * 保存红利参数，不合法时拒绝并指出字段
-     *
-     * @param request 参数保存请求
-     * @return 保存后的参数视图
-     */
-    DividendPlanVO savePlan(DividendParamSaveRequest request);
 
     /**
      * 按全部持有中的红利持仓给建议

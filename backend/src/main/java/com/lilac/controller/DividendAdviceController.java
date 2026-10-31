@@ -1,7 +1,6 @@
 package com.lilac.controller;
 
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
-import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
@@ -33,14 +32,6 @@ public class DividendAdviceController {
     @GetMapping("/plan")
     public Result<DividendPlanVO> plan() {
         return Result.success(dividendAdviceService.getPlan());
-    }
-
-    /**
-     * 保存红利参数，保底高于基准或阈值顺序颠倒时拒绝并指出字段
-     */
-    @PostMapping("/plan/save")
-    public Result<DividendPlanVO> savePlan(@RequestBody DividendParamSaveRequest request) {
-        return Result.success(dividendAdviceService.savePlan(request));
     }
 
     /**

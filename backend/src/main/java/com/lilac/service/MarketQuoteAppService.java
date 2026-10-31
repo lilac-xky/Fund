@@ -3,7 +3,6 @@ package com.lilac.service;
 import com.lilac.domain.dto.quote.QuoteBatchRequest;
 import com.lilac.domain.vo.ForexRateVO;
 import com.lilac.domain.vo.MarketHistoryVO;
-import com.lilac.domain.vo.MarketQuoteVO;
 import com.lilac.domain.vo.QuoteBatchVO;
 
 import java.util.List;
@@ -20,14 +19,6 @@ public interface MarketQuoteAppService {
      * @return 批量行情视图
      */
     QuoteBatchVO batchQuotes(QuoteBatchRequest request);
-
-    /**
-     * 取单只标的的当日行情
-     *
-     * @param code 裸代码或带前缀代码
-     * @return 行情视图
-     */
-    MarketQuoteVO quote(String code);
 
     /**
      * 取多只标的的日线

@@ -4,10 +4,7 @@ import com.lilac.domain.dto.estimate.EstimateBatchRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateTrackVO;
-import com.lilac.domain.vo.EstimateVO;
-import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.service.EstimateService;
-import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,16 +31,6 @@ public class EstimateController {
     @PostMapping("/batch")
     public Result<EstimateBatchVO> batch(@RequestBody(required = false) EstimateBatchRequest request) {
         return Result.success(estimateService.estimateBatch(request));
-    }
-
-    /**
-     * 预估单只基金
-     */
-    @PostMapping("/single")
-    public Result<EstimateVO> single(@RequestParam("varietyKey") String varietyKey) {
-        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(),
-                HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
-        return Result.success(estimateService.estimateOne(varietyKey.trim()));
     }
 
     /**

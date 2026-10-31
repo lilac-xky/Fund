@@ -54,14 +54,6 @@ public class GridController {
     }
 
     /**
-     * 保存通用网格参数，供尚未逐只配置的标的兜底
-     */
-    @PostMapping("/plan/global/save")
-    public Result<GridPlanVO> saveGlobalPlan(@RequestBody GridParamSaveRequest request) {
-        return Result.success(gridAdviceService.saveGlobalPlan(request));
-    }
-
-    /**
      * 列出网格的监控对象，说明每只 ETF 用的是哪套格子
      */
     @GetMapping("/watch")

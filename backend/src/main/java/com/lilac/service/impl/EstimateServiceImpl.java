@@ -205,22 +205,6 @@ public class EstimateServiceImpl implements EstimateService {
     }
 
     /**
-     * 预估单只基金，不做缓存，供详情页与排障直接调用
-     *
-     * @param varietyKey 品种业务主键
-     * @return 单只预估结果
-     */
-    @Override
-    public EstimateVO estimateOne(String varietyKey) {
-        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(),
-                HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
-        VarietyVO variety = findVariety(varietyKey);
-        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR, "未找到品种 " + varietyKey);
-        List<EstimateOutcome> outcomes = estimateFunds(List.of(variety), LocalDate.now());
-        return estimateConverter.toVO(outcomes.get(0));
-    }
-
-    /**
      * 分批预估并汇总，超过上限时按批处理，绝不静默丢弃任何一只
      *
      * @param varietyKeys 品种业务主键
