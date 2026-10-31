@@ -2,6 +2,7 @@ package com.lilac.adapter.probe;
 
 import com.lilac.domain.dto.source.SourceEventQueryRequest;
 import com.lilac.domain.entity.SourceEventRecord;
+import com.lilac.domain.vo.SourceFailureTargetVO;
 import com.lilac.domain.vo.SourceStatVO;
 import com.lilac.mapper.SourceEventMapper;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -104,6 +105,8 @@ public class SourceEventRecorder {
                 .ge(SourceEventRecord::getHappenedAt, start.atStartOfDay())
                 .lt(SourceEventRecord::getHappenedAt, end.plusDays(1).atStartOfDay()));
         Map<String, SourceStatVO> grouped = new LinkedHashMap<>();
+        // 按源 + 目标聚合失败明细，页面需要看到「哪个代码在失败」而不只是一个总数
+        Map<String, SourceFailureTargetVO> targetFailures = new LinkedHashMap<>();
         for (SourceEventRecord row : rows) {
             SourceStatVO stat = grouped.computeIfAbsent(row.getSource(), key -> {
                 SourceStatVO vo = new SourceStatVO();
@@ -111,22 +114,49 @@ public class SourceEventRecorder {
                 vo.setTotalCount(0);
                 vo.setSuccessCount(0);
                 vo.setFailureCount(0);
+                vo.setNoDataCount(0);
                 vo.setFailures(new ArrayList<>());
+                vo.setFailureTargets(new ArrayList<>());
                 return vo;
             });
             stat.setTotalCount(stat.getTotalCount() + 1);
             if (Boolean.TRUE.equals(row.getSuccess())) {
                 stat.setSuccessCount(stat.getSuccessCount() + 1);
+            } else if (FailureKind.NO_DATA.equals(row.getFailureKind())) {
+                // 无数据是「标的本身取不到」，不是源坏了，单独计数不进失败率
+                stat.setNoDataCount(stat.getNoDataCount() + 1);
             } else {
                 stat.setFailureCount(stat.getFailureCount() + 1);
+                String key = row.getSource() + "|" + row.getTarget() + "|" + row.getFailureKind();
+                SourceFailureTargetVO detail = targetFailures.computeIfAbsent(key, ignored -> {
+                    SourceFailureTargetVO vo = new SourceFailureTargetVO();
+                    vo.setSource(row.getSource());
+                    vo.setTarget(row.getTarget());
+                    vo.setFailureKind(row.getFailureKind());
+                    vo.setCount(0);
+                    return vo;
+                });
+                detail.setCount(detail.getCount() + 1);
+                detail.setLatestMessage(row.getMessage());
+                detail.setLatestAt(row.getHappenedAt());
                 if (row.getFailureKind() != null && !stat.getFailures().contains(row.getFailureKind())) {
                     stat.getFailures().add(row.getFailureKind());
                 }
             }
             stat.setLastHappenedAt(row.getHappenedAt());
         }
+        // 失败明细挂回各源并按次数降序，页面取前几名展示
+        for (SourceFailureTargetVO detail : targetFailures.values()) {
+            SourceStatVO stat = grouped.get(detail.getSource());
+            if (stat != null) {
+                stat.getFailureTargets().add(detail);
+            }
+        }
         List<SourceStatVO> stats = new ArrayList<>(grouped.values());
-        stats.forEach(this::fillRate);
+        stats.forEach(stat -> {
+            fillRate(stat);
+            stat.getFailureTargets().sort((left, right) -> Integer.compare(right.getCount(), left.getCount()));
+        });
         stats.sort((left, right) -> Integer.compare(right.getFailureCount(), left.getFailureCount()));
         return stats;
     }
@@ -150,7 +180,7 @@ public class SourceEventRecorder {
     }
 
     /**
-     * 计算失败率，保留两位小数
+     * 计算失败率，只按真失败（结构变化/限流/网络）除以总次数，保留两位小数
      *
      * @param stat 统计
      */

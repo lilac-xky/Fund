@@ -52,9 +52,26 @@
           <div v-if="!symbol" class="app-listempty">
             先选一个持仓标的；没有持仓时请到「持仓」页录入。
           </div>
-          <div v-else-if="loading" class="app-loading">正在取数…</div>
-          <div v-else-if="!bars.length" class="app-listempty">{{ emptyHint }}</div>
-          <div v-show="Boolean(bars.length)" ref="chartHost" class="app-chart" />
+          <template v-else>
+            <div v-if="loading" class="app-loading">正在取数…</div>
+            <div v-else-if="!bars.length" class="app-listempty">{{ emptyHint }}</div>
+            <div v-show="bars.length > 0" class="app-chgbar">
+              <span
+                >最新 <b>{{ fmt(lastClose) }}</b></span
+              >
+              <span :class="toneClass(lastChange)">{{ signedPercent(lastChange) }}</span>
+              <span>
+                区间
+                <span :class="toneClass(rangeChange)">{{ signedPercent(rangeChange) }}</span>
+              </span>
+              <span class="app-chgbar__note">
+                第二栏为逐日涨跌幅（{{ basis === 'NET_WORTH' ? '净值日变动' : '按收盘价' }}）， RSI
+                栏 30/70 为超卖超买参考线
+              </span>
+            </div>
+            <!-- 容器必须常驻 DOM：render() 在 loading 翻 false 之前执行，放进条件链会在那一刻拿不到节点 -->
+            <div v-show="bars.length > 0" ref="chartHost" class="app-chart" />
+          </template>
 
           <p v-if="indicator" class="app-disclaimer">
             接口计算：RSI {{ fmt(indicator.rsi) }} · K {{ fmt(indicator.k) }} · D
@@ -90,6 +107,7 @@ import {
   DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TitleComponent,
   TooltipComponent,
 } from 'echarts/components'
@@ -115,6 +133,7 @@ echarts.use([
   DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TitleComponent,
   TooltipComponent,
   CanvasRenderer,
@@ -155,8 +174,35 @@ const params = ref<ChartParams>({
   kdjDSmooth: 3,
 })
 
-/** 参数摘要，顶栏与图内必须一致 */
+/**
+ * 参数摘要文字，顶栏与图内一致
+ */
 const paramText = computed(() => paramSummary(params.value))
+
+/** 最新收盘价或净值 */
+const lastClose = computed(() => {
+  const closes = bars.value.map((bar) => bar.close ?? 0).filter((value) => value > 0)
+  return closes.length ? closes[closes.length - 1]! : null
+})
+
+/** 最新一天的涨跌幅，百分点 */
+const lastChange = computed(() => {
+  const closes = bars.value.map((bar) => bar.close ?? 0)
+  if (closes.length < 2 || !closes[closes.length - 2]) {
+    return null
+  }
+  return percentChange(closes[closes.length - 2]!, closes[closes.length - 1] ?? 0)
+})
+
+/** 最近 20 个交易日的区间涨跌幅，百分点 */
+const rangeChange = computed(() => {
+  const closes = bars.value.map((bar) => bar.close ?? 0).filter((value) => value > 0)
+  if (closes.length < 2) {
+    return null
+  }
+  const window = closes.slice(-21)
+  return percentChange(window[0]!, window[window.length - 1] ?? 0)
+})
 
 /** 口径标签，让使用者一眼看出看的是日线还是净值 */
 const basisLabel = computed(() => (basis.value === 'NET_WORTH' ? '净值口径' : '日线口径'))
@@ -315,8 +361,18 @@ function render(): void {
   if (!chartHost.value || bars.value.length === 0) {
     return
   }
+  // 实例与容器必须是同一个节点：容器被条件渲染销毁重建后旧实例仍在，setOption 会画进游离节点
+  if (chart.value && chart.value.getDom() !== chartHost.value) {
+    chart.value.dispose()
+    chart.value = null
+  }
   if (!chart.value) {
     chart.value = echarts.init(chartHost.value)
+  }
+  // 容器刚挂载时高度可能是 0，画了也看不见；推迟到布局完成后再画一次
+  if (chartHost.value.clientHeight === 0) {
+    void nextTick(() => render())
+    return
   }
   chart.value.setOption(buildOption(bars.value, params.value, basis.value), true)
 }
@@ -357,12 +413,65 @@ function fmt(value?: number | null): string {
   }
   return Number(value).toFixed(2)
 }
+
+/** 带正负号的百分比 */
+function signedPercent(value?: number | null): string {
+  if (value === undefined || value === null) {
+    return '—'
+  }
+  return `${value > 0 ? '+' : ''}${Number(value).toFixed(2)}%`
+}
+
+/** 涨跌配色，涨暖跌冷，零与缺值中性 */
+function toneClass(value?: number | null): string {
+  if (value === undefined || value === null || value === 0) {
+    return ''
+  }
+  return value > 0 ? 'app-chgbar__up' : 'app-chgbar__down'
+}
+
+/** 两点之间的涨跌幅，百分点，基准为 0 时返回 null */
+function percentChange(previous: number, current: number): number | null {
+  if (!previous) {
+    return null
+  }
+  return Number((((current - previous) / previous) * 100).toFixed(3))
+}
 </script>
 
 <style scoped>
 .app-chart {
   width: 100%;
-  height: 620px;
+  height: 700px;
+}
+
+.app-chgbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--t2);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-chgbar b {
+  font-size: 14px;
+  color: var(--t1);
+}
+
+.app-chgbar__note {
+  font-size: 11px;
+  color: var(--t4);
+}
+
+.app-chgbar__up {
+  color: var(--up);
+}
+
+.app-chgbar__down {
+  color: var(--dn);
 }
 
 .app-select {

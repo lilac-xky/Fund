@@ -179,7 +179,8 @@ export function kdjSeries(
 }
 
 /**
- * 拼主图与三个指标副图的 option，参数与计算层一致
+ * 拼主图与指标副图的 option：主图、涨跌幅、MACD、RSI、KDJ 各占一栏，
+ * 每条线用「颜色 + 线型 + 标记」三重区分，不只靠颜色。
  *
  * @param bars   序列，净值口径时只有 close
  * @param params 指标参数
@@ -199,15 +200,13 @@ export function buildOption(
     const close = bar.close ?? 0
     return [bar.open ?? close, close, bar.low ?? close, bar.high ?? close]
   })
-  const volumes = bars.map((bar, index) => ({
-    value: bar.volume ?? 0,
-    itemStyle: { color: kline[index]?.[1]! >= (kline[index]?.[0] ?? 0) ? '#e05a5a' : '#4a9e6f' },
-  }))
+  const changes = changeSeries(closes)
   const rsi = rsiSeries(closes, params.rsiPeriod)
   const { dif, dea, bar } = macdSeries(closes, params.macdFast, params.macdSlow, params.macdSignal)
   const { k, d, j } = kdjSeries(bars, params.kdjPeriod, params.kdjKSmooth, params.kdjDSmooth)
   return {
     animation: false,
+    color: SERIES_COLORS,
     title: {
       left: 0,
       top: 0,
@@ -215,22 +214,27 @@ export function buildOption(
       // 参数必须标在图上，与计算层一致才不会误读
       text: paramSummary(params),
     },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      valueFormatter: (value: unknown) => fmtNumber(value),
+    },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
-    legend: { top: 4, right: 0, itemWidth: 10, itemHeight: 8, textStyle: { fontSize: 11 } },
+    legend: { top: 4, right: 0, itemWidth: 18, itemHeight: 8, textStyle: { fontSize: 11 } },
     grid: [
-      { left: 48, right: 16, top: 34, height: '30%' },
-      { left: 48, right: 16, top: '40%', height: '9%' },
-      { left: 48, right: 16, top: '53%', height: '11%' },
-      { left: 48, right: 16, top: '68%', height: '11%' },
+      { left: 56, right: 56, top: 34, height: '26%' },
+      { left: 56, right: 56, top: '39%', height: '10%' },
+      { left: 56, right: 56, top: '53%', height: '11%' },
+      { left: 56, right: 56, top: '68%', height: '11%' },
+      { left: 56, right: 56, top: '83%', height: '11%' },
     ],
-    xAxis: [0, 1, 2, 3].map((index) => ({
+    xAxis: [0, 1, 2, 3, 4].map((index) => ({
       type: 'category',
       data: dates,
       gridIndex: index,
       boundaryGap: true,
       axisLine: { lineStyle: { color: '#c9ced6' } },
-      axisLabel: { show: index === 3, fontSize: 10 },
+      axisLabel: { show: index === 4, fontSize: 10 },
       axisTick: { show: false },
     })),
     yAxis: [
@@ -240,28 +244,38 @@ export function buildOption(
         splitLine: { lineStyle: { color: '#eef0f3' } },
         axisLabel: { fontSize: 10 },
       },
-      { gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false } },
+      {
+        gridIndex: 1,
+        axisLabel: { formatter: '{value}%', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#eef0f3' } },
+      },
       {
         scale: true,
         gridIndex: 2,
         splitNumber: 2,
+        axisLabel: { fontSize: 10, formatter: (value: number) => fmtNumber(value) },
+        splitLine: { show: false },
+      },
+      {
+        min: 0,
+        max: 100,
+        gridIndex: 3,
+        interval: 20,
         axisLabel: { fontSize: 10 },
         splitLine: { show: false },
       },
       {
-        scale: true,
-        gridIndex: 3,
-        splitNumber: 2,
+        gridIndex: 4,
         axisLabel: { fontSize: 10 },
         splitLine: { show: false },
       },
     ],
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1, 2, 3], start: 60, end: 100 },
-      { type: 'slider', xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 14, start: 60, end: 100 },
+      { type: 'inside', xAxisIndex: [0, 1, 2, 3, 4], start: 60, end: 100 },
+      { type: 'slider', xAxisIndex: [0, 1, 2, 3, 4], bottom: 0, height: 14, start: 60, end: 100 },
     ],
     series: [
-      // 净值口径没有开高低与成交量，主图画净值折线，成交量副图留空但保留网格位置
+      // 净值口径没有开高低与成交量，主图画净值折线，KDJ 栏画占位说明
       netWorth
         ? {
             name: '单位净值',
@@ -270,12 +284,25 @@ export function buildOption(
             xAxisIndex: 0,
             yAxisIndex: 0,
             showSymbol: false,
-            lineStyle: { width: 1.2 },
+            lineStyle: { width: 1.6, color: SERIES_COLORS[0] },
+            endLabel: {
+              show: true,
+              fontSize: 10,
+              formatter: (p: { value: number }) => fmtNumber(p.value),
+            },
           }
         : { name: 'K 线', type: 'candlestick', data: kline, xAxisIndex: 0, yAxisIndex: 0 },
-      netWorth
-        ? { name: '净值日变动', type: 'bar', data: [], xAxisIndex: 1, yAxisIndex: 1 }
-        : { name: '成交量', type: 'bar', data: volumes, xAxisIndex: 1, yAxisIndex: 1 },
+      // 涨跌幅副图：日线口径按收盘价逐日变化，净值口径按净值逐日变化，涨红跌绿
+      {
+        name: netWorth ? '净值日变动' : '涨跌幅',
+        type: 'bar',
+        data: changes.map((value) => ({
+          value,
+          itemStyle: { color: value == null ? 'transparent' : value >= 0 ? '#e05a5a' : '#4a9e6f' },
+        })),
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+      },
       {
         name: 'MACD',
         type: 'bar',
@@ -291,7 +318,12 @@ export function buildOption(
         xAxisIndex: 2,
         yAxisIndex: 2,
         showSymbol: false,
-        lineStyle: { width: 1 },
+        lineStyle: { width: 1.2, color: SERIES_COLORS[1] },
+        endLabel: {
+          show: true,
+          fontSize: 10,
+          formatter: (p: { value: number }) => fmtNumber(p.value),
+        },
       },
       {
         name: 'DEA',
@@ -300,7 +332,7 @@ export function buildOption(
         xAxisIndex: 2,
         yAxisIndex: 2,
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dashed' },
+        lineStyle: { width: 1, type: 'dashed', color: SERIES_COLORS[2] },
       },
       {
         name: `RSI(${params.rsiPeriod})`,
@@ -309,35 +341,74 @@ export function buildOption(
         xAxisIndex: 3,
         yAxisIndex: 3,
         showSymbol: false,
-        lineStyle: { width: 1 },
+        lineStyle: { width: 1.4, color: SERIES_COLORS[3] },
+        markLine: {
+          symbol: 'none',
+          silent: true,
+          lineStyle: { type: 'dashed', color: '#c9ced6' },
+          label: { fontSize: 9, color: '#8a919f' },
+          data: [{ yAxis: 30 }, { yAxis: 50 }, { yAxis: 70 }],
+        },
       },
       {
         name: 'K',
         type: 'line',
         data: k,
-        xAxisIndex: 3,
-        yAxisIndex: 3,
+        xAxisIndex: 4,
+        yAxisIndex: 4,
         showSymbol: false,
-        lineStyle: { width: 1 },
+        lineStyle: { width: 1.2, color: SERIES_COLORS[4] },
       },
       {
         name: 'D',
         type: 'line',
         data: d,
-        xAxisIndex: 3,
-        yAxisIndex: 3,
+        xAxisIndex: 4,
+        yAxisIndex: 4,
         showSymbol: false,
-        lineStyle: { width: 1 },
+        lineStyle: { width: 1, type: 'dashed', color: SERIES_COLORS[5] },
       },
       {
         name: 'J',
         type: 'line',
         data: j,
-        xAxisIndex: 3,
-        yAxisIndex: 3,
+        xAxisIndex: 4,
+        yAxisIndex: 4,
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dashed' },
+        lineStyle: { width: 1, type: 'dotted', color: SERIES_COLORS[6] },
       },
     ],
   }
+}
+
+/** 各系列的固定色板：相邻曲线色相差拉大，配合线型做三重区分 */
+const SERIES_COLORS = ['#4a7dd6', '#e07a3f', '#8a63c9', '#2aa198', '#d64a6e', '#3f8f4a', '#b8860b']
+
+/**
+ * 逐日涨跌幅序列，百分点；首日与缺值处为 null
+ *
+ * @param closes 收盘价或净值序列
+ * @returns 与输入等长的涨跌幅序列
+ */
+function changeSeries(closes: number[]): Array<number | null> {
+  return closes.map((close, index) => {
+    const previous = closes[index - 1]
+    if (index === 0 || !previous || close == null) {
+      return null
+    }
+    return Number((((close - previous) / previous) * 100).toFixed(3))
+  })
+}
+
+/**
+ * 数值展示，截到四位小数并去掉无意义尾零
+ *
+ * @param value 原值
+ * @returns 文本
+ */
+function fmtNumber(value: unknown): string {
+  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) {
+    return '—'
+  }
+  return String(Number(Number(value).toFixed(4)))
 }

@@ -5,6 +5,7 @@ import com.lilac.exception.BusinessException;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -20,6 +21,16 @@ public class MarketSymbol {
     private static final String SZ = "sz";
     private static final String BJ = "bj";
     private static final String HK = "hk";
+
+    /**
+     * 补查命中后的市场记忆，避免同一 000 段代码每次都先打错市场
+     */
+    private static final Map<String, String> RESOLVED_MARKETS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 记忆上限，防止异常代码把表撑大
+     */
+    private static final int MAX_REMEMBERED = 200;
 
     /**
      * 交易所前缀，sh / sz / bj / hk
@@ -99,7 +110,30 @@ public class MarketSymbol {
         if (!DIGITS.matcher(value).matches()) {
             throw new BusinessException(HttpsCodeEnum.PARAMS_ERROR, "行情代码格式错误：" + rawCode);
         }
-        return new MarketSymbol(inferPrefix(value), value);
+        // 000 段曾补查命中的市场记在进程内，下一次直接走对的市场，不再每次都先打错一遍
+        String remembered = RESOLVED_MARKETS.get(value);
+        return new MarketSymbol(remembered != null ? remembered : inferPrefix(value), value);
+    }
+
+    /**
+     * 记录一次补查命中后的市场前缀，供同码标的下次直接使用
+     *
+     * @param code   数字代码
+     * @param prefix 命中的市场前缀
+     */
+    public static void rememberMarket(String code, String prefix) {
+        if (code != null && prefix != null && RESOLVED_MARKETS.size() < MAX_REMEMBERED) {
+            RESOLVED_MARKETS.putIfAbsent(code, prefix);
+        }
+    }
+
+    /**
+     * 取前缀推断表，供测试核对记忆行为
+     *
+     * @return 只读视图
+     */
+    public static Map<String, String> rememberedMarkets() {
+        return java.util.Collections.unmodifiableMap(RESOLVED_MARKETS);
     }
 
     /**

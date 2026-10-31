@@ -237,6 +237,40 @@ declare namespace API {
     notice?: string
   }
 
+  type CategoryBatchRequest = {
+    /** 要处理的品种业务主键 */
+    varietyKeys?: string[]
+    /** 指定为哪一类，不能是 UNKNOWN */
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
+    /** 跟踪指数代码，红利类型必填，用于查股息率 */
+    trackIndexCode?: string
+    /** 分红方式，留空时保持原值 */
+    dividendMethod?: 'CASH' | 'REINVEST'
+  }
+
+  type checkParams = {
+    fileName: string
+  }
+
+  type CheckRow = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 已录入的持有份额 */
+    shares?: number
+    /** 已录入的加权成本价 */
+    avgCostPrice?: number
+    /** 已录入的市值 */
+    marketValue?: number
+    /** 核对状态，如「待人工核对」 */
+    status?: string
+    /** 提示，说明哪些数字需要与截图比对 */
+    hints?: string[]
+  }
+
   type DegradationRowVO = {
     /** 数据源名 */
     source?: string
@@ -620,6 +654,11 @@ declare namespace API {
   }
 
   type exportErrorsParams = {
+    startDate?: string
+    endDate?: string
+  }
+
+  type exportUsingGETParams = {
     startDate?: string
     endDate?: string
   }
@@ -1121,6 +1160,8 @@ declare namespace API {
     varietyKey?: string
     /** 卖出份额，必须为正数且不超过当前持有合计 */
     shares?: number
+    /** 卖出业务日期，为空时取当日；补录早前的卖出用它还原真实顺序 */
+    tradeDate?: string
   }
 
   type HoldingSummaryVO = {
@@ -1427,11 +1468,72 @@ declare namespace API {
     days?: number
   }
 
+  type LessonTrialRequest = {
+    /** 只试算这一类，为空时试算全部 */
+    pattern?: 'CHASE_HIGH' | 'BLIND_SWITCH' | 'PANIC_SELL'
+    /** 追高容忍幅度，为空时用库里当前值 */
+    chaseTolerance?: number
+    /** 追高回看窗口 */
+    chaseWindow?: number
+    /** 连续亏损天数 */
+    panicLossDays?: number
+    /** 累计亏损率下限 */
+    panicLossRate?: number
+    /** 熟悉品种天数 */
+    familiarDays?: number
+    /** 回看多少天的历史变动 */
+    days?: number
+  }
+
+  type LessonTrialVO = {
+    /** 试算所用的参数，必须在结果里回显，否则结果不可复现 */
+    chaseTolerance?: number
+    /** 追高回看窗口 */
+    chaseWindow?: number
+    /** 连续亏损天数 */
+    panicLossDays?: number
+    /** 累计亏损率下限 */
+    panicLossRate?: number
+    /** 熟悉品种天数 */
+    familiarDays?: number
+    /** 回看天数 */
+    days?: number
+    /** 参与试算的变动笔数 */
+    checkedCount?: number
+    /** 命中的条数 */
+    hitCount?: number
+    /** 逐类命中数 */
+    perPattern?: PatternCount[]
+    /** 命中的明细，前若干条 */
+    hits?: LessonAlertVO[]
+    /** 说明 */
+    note?: string
+  }
+
   type LoginRequest = {
     /** 用户名 */
     username?: string
     /** 口令，明文传输但只在 HTTPS 下，服务端只与密钥文件比对，不落库不记日志 */
     password?: string
+  }
+
+  type MailArchiveVO = {
+    /** 留存文件名 */
+    fileName?: string
+    /** 主题 */
+    subject?: string
+    /** 交易日 */
+    tradeDate?: string
+    /** 发送时间，文件头部记录 */
+    sentAt?: string
+    /** 是否发送失败件 */
+    failed?: boolean
+    /** 是否已补发过 */
+    resent?: boolean
+    /** 文件大小，字节 */
+    sizeBytes?: number
+    /** 留存时间，取文件修改时间 */
+    archivedAt?: string
   }
 
   type MailPreviewVO = {
@@ -1573,6 +1675,46 @@ declare namespace API {
     equityReturn?: number
   }
 
+  type OperationLogQueryRequest = {
+    /** 区间起始日，含 */
+    startDate?: string
+    /** 区间截止日，含 */
+    endDate?: string
+    /** 只看某一品种 */
+    varietyKey?: string
+    /** 只看来某一类来源 SEND / CHANGE，为空表示全部 */
+    source?: string
+  }
+
+  type OperationLogVO = {
+    /** 日志来源，SEND 提醒 / CHANGE 买卖 */
+    source?: string
+    /** 来源中文名 */
+    sourceLabel?: string
+    /** 业务日期，排序与筛选都用它 */
+    tradeDate?: string
+    /** 发生时刻，买卖可能只有日期，此时取当日零点 */
+    happenedAt?: string
+    /** 事件类型，如「收盘前提醒」「买入」「卖出」 */
+    eventType?: string
+    /** 品种业务主键，提醒类为空 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 结果或状态，如「已发送」「失败」「成功」 */
+    status?: string
+    /** 份额，买卖时有值 */
+    shares?: number
+    /** 成交单价，买卖时有值 */
+    unitPrice?: number
+    /** 金额，买卖时为份额乘单价 */
+    amount?: number
+    /** 说明，失败原因或备注 */
+    note?: string
+  }
+
   type overviewParams = {
     tradeDate?: string
   }
@@ -1593,6 +1735,53 @@ declare namespace API {
     paramValue?: string
     /** 参数说明 */
     paramDesc?: string
+  }
+
+  type PatternCount = {
+    /** 模式代码 */
+    pattern?: string
+    /** 模式中文名 */
+    label?: string
+    /** 命中条数 */
+    count?: number
+  }
+
+  type PendingCategoryVO = {
+    /** 待确认的标的 */
+    items?: PendingItemVO[]
+    /** 待确认总数 */
+    total?: number
+    /** 其中属于黄金或红利的可疑项数量 */
+    suspectedCount?: number
+    /** 操作提示 */
+    notice?: string
+  }
+
+  type PendingItemVO = {
+    /** 业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 品种类型 */
+    varietyType?: 'OF' | 'ETF' | 'IDX'
+    /** 当前类型，待确认时为 UNKNOWN */
+    category?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
+    /** 跟踪指数代码 */
+    trackIndexCode?: string
+    /** 为什么推断不出来，一句话 */
+    reason?: string
+    /** 名称里命中的关键词，供使用者判断 */
+    hints?: string[]
+    /** 建议的类型，没有建议时为空 */
+    suggested?: 'STOCK' | 'MIXED' | 'BOND' | 'GOLD' | 'DIVIDEND' | 'ETF' | 'UNKNOWN'
+    /** 是否持有中，只有持仓的才影响预估与策略 */
+    holding?: boolean
+  }
+
+  type pendingParams = {
+    holdingOnly?: boolean
   }
 
   type planOfParams = {
@@ -1638,6 +1827,10 @@ declare namespace API {
     dataDate?: string
     /** 是否处于交易时段，false 时数据为上一交易日 */
     tradingHours?: boolean
+  }
+
+  type rawParams = {
+    fileName: string
   }
 
   type ReportRowVO = {
@@ -1861,6 +2054,12 @@ declare namespace API {
     data?: LessonAdvisoryVO
   }
 
+  type ResultLessonTrialVO = {
+    code?: number
+    msg?: string
+    data?: LessonTrialVO
+  }
+
   type ResultListBigDecimal = {
     code?: number
     msg?: string
@@ -1921,6 +2120,18 @@ declare namespace API {
     data?: MarketHistoryVO[]
   }
 
+  type ResultListOperationLogVO = {
+    code?: number
+    msg?: string
+    data?: OperationLogVO[]
+  }
+
+  type ResultListScreenshotVO = {
+    code?: number
+    msg?: string
+    data?: ScreenshotVO[]
+  }
+
   type ResultListSendRecordVO = {
     code?: number
     msg?: string
@@ -1963,6 +2174,12 @@ declare namespace API {
     data?: MailTestVO
   }
 
+  type ResultPendingCategoryVO = {
+    code?: number
+    msg?: string
+    data?: PendingCategoryVO
+  }
+
   type ResultPointOutcome = {
     code?: number
     msg?: string
@@ -1979,6 +2196,18 @@ declare namespace API {
     code?: number
     msg?: string
     data?: ReviewReportVO
+  }
+
+  type ResultScreenshotCheckVO = {
+    code?: number
+    msg?: string
+    data?: ScreenshotCheckVO
+  }
+
+  type ResultScreenshotVO = {
+    code?: number
+    msg?: string
+    data?: ScreenshotVO
   }
 
   type ResultSettingOverviewVO = {
@@ -2048,6 +2277,29 @@ declare namespace API {
     notes?: string[]
     /** 报告留存路径，写入失败时为 null */
     savedPath?: string
+  }
+
+  type ScreenshotCheckVO = {
+    screenshot?: ScreenshotVO
+    /** 逐只核对行 */
+    rows?: CheckRow[]
+    /** 差异条数 */
+    diffCount?: number
+    /** 核对说明 */
+    notice?: string
+  }
+
+  type ScreenshotVO = {
+    /** 留存文件名，含时间戳 */
+    fileName?: string
+    /** 原始文件名 */
+    originalName?: string
+    /** 文件大小，字节 */
+    size?: number
+    /** 上传时间 */
+    uploadedAt?: string
+    /** 相对 data 目录的路径，页面据此取图 */
+    path?: string
   }
 
   type SendRecordQueryRequest = {
@@ -2176,6 +2428,21 @@ declare namespace API {
     endDate?: string
   }
 
+  type SourceFailureTargetVO = {
+    /** 数据源名 */
+    source?: string
+    /** 取数目标，如 sh000300 */
+    target?: string
+    /** 失败类型 */
+    failureKind?: string
+    /** 失败次数 */
+    count?: number
+    /** 最近一次原因 */
+    latestMessage?: string
+    /** 最近一次时间 */
+    latestAt?: string
+  }
+
   type SourceHealthVO = {
     /** 各数据源的统计，按失败次数降序 */
     sources?: SourceStatVO[]
@@ -2200,10 +2467,14 @@ declare namespace API {
     successCount?: number
     /** 失败次数 */
     failureCount?: number
+    /** 无数据次数，标的自身没有行情（停牌、指数推错市场等），不计入失败率 */
+    noDataCount?: number
     /** 失败率，百分点 */
     failureRate?: number
     /** 出现过的失败类型 */
     failures?: string[]
+    /** 失败最多的标的明细，供页面直接看出「哪个代码在失败」 */
+    failureTargets?: SourceFailureTargetVO[]
     /** 最近一次事件时间 */
     lastHappenedAt?: string
   }
@@ -2254,6 +2525,12 @@ declare namespace API {
     clockJumpSeconds?: number
     /** 整体提示，可直接显示在页面顶部 */
     notice?: string
+    /** 本地邮件留存目录的绝对路径，供调度页直接说明「失败件在哪」 */
+    mailArchiveDir?: string
+    /** 尚未补发的失败件数量 */
+    mailPendingResendCount?: number
+    /** 最近的邮件留存清单，含已发送与未送达件，按时间倒序 */
+    mailArchives?: MailArchiveVO[]
   }
 
   type TaskPointStatusVO = {

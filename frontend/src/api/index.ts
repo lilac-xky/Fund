@@ -22,6 +22,8 @@ import * as estimateCalibrationController from './estimateCalibrationController'
 import * as lessonController from './lessonController'
 import * as reviewReportController from './reviewReportController'
 import * as sourceHealthController from './sourceHealthController'
+import * as screenshotController from './screenshotController'
+import * as operationLogController from './operationLogController'
 export default {
   authController,
   bondController,
@@ -43,4 +45,6 @@ export default {
   lessonController,
   reviewReportController,
   sourceHealthController,
+  screenshotController,
+  operationLogController,
 }

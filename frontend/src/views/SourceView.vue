@@ -52,6 +52,12 @@
                 {{ health.note }}
               </AppAlert>
 
+              <AppAlert kind="info" title="失败率怎么读">
+                失败率只统计「结构变化 / 被限流 / 网络失败」这类源自身的问题；
+                「无数据」是标的本身取不到（指数在另一个市场、停牌、场外基金没有日线），
+                单独计数，不进入失败率。备用源只在前一个源取不到时才被调用， 所以它的样本天然偏少。
+              </AppAlert>
+
               <AppGroup
                 title="各源成败"
                 code="STATS"
@@ -81,8 +87,8 @@
                     <div class="app-src__nums">
                       <span>{{ row.totalCount ?? 0 }} 次</span>
                       <span class="app-src__sub">
-                        成功 {{ row.successCount ?? 0 }} · 失败 {{ row.failureCount ?? 0 }} · 失败率
-                        {{ pct(row.failureRate) }}
+                        成功 {{ row.successCount ?? 0 }} · 真失败 {{ row.failureCount ?? 0 }} ·
+                        无数据 {{ row.noDataCount ?? 0 }} · 失败率 {{ pct(row.failureRate) }}
                       </span>
                     </div>
                     <div class="app-src__state">
@@ -98,6 +104,19 @@
                     <ul v-if="row.failures?.length" class="app-src__why">
                       <li v-for="kind in row.failures" :key="kind">{{ kindText(kind) }}</li>
                     </ul>
+                    <div v-if="row.failureTargets?.length" class="app-src__targets">
+                      <div
+                        v-for="target in row.failureTargets"
+                        :key="target.target"
+                        class="app-src__target"
+                      >
+                        <code>{{ target.target }}</code>
+                        <span>{{ target.count }} 次 · {{ kindText(target.failureKind) }}</span>
+                        <span v-if="target.latestMessage" class="app-src__msg">
+                          {{ target.latestMessage }}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </AppGroup>
@@ -172,9 +191,26 @@ const MIN_SAMPLES = 5
 
 const loading = ref(true)
 const errorText = ref('')
-const health = ref<API.SourceHealthVO | null>(null)
 const startDate = ref(isoOf(-7))
 const endDate = ref(isoOf(0))
+
+/**
+ * 数据源统计的补充字段：无数据次数与失败标的明细是本轮新增，
+ * 生成层尚未更新，故在此扩展；接口重新生成后可删掉。
+ */
+type SourceStatDisplay = API.SourceStatVO & {
+  noDataCount?: number
+  failureTargets?: Array<{
+    source?: string
+    target?: string
+    failureKind?: string
+    count?: number
+    latestMessage?: string
+    latestAt?: string
+  }>
+}
+
+const health = ref<(API.SourceHealthVO & { sources?: SourceStatDisplay[] }) | null>(null)
 
 /** 各源统计 */
 const rows = computed(() => health.value?.sources ?? [])
@@ -354,6 +390,38 @@ onMounted(load)
   font-size: 12px;
   line-height: 1.8;
   color: var(--t2);
+}
+
+.app-src__targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--s2);
+}
+
+.app-src__target {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--t2);
+}
+
+.app-src__target code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.app-src__msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--t4);
 }
 
 .app-matrix__row {

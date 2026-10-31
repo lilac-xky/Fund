@@ -115,12 +115,11 @@ public class MarketQuoteAdapter {
             if (quote != null && quote.usable()) {
                 // 补查成功时用另一市场的行情替换，key 保持调用方传入的形式
                 log.info("代码 {} 在推断市场无行情，改查 {} 命中", entry.getKey(), sibling.symbol());
+                MarketSymbol.rememberMarket(sibling.getCode(), sibling.getPrefix());
                 result.put(entry.getKey(), quote);
             }
         }
-    }
-
-    /**
+    }    /**
      * 取单只标的的当日行情
      *
      * @param rawCode 裸代码或带前缀代码
@@ -163,8 +162,9 @@ public class MarketQuoteAdapter {
                 MarketHistory history = source.fetchHistory(symbol, rows);
                 if (!history.enough(2)) {
                     failures.add(source.name() + ":根数不足");
+                    // 根数不足多半是「该标的无日线」，与上游改版分开记，避免健康页误报结构变化
                     sourceEventRecorder.failure(source.name(), symbol.symbol(),
-                            SourceEventRecorder.FailureKind.STRUCTURE, "日线根数不足");
+                            SourceEventRecorder.FailureKind.NO_DATA, "日线根数不足");
                     continue;
                 }
                 sourceEventRecorder.success(source.name(), symbol.symbol());
@@ -225,10 +225,11 @@ public class MarketQuoteAdapter {
                         sourceEventRecorder.success(source.name(), key);
                     } else {
                         // 取到响应但无可用行情，多半是上游字段变了或标的停牌，必须分开记
-                        sourceEventRecorder.failure(source.name(), key,
-                                quote.getStatus() == QuoteStatus.NO_DATA
-                                        ? SourceEventRecorder.FailureKind.NO_DATA
-                                        : SourceEventRecorder.FailureKind.STRUCTURE,
+                        String kind = quote.getStatus() == QuoteStatus.NO_DATA
+                                || quote.getStatus() == QuoteStatus.SUSPENDED
+                                ? SourceEventRecorder.FailureKind.NO_DATA
+                                : SourceEventRecorder.FailureKind.STRUCTURE;
+                        sourceEventRecorder.failure(source.name(), key, kind,
                                 quote.getUnavailableReason());
                     }
                 });

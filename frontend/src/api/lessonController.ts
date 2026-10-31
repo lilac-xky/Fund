@@ -13,3 +13,15 @@ export async function list(body: API.LessonQueryRequest, options?: { [key: strin
     ...(options || {}),
   })
 }
+
+/** 用给定参数在历史数据上试算，不落库，供规则页面回看是否触发 POST /api/lesson/trial */
+export async function trial(body: API.LessonTrialRequest, options?: { [key: string]: any }) {
+  return request<API.ResultLessonTrialVO>('/api/lesson/trial', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
