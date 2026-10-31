@@ -29,6 +29,11 @@ import java.util.List;
 @Component
 public class TaskOrchestrator {
 
+    /**
+     * 总览最多带出多少条邮件留存，过多会把页面撑爆
+     */
+    private static final int MAIL_ARCHIVE_LIMIT = 30;
+
     private final TaskProperties taskProperties;
 
     private final TradingCalendar tradingCalendar;
@@ -39,6 +44,8 @@ public class TaskOrchestrator {
 
     private final TaskOutcomeDispatcher dispatcher;
 
+    private final com.lilac.mail.MailArchive mailArchive;
+
     /**
      * 注入调度依赖，编排层只做时序与留痕，产出交给分派器
      *
@@ -47,14 +54,17 @@ public class TaskOrchestrator {
      * @param clockGuard      时钟跳变检测
      * @param sendLedger      发送留痕
      * @param dispatcher      产出分派器
+     * @param mailArchive     邮件留存，供总览带出未送达件
      */
     public TaskOrchestrator(TaskProperties taskProperties, TradingCalendar tradingCalendar,
-                            ClockGuard clockGuard, SendLedger sendLedger, TaskOutcomeDispatcher dispatcher) {
+                            ClockGuard clockGuard, SendLedger sendLedger, TaskOutcomeDispatcher dispatcher,
+                            com.lilac.mail.MailArchive mailArchive) {
         this.taskProperties = taskProperties;
         this.tradingCalendar = tradingCalendar;
         this.clockGuard = clockGuard;
         this.sendLedger = sendLedger;
         this.dispatcher = dispatcher;
+        this.mailArchive = mailArchive;
     }
 
     /**
@@ -253,6 +263,10 @@ public class TaskOrchestrator {
         vo.setClockJump(clockGuard.inGuardWindow(now));
         vo.setClockJumpSeconds(Math.abs(clockGuard.lastJumpSeconds()));
         vo.setNotice(notice(target, sent, failed, overdue));
+        // 邮件留存一并带出，页面上才能回答「发送失败的内容在哪、还差几封没补」
+        vo.setMailArchiveDir(mailArchive.mailDirText());
+        vo.setMailPendingResendCount(mailArchive.pendingResendCount());
+        vo.setMailArchives(mailArchive.listRecent(MAIL_ARCHIVE_LIMIT));
         return vo;
     }
 

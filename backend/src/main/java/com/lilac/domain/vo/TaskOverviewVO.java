@@ -62,5 +62,20 @@ public class TaskOverviewVO implements Serializable {
      */
     private String notice;
 
+    /**
+     * 本地邮件留存目录的绝对路径，供调度页直接说明「失败件在哪」
+     */
+    private String mailArchiveDir;
+
+    /**
+     * 尚未补发的失败件数量
+     */
+    private Integer mailPendingResendCount;
+
+    /**
+     * 最近的邮件留存清单，含已发送与未送达件，按时间倒序
+     */
+    private List<MailArchiveVO> mailArchives;
+
     private static final long serialVersionUID = 1L;
 }

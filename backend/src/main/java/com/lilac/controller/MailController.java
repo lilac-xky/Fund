@@ -3,12 +3,15 @@ package com.lilac.controller;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.MailPreviewVO;
 import com.lilac.domain.vo.MailStatusVO;
+import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.enums.SendPoint;
 import com.lilac.mail.SmtpSettingsResolver;
-import com.lilac.mail.CloseReminderMailService;
 import com.lilac.mail.MailContent;
 import com.lilac.mail.MailContentBuilder;
 import com.lilac.mail.MailRenderer;
 import com.lilac.service.EstimateService;
+import com.lilac.task.TaskOrchestrator;
+import com.lilac.task.model.PointOutcome;
 import jakarta.annotation.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,9 +30,6 @@ import java.time.LocalDate;
 public class MailController {
 
     @Resource
-    private CloseReminderMailService closeReminderMailService;
-
-    @Resource
     private SmtpSettingsResolver smtpSettingsResolver;
 
     @Resource
@@ -40,6 +40,9 @@ public class MailController {
 
     @Resource
     private EstimateService estimateService;
+
+    @Resource
+    private TaskOrchestrator taskOrchestrator;
 
     /**
      * 查询邮件通道是否就绪，只回「已配置 / 未配置」，不回显授权码
@@ -78,6 +81,11 @@ public class MailController {
             @RequestParam(value = "tradeDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate) {
         LocalDate date = tradeDate == null ? LocalDate.now() : tradeDate;
-        return Result.success(closeReminderMailService.send(date, true));
+        // 走编排器补发，成功与失败都会进发送留痕，页面上才能看到「补发过、失败在哪」
+        PointOutcome outcome = taskOrchestrator.triggerManually(SendPoint.PRE_CLOSE, date, true);
+        if (!outcome.isSuccess()) {
+            return Result.error(HttpsCodeEnum.OPERATION_ERROR.getCode(), outcome.getFailReason());
+        }
+        return Result.success(outcome.getDetail());
     }
 }

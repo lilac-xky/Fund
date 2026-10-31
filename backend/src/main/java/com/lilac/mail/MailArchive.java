@@ -1,5 +1,6 @@
 package com.lilac.mail;
 
+import com.lilac.domain.vo.MailArchiveVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -144,6 +145,108 @@ public class MailArchive {
      */
     private Path mailDir() {
         return Paths.get(dataRoot).toAbsolutePath().normalize().resolve("mail");
+    }
+
+    /**
+     * 取邮件留存目录的绝对路径，供页面直接告诉使用者「文件在哪」
+     *
+     * @return 绝对路径文本
+     */
+    public String mailDirText() {
+        return mailDir().toString();
+    }
+
+    /**
+     * 扫描留存目录，按时间倒序列出最近的已发送与未送达件，供调度页展示
+     *
+     * @param limit 最多取几条
+     * @return 留存清单，目录不存在时为空
+     */
+    public List<MailArchiveVO> listRecent(int limit) {
+        List<MailArchiveVO> items = new ArrayList<>();
+        try {
+            Path dir = mailDir();
+            if (!Files.isDirectory(dir)) {
+                return items;
+            }
+            try (var stream = Files.list(dir)) {
+                List<Path> files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".txt"))
+                        .sorted(Comparator.comparing(path -> path.getFileName().toString(),
+                                Comparator.reverseOrder()))
+                        .limit(Math.max(1, limit))
+                        .toList();
+                for (Path file : files) {
+                    items.add(toVO(file));
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("扫描邮件留存目录失败：{}", e.getMessage());
+        }
+        return items;
+    }
+
+    /**
+     * 统计尚未补发的失败件数量，供调度页提示「还有几封没送出去」
+     *
+     * @return 待补发数量
+     */
+    public int pendingResendCount() {
+        try {
+            Path dir = mailDir();
+            if (!Files.isDirectory(dir)) {
+                return 0;
+            }
+            try (var stream = Files.list(dir)) {
+                return (int) stream.filter(Files::isRegularFile).filter(this::isPendingFailure).count();
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("统计未送达留存失败：{}", e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * 把一份留存文件转成视图，失败件标记出来供页面标红
+     *
+     * @param file 留存文件
+     * @return 留存视图
+     */
+    private MailArchiveVO toVO(Path file) {
+        MailArchiveVO vo = new MailArchiveVO();
+        String name = file.getFileName().toString();
+        vo.setFileName(name);
+        boolean failed = name.contains(FAILED_TAG);
+        vo.setFailed(failed);
+        vo.setResent(Files.exists(file.resolveSibling(name + RESENT_MARK)));
+        vo.setSizeBytes(file.toFile().length());
+        try {
+            // 留存时间取文件修改时间，比文件名里的时分秒更可靠
+            vo.setArchivedAt(java.time.LocalDateTime.ofInstant(
+                    Files.getLastModifiedTime(file).toInstant(), java.time.ZoneId.systemDefault()));
+        } catch (IOException ignored) {
+            // 属性读不到不影响展示，时间字段留空
+        }
+        try {
+            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            for (String line : lines) {
+                if (line.startsWith("发送时间：")) {
+                    vo.setSentAt(line.substring("发送时间：".length()).trim());
+                } else if (line.startsWith("交易日：")) {
+                    vo.setTradeDate(line.substring("交易日：".length()).trim());
+                } else if (line.startsWith("主题：")) {
+                    vo.setSubject(line.substring("主题：".length()).trim());
+                    break;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            vo.setSubject("（留存文件读取失败）");
+        }
+        if (vo.getSubject() == null) {
+            vo.setSubject("（无主题记录）");
+        }
+        return vo;
     }
 
     /**
