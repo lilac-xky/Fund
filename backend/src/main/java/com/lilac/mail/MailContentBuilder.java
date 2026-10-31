@@ -3,17 +3,21 @@ package com.lilac.mail;
 import com.lilac.domain.dto.dividend.DividendQueryRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
+import com.lilac.domain.vo.BondAdvisoryVO;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.HoldingVO;
+import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import com.lilac.domain.vo.IndexDividendOverviewVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.HoldingStatus;
+import com.lilac.service.BondMonitorService;
 import com.lilac.service.DividendAdviceService;
 import com.lilac.service.GridAdviceService;
+import com.lilac.service.IndicatorService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
@@ -44,24 +48,34 @@ public class MailContentBuilder {
 
     private final GridAdviceService gridAdviceService;
 
+    private final BondMonitorService bondMonitorService;
+
+    private final IndicatorService indicatorService;
+
     /**
-     * 注入邮件需要的五类业务
+     * 注入邮件需要的七类业务
      *
      * @param holdingService        持仓业务
      * @param varietyService        品种业务
      * @param dividendAdviceService 红利建议业务
      * @param indexDividendService  股息率业务
      * @param gridAdviceService     网格提醒业务
+     * @param bondMonitorService    债券监控业务
+     * @param indicatorService      技术指标业务
      */
     public MailContentBuilder(HoldingService holdingService, VarietyService varietyService,
                               DividendAdviceService dividendAdviceService,
                               IndexDividendService indexDividendService,
-                              GridAdviceService gridAdviceService) {
+                              GridAdviceService gridAdviceService,
+                              BondMonitorService bondMonitorService,
+                              IndicatorService indicatorService) {
         this.holdingService = holdingService;
         this.varietyService = varietyService;
         this.dividendAdviceService = dividendAdviceService;
         this.indexDividendService = indexDividendService;
         this.gridAdviceService = gridAdviceService;
+        this.bondMonitorService = bondMonitorService;
+        this.indicatorService = indicatorService;
     }
 
     /**
@@ -84,6 +98,8 @@ public class MailContentBuilder {
         fillEstimates(content, estimate, varietyMap);
         fillDividends(content, varieties);
         fillGrid(content, varieties);
+        fillBonds(content, varieties);
+        fillIndicators(content, varieties);
         fillDataCutoff(content, estimate, varieties);
         return content;
     }
@@ -286,6 +302,83 @@ public class MailContentBuilder {
             log.warn("网格提醒装配失败，邮件里标注为不可用：{}", e.getMessage());
             content.setGridAvailable(false);
             content.setGridSummary(List.of("网格提醒本次取数失败，请到页面查看：" + e.getMessage()));
+        }
+    }
+
+    /**
+     * 取债券监控结果，失败时只记日志，不让一段提醒拖垮整封邮件
+     *
+     * @param content   邮件模型
+     * @param varieties 品种列表
+     */
+    private void fillBonds(MailContent content, List<VarietyVO> varieties) {
+        boolean hasBond = varieties.stream()
+                .anyMatch(variety -> variety.getCategory() == com.lilac.enums.FundCategory.BOND);
+        if (!hasBond) {
+            return;
+        }
+        try {
+            BondAdvisoryVO advisory = bondMonitorService.adviseAll();
+            if (advisory == null) {
+                content.setBondAvailable(false);
+                content.setBondSummary(List.of("债券监控本次没有返回结果，请到页面查看"));
+                return;
+            }
+            content.setBondAdvisory(advisory);
+            content.setBondAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
+            List<String> summaries = new ArrayList<>();
+            if (!content.isBondAvailable()) {
+                summaries.add("债券监控参数不合法，本次不给换仓提醒：" + join(advisory.getParamIssues()));
+            }
+            summaries.addAll(safe(advisory.getSummary()));
+            if (summaries.isEmpty()) {
+                summaries.add("债券基金净值未横盘也未转弱，本次无换仓提醒");
+            }
+            content.setBondSummary(summaries);
+        } catch (RuntimeException e) {
+            log.warn("债券监控装配失败，邮件里标注为不可用：{}", e.getMessage());
+            content.setBondAvailable(false);
+            content.setBondSummary(List.of("债券监控本次取数失败，请到页面查看：" + e.getMessage()));
+        }
+    }
+
+    /**
+     * 取技术指标结果，只在参数开启参与提醒时有内容，失败同样只记日志
+     *
+     * @param content   邮件模型
+     * @param varieties 品种列表
+     */
+    private void fillIndicators(MailContent content, List<VarietyVO> varieties) {
+        if (varieties.isEmpty()) {
+            return;
+        }
+        try {
+            IndicatorAdvisoryVO advisory = indicatorService.computeAll();
+            if (advisory == null) {
+                content.setIndicatorAvailable(false);
+                content.setIndicatorSummary(List.of("技术指标本次没有返回结果，请到页面查看"));
+                return;
+            }
+            content.setIndicatorAdvisory(advisory);
+            // 开关关闭时指标只在页面展示，不准进邮件，这是参数页对使用者的承诺
+            if (Boolean.FALSE.equals(advisory.getParticipateInAlert())) {
+                content.setIndicatorAvailable(false);
+                content.setIndicatorSummary(List.of("指标参数已关闭「参与提醒」，本次不在邮件里给指标信号"));
+                return;
+            }
+            content.setIndicatorAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
+            List<String> summaries = new ArrayList<>();
+            if (!content.isIndicatorAvailable()) {
+                summaries.add("指标参数不合法，本次不给指标信号：" + join(advisory.getParamIssues()));
+                content.setIndicatorSummary(summaries);
+                return;
+            }
+            summaries.addAll(safe(advisory.getSummary()));
+            content.setIndicatorSummary(summaries);
+        } catch (RuntimeException e) {
+            log.warn("技术指标装配失败，邮件里标注为不可用：{}", e.getMessage());
+            content.setIndicatorAvailable(false);
+            content.setIndicatorSummary(List.of("技术指标本次计算失败，请到页面查看：" + e.getMessage()));
         }
     }
 

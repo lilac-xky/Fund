@@ -1,7 +1,9 @@
 package com.lilac.mail;
 
+import com.lilac.domain.vo.BondAdvisoryVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
+import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -85,6 +87,36 @@ public class MailContent implements Serializable {
      * 网格提醒摘要，逐条可读
      */
     private List<String> gridSummary = new ArrayList<>();
+
+    /**
+     * 债券监控汇总，无债券持仓为空
+     */
+    private BondAdvisoryVO bondAdvisory;
+
+    /**
+     * 债券参数是否可用，false 时不给换仓提醒
+     */
+    private boolean bondAvailable = true;
+
+    /**
+     * 债券提醒摘要，逐条可读
+     */
+    private List<String> bondSummary = new ArrayList<>();
+
+    /**
+     * 技术指标汇总，无持仓为空
+     */
+    private IndicatorAdvisoryVO indicatorAdvisory;
+
+    /**
+     * 指标参数是否可用，false 时不给指标提醒
+     */
+    private boolean indicatorAvailable = true;
+
+    /**
+     * 指标提醒摘要，只收有信号的标的
+     */
+    private List<String> indicatorSummary = new ArrayList<>();
 
     /**
      * 行情数据日期

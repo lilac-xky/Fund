@@ -1,8 +1,10 @@
 package com.lilac.mail;
 
 import cn.hutool.core.util.EscapeUtil;
+import com.lilac.domain.vo.BondAdvisoryVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
+import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -60,6 +62,8 @@ public class MailRenderer {
             appendUnavailableSection(builder, content);
             appendDividendSection(builder, content);
             appendGridSection(builder, content);
+            appendBondSection(builder, content);
+            appendIndicatorSection(builder, content);
             appendFooter(builder, content);
         }
         builder.append("</div></body></html>");
@@ -121,6 +125,22 @@ public class MailRenderer {
             lines.add("  今日无场内 ETF 持仓，暂无网格提醒。");
         }
         for (String summary : content.getGridSummary()) {
+            lines.add("  " + summary);
+        }
+        lines.add("");
+        lines.add("【债券监控】");
+        if (content.getBondSummary().isEmpty()) {
+            lines.add("  今日无债券型持仓，暂无换仓提醒。");
+        }
+        for (String summary : content.getBondSummary()) {
+            lines.add("  " + summary);
+        }
+        lines.add("");
+        lines.add("【技术指标】");
+        if (content.getIndicatorSummary().isEmpty()) {
+            lines.add("  今日无触发信号，指标数值请到页面查看。");
+        }
+        for (String summary : content.getIndicatorSummary()) {
             lines.add("  " + summary);
         }
         lines.add("");
@@ -279,6 +299,57 @@ public class MailRenderer {
         if (advisory != null && advisory.getDividendNote() != null) {
             builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">")
                     .append(escape(advisory.getDividendNote())).append("</p>");
+        }
+    }
+
+    /**
+     * 渲染债券监控段，参数不可用与未触发都明确说明，不留空段
+     *
+     * @param builder 正文构建器
+     * @param content 邮件模型
+     */
+    private void appendBondSection(StringBuilder builder, MailContent content) {
+        builder.append("<h3 style=\"font-size:15px;margin:16px 0 6px;\">债券监控</h3>");
+        if (content.getBondSummary().isEmpty()) {
+            builder.append("<p style=\"font-size:13px;color:#8a919f;margin:0 0 8px;\">")
+                    .append("今日无债券型持仓，暂无换仓提醒。</p>");
+            return;
+        }
+        builder.append("<ul style=\"font-size:13px;line-height:1.8;margin:0 0 8px;padding-left:18px;\">");
+        for (String summary : content.getBondSummary()) {
+            builder.append("<li>").append(escape(summary)).append("</li>");
+        }
+        builder.append("</ul>");
+        BondAdvisoryVO advisory = content.getBondAdvisory();
+        if (advisory != null && advisory.getSidewaysDaysThreshold() != null) {
+            builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">判定阈值：横盘 ")
+                    .append(advisory.getSidewaysDaysThreshold()).append(" 个交易日，年化斜率低于 ")
+                    .append(escape(percent(advisory.getWeakSlopeThreshold()))).append("</p>");
+        }
+    }
+
+    /**
+     * 渲染技术指标段，只列触发的信号，参数摘要与之一并给出
+     *
+     * @param builder 正文构建器
+     * @param content 邮件模型
+     */
+    private void appendIndicatorSection(StringBuilder builder, MailContent content) {
+        builder.append("<h3 style=\"font-size:15px;margin:16px 0 6px;\">技术指标</h3>");
+        if (content.getIndicatorSummary().isEmpty()) {
+            builder.append("<p style=\"font-size:13px;color:#8a919f;margin:0 0 8px;\">")
+                    .append("今日无触发信号，指标数值请到页面查看。</p>");
+            return;
+        }
+        builder.append("<ul style=\"font-size:13px;line-height:1.8;margin:0 0 8px;padding-left:18px;\">");
+        for (String summary : content.getIndicatorSummary()) {
+            builder.append("<li>").append(escape(summary)).append("</li>");
+        }
+        builder.append("</ul>");
+        IndicatorAdvisoryVO advisory = content.getIndicatorAdvisory();
+        if (advisory != null && advisory.getParamSummary() != null) {
+            builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">本次参数：")
+                    .append(escape(advisory.getParamSummary())).append("</p>");
         }
     }
 

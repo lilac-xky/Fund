@@ -2,19 +2,23 @@ package com.lilac.mail;
 
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
+import com.lilac.domain.vo.BondAdvisoryVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateVO;
 import com.lilac.domain.vo.HoldingVO;
+import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.EstimateConfidence;
 import com.lilac.enums.EstimateTier;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.VarietyType;
+import com.lilac.service.BondMonitorService;
 import com.lilac.service.DividendAdviceService;
 import com.lilac.service.GridAdviceService;
 import com.lilac.service.HoldingService;
+import com.lilac.service.IndicatorService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.VarietyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,10 +46,12 @@ class MailContentBuilderTest {
     private DividendAdviceService dividendAdviceService;
     private IndexDividendService indexDividendService;
     private GridAdviceService gridAdviceService;
+    private BondMonitorService bondMonitorService;
+    private IndicatorService indicatorService;
     private MailContentBuilder builder;
 
     /**
-     * 五类业务全部用桩，装配逻辑单独验证
+     * 七类业务全部用桩，装配逻辑单独验证
      */
     @BeforeEach
     void setUp() {
@@ -54,8 +60,10 @@ class MailContentBuilderTest {
         dividendAdviceService = mock(DividendAdviceService.class);
         indexDividendService = mock(IndexDividendService.class);
         gridAdviceService = mock(GridAdviceService.class);
+        bondMonitorService = mock(BondMonitorService.class);
+        indicatorService = mock(IndicatorService.class);
         builder = new MailContentBuilder(holdingService, varietyService, dividendAdviceService,
-                indexDividendService, gridAdviceService);
+                indexDividendService, gridAdviceService, bondMonitorService, indicatorService);
     }
 
     /**
@@ -102,6 +110,76 @@ class MailContentBuilderTest {
         assertThat(content.isDividendAvailable()).isFalse();
         assertThat(content.getDividendSummary()).anySatisfy(item -> assertThat(item).contains("失败"));
         assertThat(content.getItems()).hasSize(1);
+    }
+
+    /**
+     * 债券持仓存在时邮件必须带债券段，触发提醒时摘要里要有具体数值
+     */
+    @Test
+    @DisplayName("债券触发时邮件带出换仓提醒")
+    void bondAlertReachesMail() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:006327")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(bond()));
+        when(bondMonitorService.adviseAll()).thenReturn(bondAdvisory(true));
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.getBondSummary()).isNotEmpty();
+        assertThat(content.getBondSummary()).anySatisfy(item -> assertThat(item).contains("横盘"));
+        assertThat(content.isBondAvailable()).isTrue();
+    }
+
+    /**
+     * 未达阈值时债券段不给换仓动作，避免正常情形误报
+     */
+    @Test
+    @DisplayName("债券未达阈值时不产生提醒")
+    void bondNormalNoAlert() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:006327")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(bond()));
+        when(bondMonitorService.adviseAll()).thenReturn(bondAdvisory(false));
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.getBondSummary()).anySatisfy(item -> assertThat(item).contains("未达换仓阈值"));
+    }
+
+    /**
+     * 指标开关关闭时邮件里不得出现指标信号，这是参数页对使用者的承诺
+     */
+    @Test
+    @DisplayName("关闭参与提醒后邮件不给指标信号")
+    void indicatorSwitchOff() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+        when(dividendAdviceService.adviseAll()).thenReturn(emptyAdvisory());
+        IndicatorAdvisoryVO advisory = new IndicatorAdvisoryVO();
+        advisory.setParamUsable(Boolean.TRUE);
+        advisory.setParticipateInAlert(Boolean.FALSE);
+        advisory.setSummary(List.of("000922 RSI 超买"));
+        when(indicatorService.computeAll()).thenReturn(advisory);
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.isIndicatorAvailable()).isFalse();
+        assertThat(content.getIndicatorSummary()).anySatisfy(item -> assertThat(item).contains("参与提醒"));
+    }
+
+    /**
+     * 指标有信号时进邮件，且摘要里带指标数值
+     */
+    @Test
+    @DisplayName("指标信号进邮件并带数值")
+    void indicatorSignalReachesMail() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+        when(dividendAdviceService.adviseAll()).thenReturn(emptyAdvisory());
+        IndicatorAdvisoryVO advisory = new IndicatorAdvisoryVO();
+        advisory.setParamUsable(Boolean.TRUE);
+        advisory.setParticipateInAlert(Boolean.TRUE);
+        advisory.setSummary(List.of("000922 中证红利ETF联接A：RSI 超买，RSI 78.50"));
+        when(indicatorService.computeAll()).thenReturn(advisory);
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.isIndicatorAvailable()).isTrue();
+        assertThat(content.getIndicatorSummary()).anySatisfy(item -> assertThat(item).contains("RSI 超买"));
     }
 
     /**
@@ -176,6 +254,42 @@ class MailContentBuilderTest {
         variety.setVarietyType(VarietyType.OF);
         variety.setCategory(FundCategory.MIXED);
         return variety;
+    }
+
+    /**
+     * 造一只债券型品种
+     *
+     * @return 品种
+     */
+    private VarietyVO bond() {
+        VarietyVO variety = new VarietyVO();
+        variety.setVarietyKey("OF:006327");
+        variety.setVarietyCode("006327");
+        variety.setVarietyName("易方达中债7-10年期国开行A");
+        variety.setVarietyType(VarietyType.OF);
+        variety.setCategory(FundCategory.BOND);
+        return variety;
+    }
+
+    /**
+     * 造一份债券监控总览
+     *
+     * @param alerting 是否触发换仓提醒
+     * @return 总览
+     */
+    private BondAdvisoryVO bondAdvisory(boolean alerting) {
+        BondAdvisoryVO advisory = new BondAdvisoryVO();
+        advisory.setParamUsable(Boolean.TRUE);
+        advisory.setSidewaysDaysThreshold(20);
+        advisory.setWeakSlopeThreshold(new BigDecimal("0.50"));
+        if (alerting) {
+            advisory.setAlertCount(1);
+            advisory.setSummary(List.of("006327 易方达中债：横盘，考虑换仓。横盘 25 个交易日，区间累计涨幅 +0.02%"));
+        } else {
+            advisory.setAlertCount(0);
+            advisory.setSummary(List.of("006327 易方达中债：正常，横盘 3 个交易日，年化斜率 +1.20%，未达换仓阈值"));
+        }
+        return advisory;
     }
 
     /**
