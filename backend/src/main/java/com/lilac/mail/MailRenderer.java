@@ -64,6 +64,7 @@ public class MailRenderer {
             appendGridSection(builder, content);
             appendBondSection(builder, content);
             appendIndicatorSection(builder, content);
+            appendLessonSection(builder, content);
             appendFooter(builder, content);
         }
         builder.append("</div></body></html>");
@@ -141,6 +142,14 @@ public class MailRenderer {
             lines.add("  今日无触发信号，指标数值请到页面查看。");
         }
         for (String summary : content.getIndicatorSummary()) {
+            lines.add("  " + summary);
+        }
+        lines.add("");
+        lines.add("【历史教训警示】");
+        if (content.getLessonSummary().isEmpty()) {
+            lines.add("  本次历史操作未命中追高、盲目换仓或恐慌卖出。");
+        }
+        for (String summary : content.getLessonSummary()) {
             lines.add("  " + summary);
         }
         lines.add("");
@@ -351,6 +360,26 @@ public class MailRenderer {
             builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">本次参数：")
                     .append(escape(advisory.getParamSummary())).append("</p>");
         }
+    }
+
+    /**
+     * 渲染历史教训警示段，每条都带可读的教训说明
+     *
+     * @param builder 正文构建器
+     * @param content 邮件模型
+     */
+    private void appendLessonSection(StringBuilder builder, MailContent content) {
+        builder.append("<h3 style=\"font-size:15px;margin:16px 0 6px;\">历史教训警示</h3>");
+        if (content.getLessonSummary().isEmpty()) {
+            builder.append("<p style=\"font-size:13px;color:#8a919f;margin:0 0 8px;\">")
+                    .append("本次历史操作未命中追高、盲目换仓或恐慌卖出。</p>");
+            return;
+        }
+        builder.append("<ul style=\"font-size:13px;line-height:1.8;margin:0 0 8px;padding-left:18px;\">");
+        for (String summary : content.getLessonSummary()) {
+            builder.append("<li>").append(escape(summary)).append("</li>");
+        }
+        builder.append("</ul>");
     }
 
     /**

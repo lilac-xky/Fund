@@ -8,6 +8,7 @@ import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.IndicatorAdvisoryVO;
+import com.lilac.domain.vo.LessonAdvisoryVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.EstimateConfidence;
 import com.lilac.enums.EstimateTier;
@@ -20,6 +21,7 @@ import com.lilac.service.GridAdviceService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.IndicatorService;
 import com.lilac.service.IndexDividendService;
+import com.lilac.service.LessonAdviceService;
 import com.lilac.service.VarietyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,10 +50,11 @@ class MailContentBuilderTest {
     private GridAdviceService gridAdviceService;
     private BondMonitorService bondMonitorService;
     private IndicatorService indicatorService;
+    private LessonAdviceService lessonAdviceService;
     private MailContentBuilder builder;
 
     /**
-     * 七类业务全部用桩，装配逻辑单独验证
+     * 八类业务全部用桩，装配逻辑单独验证
      */
     @BeforeEach
     void setUp() {
@@ -62,8 +65,10 @@ class MailContentBuilderTest {
         gridAdviceService = mock(GridAdviceService.class);
         bondMonitorService = mock(BondMonitorService.class);
         indicatorService = mock(IndicatorService.class);
+        lessonAdviceService = mock(LessonAdviceService.class);
         builder = new MailContentBuilder(holdingService, varietyService, dividendAdviceService,
-                indexDividendService, gridAdviceService, bondMonitorService, indicatorService);
+                indexDividendService, gridAdviceService, bondMonitorService, indicatorService,
+                lessonAdviceService);
     }
 
     /**
@@ -180,6 +185,47 @@ class MailContentBuilderTest {
         MailContent content = builder.build(TRADE_DATE, estimateWithOne());
         assertThat(content.isIndicatorAvailable()).isTrue();
         assertThat(content.getIndicatorSummary()).anySatisfy(item -> assertThat(item).contains("RSI 超买"));
+    }
+
+    /**
+     * 教训警示必须带可读说明进邮件，不能只有规则编号
+     */
+    @Test
+    @DisplayName("教训警示进邮件并带可读说明")
+    void lessonReachesMail() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+        when(dividendAdviceService.adviseAll()).thenReturn(emptyAdvisory());
+        LessonAdvisoryVO advisory = new LessonAdvisoryVO();
+        advisory.setParamUsable(Boolean.TRUE);
+        advisory.setParticipateInAlert(Boolean.TRUE);
+        advisory.setSummary(List.of("追高被套｜510300 沪深300ETF：买入价 1.20 元，高于此前 20 个交易日最高"
+                + "收盘价 1.10 元 9.09%，超过容忍幅度 3%。教训：你记录过「追高被套」"));
+        when(lessonAdviceService.advise(null)).thenReturn(advisory);
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.isLessonAvailable()).isTrue();
+        assertThat(content.getLessonSummary()).anySatisfy(item -> assertThat(item).contains("教训："));
+    }
+
+    /**
+     * 关闭「随邮件发出」后警示不得进邮件
+     */
+    @Test
+    @DisplayName("关闭教训提醒后邮件不给警示")
+    void lessonSwitchOff() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+        when(dividendAdviceService.adviseAll()).thenReturn(emptyAdvisory());
+        LessonAdvisoryVO advisory = new LessonAdvisoryVO();
+        advisory.setParamUsable(Boolean.TRUE);
+        advisory.setParticipateInAlert(Boolean.FALSE);
+        advisory.setSummary(List.of("追高被套｜510300 沪深300ETF"));
+        when(lessonAdviceService.advise(null)).thenReturn(advisory);
+
+        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        assertThat(content.isLessonAvailable()).isFalse();
+        assertThat(content.getLessonSummary()).anySatisfy(item -> assertThat(item).contains("随邮件发出"));
     }
 
     /**

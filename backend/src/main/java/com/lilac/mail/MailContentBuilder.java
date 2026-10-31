@@ -12,6 +12,7 @@ import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import com.lilac.domain.vo.IndexDividendOverviewVO;
+import com.lilac.domain.vo.LessonAdvisoryVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.service.BondMonitorService;
@@ -19,6 +20,7 @@ import com.lilac.service.DividendAdviceService;
 import com.lilac.service.GridAdviceService;
 import com.lilac.service.IndicatorService;
 import com.lilac.service.IndexDividendService;
+import com.lilac.service.LessonAdviceService;
 import com.lilac.service.HoldingService;
 import com.lilac.service.VarietyService;
 import lombok.extern.slf4j.Slf4j;
@@ -52,8 +54,10 @@ public class MailContentBuilder {
 
     private final IndicatorService indicatorService;
 
+    private final LessonAdviceService lessonAdviceService;
+
     /**
-     * 注入邮件需要的七类业务
+     * 注入邮件需要的八类业务
      *
      * @param holdingService        持仓业务
      * @param varietyService        品种业务
@@ -62,13 +66,15 @@ public class MailContentBuilder {
      * @param gridAdviceService     网格提醒业务
      * @param bondMonitorService    债券监控业务
      * @param indicatorService      技术指标业务
+     * @param lessonAdviceService   历史教训警示业务
      */
     public MailContentBuilder(HoldingService holdingService, VarietyService varietyService,
                               DividendAdviceService dividendAdviceService,
                               IndexDividendService indexDividendService,
                               GridAdviceService gridAdviceService,
                               BondMonitorService bondMonitorService,
-                              IndicatorService indicatorService) {
+                              IndicatorService indicatorService,
+                              LessonAdviceService lessonAdviceService) {
         this.holdingService = holdingService;
         this.varietyService = varietyService;
         this.dividendAdviceService = dividendAdviceService;
@@ -76,6 +82,7 @@ public class MailContentBuilder {
         this.gridAdviceService = gridAdviceService;
         this.bondMonitorService = bondMonitorService;
         this.indicatorService = indicatorService;
+        this.lessonAdviceService = lessonAdviceService;
     }
 
     /**
@@ -100,6 +107,7 @@ public class MailContentBuilder {
         fillGrid(content, varieties);
         fillBonds(content, varieties);
         fillIndicators(content, varieties);
+        fillLessons(content);
         fillDataCutoff(content, estimate, varieties);
         return content;
     }
@@ -379,6 +387,39 @@ public class MailContentBuilder {
             log.warn("技术指标装配失败，邮件里标注为不可用：{}", e.getMessage());
             content.setIndicatorAvailable(false);
             content.setIndicatorSummary(List.of("技术指标本次计算失败，请到页面查看：" + e.getMessage()));
+        }
+    }
+
+    /**
+     * 取历史教训警示，只在参数开启时进邮件，失败同样只记日志
+     *
+     * @param content 邮件模型
+     */
+    private void fillLessons(MailContent content) {
+        try {
+            LessonAdvisoryVO advisory = lessonAdviceService.advise(null);
+            if (advisory == null) {
+                content.setLessonAvailable(false);
+                content.setLessonSummary(List.of("历史教训警示本次没有返回结果，请到页面查看"));
+                return;
+            }
+            content.setLessonAdvisory(advisory);
+            if (Boolean.FALSE.equals(advisory.getParticipateInAlert())) {
+                content.setLessonAvailable(false);
+                content.setLessonSummary(List.of("教训参数已关闭「随邮件发出」，本次不在邮件里给警示"));
+                return;
+            }
+            content.setLessonAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
+            List<String> summaries = new ArrayList<>();
+            if (!content.isLessonAvailable()) {
+                summaries.add("教训警示参数不合法，本次不判定：" + join(advisory.getParamIssues()));
+            }
+            summaries.addAll(safe(advisory.getSummary()));
+            content.setLessonSummary(summaries);
+        } catch (RuntimeException e) {
+            log.warn("历史教训警示装配失败，邮件里标注为不可用：{}", e.getMessage());
+            content.setLessonAvailable(false);
+            content.setLessonSummary(List.of("历史教训警示本次取数失败，请到页面查看：" + e.getMessage()));
         }
     }
 

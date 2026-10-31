@@ -4,6 +4,7 @@ import com.lilac.domain.vo.BondAdvisoryVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.IndicatorAdvisoryVO;
+import com.lilac.domain.vo.LessonAdvisoryVO;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -117,6 +118,21 @@ public class MailContent implements Serializable {
      * 指标提醒摘要，只收有信号的标的
      */
     private List<String> indicatorSummary = new ArrayList<>();
+
+    /**
+     * 历史教训警示汇总，无命中为空
+     */
+    private LessonAdvisoryVO lessonAdvisory;
+
+    /**
+     * 教训警示参数是否可用
+     */
+    private boolean lessonAvailable = true;
+
+    /**
+     * 教训警示摘要，每条都带可读的教训说明
+     */
+    private List<String> lessonSummary = new ArrayList<>();
 
     /**
      * 行情数据日期
