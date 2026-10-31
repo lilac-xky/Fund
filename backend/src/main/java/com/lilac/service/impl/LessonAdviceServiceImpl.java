@@ -6,11 +6,13 @@ import com.lilac.adapter.quote.MarketQuoteAdapter;
 import com.lilac.domain.dto.bond.BondMonitorRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
 import com.lilac.domain.dto.lesson.LessonQueryRequest;
+import com.lilac.domain.dto.lesson.LessonTrialRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.BondMonitorVO;
 import com.lilac.domain.vo.HoldingChangeVO;
 import com.lilac.domain.vo.LessonAdvisoryVO;
 import com.lilac.domain.vo.LessonAlertVO;
+import com.lilac.domain.vo.LessonTrialVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingChangeType;
@@ -43,6 +45,11 @@ public class LessonAdviceServiceImpl implements LessonAdviceService {
     private static final int DEFAULT_DAYS = 180;
     private static final int HISTORY_BARS = 120;
 
+    /**
+     * 试算结果最多回传多少条明细，避免历史很长时把响应撑大
+     */
+    private static final int TRIAL_HIT_LIMIT = 50;
+
     @Resource
     private LessonPlanResolver lessonPlanResolver;
 
@@ -72,13 +79,129 @@ public class LessonAdviceServiceImpl implements LessonAdviceService {
         LessonPlan plan = lessonPlanResolver.resolve();
         LessonQueryRequest query = request == null ? new LessonQueryRequest() : request;
         List<HoldingChangeVO> changes = changesOf(query);
+        List<LessonAlertVO> items = collect(changes, plan, null);
+        return assemble(plan, changes.size(), items);
+    }
+
+    /**
+     * 用给定参数在历史数据上试算，不落库
+     *
+     * @param request 试算请求
+     * @return 试算结果
+     */
+    @Override
+    public LessonTrialVO trial(LessonTrialRequest request) {
+        LessonTrialRequest query = request == null ? new LessonTrialRequest() : request;
+        LessonPlan plan = planOf(query);
+        LessonQueryRequest historyQuery = new LessonQueryRequest();
+        historyQuery.setDays(query.getDays());
+        List<HoldingChangeVO> changes = changesOf(historyQuery);
+        List<LessonAlertVO> items = collect(changes, plan, query.getPattern());
+        return trialOf(plan, query.getDays(), changes.size(), items);
+    }
+
+    /**
+     * 用请求里的覆盖值拼参数，未填的字段回落到库里当前值
+     *
+     * @param request 试算请求
+     * @return 参数
+     */
+    private LessonPlan planOf(LessonTrialRequest request) {
+        LessonPlan base = lessonPlanResolver.resolve();
+        LessonPlan plan = new LessonPlan();
+        plan.setChaseTolerance(orDefault(request.getChaseTolerance(), base.getChaseTolerance()));
+        plan.setChaseWindow(orDefault(request.getChaseWindow(), base.getChaseWindow()));
+        plan.setPanicLossDays(orDefault(request.getPanicLossDays(), base.getPanicLossDays()));
+        plan.setPanicLossRate(orDefault(request.getPanicLossRate(), base.getPanicLossRate()));
+        plan.setFamiliarDays(orDefault(request.getFamiliarDays(), base.getFamiliarDays()));
+        plan.setParticipateInAlert(base.getParticipateInAlert());
+        // 试算也要过自洽校验，否则「参数很离谱却算出很多命中」会误导使用者
+        plan.setIssues(lessonPlanResolver.validate(plan));
+        return plan;
+    }
+
+    /**
+     * 取覆盖值，为空时用兜底值
+     *
+     * @param value    覆盖值
+     * @param fallback 兜底值
+     * @return 取值
+     * @param <T> 类型
+     */
+    private <T> T orDefault(T value, T fallback) {
+        return value == null ? fallback : value;
+    }
+
+    /**
+     * 跑判定并收集命中，可选只保留某一类
+     *
+     * @param changes 历史变动
+     * @param plan    参数
+     * @param only    只保留该类，为空表示全部
+     * @return 命中的警示
+     */
+    private List<LessonAlertVO> collect(List<HoldingChangeVO> changes, LessonPlan plan, LessonPattern only) {
         List<LessonAlertVO> items = new ArrayList<>();
-        if (plan.complete()) {
-            for (HoldingChangeVO change : changes) {
-                items.addAll(checkOne(change, changes, plan));
+        if (!plan.complete()) {
+            return items;
+        }
+        for (HoldingChangeVO change : changes) {
+            for (LessonAlertVO vo : checkOne(change, changes, plan)) {
+                if (only == null || (vo.getPattern() != null && vo.getPattern().equals(only.name()))) {
+                    items.add(vo);
+                }
             }
         }
-        return assemble(plan, changes.size(), items);
+        return items;
+    }
+
+    /**
+     * 把命中结果折成试算视图，参数必须回显才能复现
+     *
+     * @param plan    所用参数
+     * @param days    回看天数
+     * @param checked 检查笔数
+     * @param items   命中明细
+     * @return 试算结果
+     */
+    private LessonTrialVO trialOf(LessonPlan plan, Integer days, int checked, List<LessonAlertVO> items) {
+        LessonTrialVO vo = new LessonTrialVO();
+        vo.setChaseTolerance(plan.getChaseTolerance());
+        vo.setChaseWindow(plan.getChaseWindow());
+        vo.setPanicLossDays(plan.getPanicLossDays());
+        vo.setPanicLossRate(plan.getPanicLossRate());
+        vo.setFamiliarDays(plan.getFamiliarDays());
+        vo.setDays(days);
+        vo.setCheckedCount(checked);
+        vo.setHitCount(items.size());
+        vo.setHits(items.size() > TRIAL_HIT_LIMIT ? items.subList(0, TRIAL_HIT_LIMIT) : items);
+        vo.setPerPattern(countByPattern(items));
+        if (!plan.complete()) {
+            vo.setNote("参数不合法，未试算：" + String.join("；", plan.getIssues()));
+        } else if (checked == 0) {
+            vo.setNote("回看区间内没有历史买卖记录");
+        } else {
+            vo.setNote("回看 " + checked + " 笔变动，命中 " + items.size() + " 条");
+        }
+        return vo;
+    }
+
+    /**
+     * 按模式统计命中数，三类都要出现，便于页面并列比较
+     *
+     * @param items 命中明细
+     * @return 各类计数
+     */
+    private List<LessonTrialVO.PatternCount> countByPattern(List<LessonAlertVO> items) {
+        List<LessonTrialVO.PatternCount> counts = new ArrayList<>();
+        for (LessonPattern pattern : LessonPattern.values()) {
+            LessonTrialVO.PatternCount row = new LessonTrialVO.PatternCount();
+            row.setPattern(pattern.name());
+            row.setLabel(pattern.getLabel());
+            row.setCount((int) items.stream().filter(item -> pattern.name().equals(item.getPattern())).count());
+            counts.add(row);
+        }
+        return counts;
     }
 
     /**

@@ -1,8 +1,10 @@
 package com.lilac.controller;
 
 import com.lilac.domain.dto.lesson.LessonQueryRequest;
+import com.lilac.domain.dto.lesson.LessonTrialRequest;
 import com.lilac.domain.result.Result;
 import com.lilac.domain.vo.LessonAdvisoryVO;
+import com.lilac.domain.vo.LessonTrialVO;
 import com.lilac.service.LessonAdviceService;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,5 +28,13 @@ public class LessonController {
     @PostMapping("/list")
     public Result<LessonAdvisoryVO> list(@RequestBody(required = false) LessonQueryRequest request) {
         return Result.success(lessonAdviceService.advise(request));
+    }
+
+    /**
+     * 用给定参数在历史数据上试算，不落库，供规则页面回看是否触发
+     */
+    @PostMapping("/trial")
+    public Result<LessonTrialVO> trial(@RequestBody(required = false) LessonTrialRequest request) {
+        return Result.success(lessonAdviceService.trial(request));
     }
 }
