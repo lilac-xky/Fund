@@ -5,6 +5,7 @@ import com.lilac.constant.BondParamKey;
 import com.lilac.constant.DividendParamKey;
 import com.lilac.constant.GridParamKey;
 import com.lilac.constant.IndicatorParamKey;
+import com.lilac.constant.LessonParamKey;
 import com.lilac.constant.SettingCatalog;
 import com.lilac.enums.ParamGroup;
 import lombok.Data;
@@ -93,6 +94,24 @@ public final class SettingFieldCatalog {
         defs.add(new FieldDef(ParamGroup.ALERT, AlertParamKey.BOND_ERROR_THRESHOLD, "债券误差阈值",
                 "债券日波动极小，套用 0.30 会让阈值失去意义；默认 0.10，改这里会覆盖配置文件", "%",
                 SettingCatalog.TYPE_DECIMAL, SettingCatalog.DEFAULT_BOND_ERROR_THRESHOLD));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.CHASE_TOLERANCE, "追高容忍幅度",
+                LessonParamKey.CHASE_TOLERANCE_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                LessonParamKey.DEFAULT_CHASE_TOLERANCE));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.CHASE_WINDOW, "追高回看窗口",
+                LessonParamKey.CHASE_WINDOW_DESC, "日", SettingCatalog.TYPE_INTEGER,
+                LessonParamKey.DEFAULT_CHASE_WINDOW));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.PANIC_LOSS_DAYS, "连续亏损天数",
+                LessonParamKey.PANIC_LOSS_DAYS_DESC, "日", SettingCatalog.TYPE_INTEGER,
+                LessonParamKey.DEFAULT_PANIC_LOSS_DAYS));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.PANIC_LOSS_RATE, "累计亏损率下限",
+                LessonParamKey.PANIC_LOSS_RATE_DESC, "%", SettingCatalog.TYPE_DECIMAL,
+                LessonParamKey.DEFAULT_PANIC_LOSS_RATE));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.FAMILIAR_DAYS, "熟悉品种天数",
+                LessonParamKey.FAMILIAR_DAYS_DESC, "天", SettingCatalog.TYPE_INTEGER,
+                LessonParamKey.DEFAULT_FAMILIAR_DAYS));
+        defs.add(new FieldDef(ParamGroup.ALERT, LessonParamKey.PARTICIPATE_IN_ALERT, "教训随邮件发出",
+                LessonParamKey.PARTICIPATE_IN_ALERT_DESC, "", SettingCatalog.TYPE_BOOLEAN,
+                LessonParamKey.DEFAULT_PARTICIPATE_IN_ALERT));
         return defs;
     }
 
