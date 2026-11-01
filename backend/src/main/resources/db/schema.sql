@@ -48,11 +48,13 @@ CREATE TABLE IF NOT EXISTS holding_change (
     openDate    DATE                    DEFAULT NULL COMMENT '业务日期，买入为建仓日期，卖出为操作当日',
     holdingId   BIGINT                  DEFAULT NULL COMMENT '买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空',
     beforeShares DECIMAL(20, 4)         DEFAULT NULL COMMENT '卖出发生前的合计份额，供更正卖出时核对；买入行为空',
+    tradeNo     VARCHAR(64)             DEFAULT NULL COMMENT '来源渠道的交易号，账单导入时写入，用于跨次导入去重；手工录入为空',
     createTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updateTime  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (id),
     KEY idxChangeVarietyKey (varietyKey),
-    KEY idxChangeCreateTime (createTime)
+    KEY idxChangeCreateTime (createTime),
+    KEY idxChangeTradeNo (tradeNo)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='持仓变动历史，买入与卖出逐笔留存，不做覆盖与删除';
 

@@ -130,7 +130,9 @@ class HoldingServiceTest {
         assertThat(changes.get(0).getUnitPrice()).isEqualByComparingTo("1.5");
         assertThat(changes.get(0).getAfterShares()).isEqualByComparingTo("1000");
         assertThat(changes.get(0).getVarietyName()).isEqualTo("易方达消费行业股票");
-        assertThat(changes.get(0).getNote()).contains("110022");
+        // 备注不再塞「身份回显」，品种名称与代码可由品种行查到，留痕里只放真正的说明
+        assertThat(changes.get(0).getNote() == null
+                || !changes.get(0).getNote().contains("身份回显")).isTrue();
     }
 
     /**

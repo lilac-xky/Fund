@@ -26,6 +26,11 @@ public enum AlipayAction {
     CONVERT("转换"),
 
     /**
+     * 转换转入侧，由同一条转换行派生，账单里没有独立记录
+     */
+    CONVERT_IN("转换转入"),
+
+    /**
      * 退款，冲销同一交易号上的原动作
      */
     REFUND("退款"),

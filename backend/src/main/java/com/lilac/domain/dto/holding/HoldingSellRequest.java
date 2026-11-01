@@ -37,5 +37,15 @@ public class HoldingSellRequest implements Serializable {
      */
     private BigDecimal unitPrice;
 
+    /**
+     * 来源交易号，账单导入时带上，用于跨次导入去重
+     */
+    private String tradeNo;
+
+    /**
+     * 备注，账单导入的转换转出侧用它写明「由转换产生」，手工卖出留空
+     */
+    private String note;
+
     private static final long serialVersionUID = 1L;
 }

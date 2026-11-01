@@ -55,6 +55,9 @@ class AlipayImportServiceTest {
         when(varietyMapper.selectListByQuery(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(List.of(variety("OF:011370", "011370", "华商均衡成长混合C")));
         ReflectionTestUtils.setField(service, "varietyMapper", varietyMapper);
+
+        // 默认没有任何已导入记录，各用例按需覆盖
+        ReflectionTestUtils.setField(service, "holdingChangeMapper", importedMapper(null));
     }
 
     /**
@@ -103,20 +106,70 @@ class AlipayImportServiceTest {
     }
 
     /**
-     * 转换行即使命中也不默认可选，必须人工补份额与净值
+     * 转换行拆成转出与转入两条：转出侧待补信息，转入侧走普通买入口径
      */
     @Test
-    @DisplayName("转换行标为待补信息且不可直接勾选")
+    @DisplayName("转换行拆出转入侧，转出侧标为待补信息")
     void convertNeedsManual() {
         List<AlipayImportRow> rows = preview(row("2026010000000000000009", "2026/10/27 20:36",
                 "蚂蚁财富-华商均衡成长混合C[转换至]华商均衡成长混合A", "403.32"));
 
+        // 一条转换行必须产出两条：转出侧与转入侧，否则转入基金永远没有买入批次
+        assertThat(rows).hasSize(2);
+        AlipayImportRow out = rows.stream()
+                .filter(item -> "CONVERT".equals(item.getAction())).findFirst().orElseThrow();
+        AlipayImportRow in = rows.stream()
+                .filter(item -> "CONVERT_IN".equals(item.getAction())).findFirst().orElseThrow();
+
+        assertThat(out.getStatus()).isEqualTo("待补信息");
+        assertThat(out.getSelectable()).isFalse();
+        assertThat(out.getTargetFundName()).isEqualTo("华商均衡成长混合A");
+        assertThat(out.getReason()).contains("转换");
+
+        assertThat(in.getFundName()).isEqualTo("华商均衡成长混合A");
+        assertThat(in.getAmount()).isEqualByComparingTo("403.32");
+        assertThat(in.getTradeNo()).endsWith("#IN");
+        // 转入基金没注册时先要人选，选定注册后才走「转换转入」那段说明
+        assertThat(in.getCandidates()).isNotEmpty();
+        assertThat(in.getCandidates()).extracting(AlipayImportRow.Candidate::getFundCode)
+                .contains("011371");
+    }
+
+    /**
+     * 库里已有同交易号的变动记录时，该行直接标「已导入」且不可勾选
+     */
+    @Test
+    @DisplayName("已导入过的交易号自动标记并禁止重复勾选")
+    void importedTradeNoSkipped() {
+        // 先让桩的变动表返回一条带交易号的记录
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "holdingChangeMapper",
+                importedMapper("2026010000000000000050"));
+
+        List<AlipayImportRow> rows = preview(row("2026010000000000000050", "2026/10/12 14:21",
+                "蚂蚁财富-华商均衡成长混合C-买入", "10"));
+
         assertThat(rows).hasSize(1);
-        AlipayImportRow row = rows.get(0);
-        assertThat(row.getStatus()).isEqualTo("待补信息");
-        assertThat(row.getSelectable()).isFalse();
-        assertThat(row.getTargetFundName()).isEqualTo("华商均衡成长混合A");
-        assertThat(row.getReason()).contains("转换");
+        assertThat(rows.get(0).getStatus()).isEqualTo("已导入");
+        assertThat(rows.get(0).getSelectable()).isFalse();
+        assertThat(rows.get(0).getReason()).contains("已存在");
+    }
+
+    /**
+     * 造一个只返回指定交易号的变动表桩，传 null 表示库里还没有任何导入记录
+     *
+     * @param tradeNo 已有交易号，可为 null
+     * @return 桩
+     */
+    private com.lilac.mapper.HoldingChangeMapper importedMapper(String tradeNo) {
+        com.lilac.mapper.HoldingChangeMapper mapper = mock(com.lilac.mapper.HoldingChangeMapper.class);
+        if (tradeNo == null) {
+            when(mapper.selectListByQuery(org.mockito.ArgumentMatchers.any())).thenReturn(List.of());
+            return mapper;
+        }
+        com.lilac.domain.entity.HoldingChange change = new com.lilac.domain.entity.HoldingChange();
+        change.setTradeNo(tradeNo);
+        when(mapper.selectListByQuery(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(change));
+        return mapper;
     }
 
     /**

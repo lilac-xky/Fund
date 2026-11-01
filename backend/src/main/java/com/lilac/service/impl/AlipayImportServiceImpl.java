@@ -7,10 +7,12 @@ import com.lilac.adapter.alipay.AlipayFundOrder;
 import com.lilac.adapter.alipay.AlipayImportRow;
 import com.lilac.adapter.alipay.FundNameMatcher;
 import com.lilac.domain.entity.FundCatalog;
+import com.lilac.domain.entity.HoldingChange;
 import com.lilac.domain.entity.Variety;
 import com.lilac.enums.AlipayAction;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.exception.BusinessException;
+import com.lilac.mapper.HoldingChangeMapper;
 import com.lilac.mapper.VarietyMapper;
 import com.lilac.service.AlipayImportService;
 import com.lilac.service.FundCatalogService;
@@ -22,9 +24,11 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 支付宝账单导入实现，解析后逐行匹配基金并去重，全程只读不写持仓
@@ -68,6 +72,9 @@ public class AlipayImportServiceImpl implements AlipayImportService {
     @Resource
     private VarietyMapper varietyMapper;
 
+    @Resource
+    private HoldingChangeMapper holdingChangeMapper;
+
     /**
      * 解析账单并生成待确认清单，重复的交易号与退款行在这里被消掉
      *
@@ -84,10 +91,17 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         }
         List<AlipayFundOrder> orders = alipayFundClassifier.classify(rows);
         List<AlipayFundOrder> merged = dropRefunded(orders);
+        // 库里已有的交易号，用来把「上次已经导过」的行直接标出来，不必等人工再点清理
+        Set<String> imported = importedTradeNos();
         List<AlipayImportRow> result = new ArrayList<>();
         int seq = 0;
         for (AlipayFundOrder order : merged) {
             AlipayImportRow row = toRow(++seq, order);
+            if (imported.contains(order.getTradeNo())) {
+                row.setStatus("已导入");
+                row.setReason("这笔交易号在库里已存在，上次已经导入过，跳过即可");
+                row.setSelectable(Boolean.FALSE);
+            }
             result.add(row);
         }
         log.info("账单 {} 解析出 {} 条记录，去重抵消后剩 {} 条待确认", fileName, rows.size(),
@@ -324,6 +338,22 @@ public class AlipayImportServiceImpl implements AlipayImportService {
     }
 
     /**
+     * 取库里已有变动记录上的交易号，用于跨次导入去重
+     *
+     * @return 交易号集合
+     */
+    private Set<String> importedTradeNos() {
+        Set<String> set = new HashSet<>();
+        for (HoldingChange change : holdingChangeMapper.selectListByQuery(QueryWrapper.create()
+                .isNotNull(HoldingChange::getTradeNo))) {
+            if (change.getTradeNo() != null && !change.getTradeNo().isBlank()) {
+                set.add(change.getTradeNo());
+            }
+        }
+        return set;
+    }
+
+    /**
      * 已注册品种按 6 位代码建索引，用于判断候选能否直接落库
      *
      * @return 代码到品种
@@ -411,6 +441,9 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         }
         if (order.getAction() == AlipayAction.CASH_DIVIDEND) {
             return "现金分红只留档核对，不计入持仓与收益，避免与系统自动推算的除息重复";
+        }
+        if (order.getAction() == AlipayAction.CONVERT_IN) {
+            return "由「" + order.getNote() + "」；金额按确认日净值折算份额，与买入同口径";
         }
         return "确认日期 " + order.getConfirmDate() + "（按 15:00 口径换算）";
     }

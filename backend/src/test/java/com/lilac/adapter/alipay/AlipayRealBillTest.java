@@ -52,6 +52,11 @@ class AlipayRealBillTest {
         VarietyMapper varietyMapper = mock(VarietyMapper.class);
         when(varietyMapper.selectListByQuery(any())).thenReturn(List.of());
         ReflectionTestUtils.setField(service, "varietyMapper", varietyMapper);
+        // 库里还没有导入过的记录，全部视为新行
+        com.lilac.mapper.HoldingChangeMapper changeMapper =
+                mock(com.lilac.mapper.HoldingChangeMapper.class);
+        when(changeMapper.selectListByQuery(any())).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "holdingChangeMapper", changeMapper);
     }
 
     /**

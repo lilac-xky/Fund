@@ -45,6 +45,8 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
                 "BIGINT DEFAULT NULL COMMENT '买入对应的持仓批次主键，供更正与撤销定位；卖出与历史行为空'");
         changeColumns.put("beforeShares",
                 "DECIMAL(20, 4) DEFAULT NULL COMMENT '卖出发生前的合计份额，供更正卖出时核对；买入行为空'");
+        changeColumns.put("tradeNo",
+                "VARCHAR(64) DEFAULT NULL COMMENT '来源渠道的交易号，账单导入时写入，用于跨次导入去重；手工录入为空'");
         REQUIRED_COLUMNS.put("holding_change", changeColumns);
 
         Map<String, String> varietyColumns = new LinkedHashMap<>();

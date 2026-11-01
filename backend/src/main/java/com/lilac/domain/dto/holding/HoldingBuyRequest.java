@@ -37,5 +37,10 @@ public class HoldingBuyRequest implements Serializable {
      */
     private LocalDate openDate;
 
+    /**
+     * 来源交易号，账单导入时带上，用于跨次导入去重
+     */
+    private String tradeNo;
+
     private static final long serialVersionUID = 1L;
 }

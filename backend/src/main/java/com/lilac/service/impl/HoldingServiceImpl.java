@@ -194,10 +194,9 @@ public class HoldingServiceImpl implements HoldingService {
         holdingMapper.insertSelective(holding);
 
         BigDecimal after = totalShares(varietyKey);
-        String changeNote = note != null ? note
-                : "身份回显：" + variety.getVarietyName() + "（" + variety.getVarietyCode() + "）";
+        // 备注只在真有说明时写；「身份回显」这类可由品种行推出的信息不再塞进留痕
         saveChange(varietyKey, HoldingChangeType.BUY, figure.shares(), figure.costPrice(), after,
-                holding.getOpenDate(), changeNote, holding.getId());
+                holding.getOpenDate(), note, holding.getId(), null, request.getTradeNo());
         log.info("买入入库 varietyKey={} shares={} cost={} 金额={}", varietyKey,
                 figure.shares(), figure.costPrice(), request.getAmount());
         return BeanUtil.copyProperties(holding, HoldingVO.class);
@@ -347,8 +346,12 @@ public class HoldingServiceImpl implements HoldingService {
                 ? "按订单净值 " + plain(request.getUnitPrice()) + " 元/份记账，扣减 "
                         + String.join("、", deductNotes)
                 : "按先进先出扣减 " + String.join("、", deductNotes);
+        // 账单导入的转换转出侧走的是卖出接口，备注要写明来由，否则历史里看着像普通卖出
+        if (request.getNote() != null && !request.getNote().isBlank()) {
+            priceNote = request.getNote().strip() + "；" + priceNote;
+        }
         saveChange(varietyKey, HoldingChangeType.SELL, sellShares, avgPrice, after,
-                tradeDate, priceNote, null, available);
+                tradeDate, priceNote, null, available, request.getTradeNo());
         log.info("卖出扣减 varietyKey={} shares={} 均价={} 卖出日={}", varietyKey, sellShares,
                 avgPrice, tradeDate);
         // 只返回仍持有中的记录，已清仓的留在历史里
@@ -1279,7 +1282,28 @@ public class HoldingServiceImpl implements HoldingService {
     private void saveChange(String varietyKey, HoldingChangeType type, BigDecimal shares, BigDecimal unitPrice,
                             BigDecimal after, LocalDate openDate, String note, Long holdingId,
                             BigDecimal beforeShares) {
+        saveChange(varietyKey, type, shares, unitPrice, after, openDate, note, holdingId, beforeShares, null);
+    }
+
+    /**
+     * 写入一条变动历史并记下来源交易号，账单导入时用它做跨次去重
+     *
+     * @param varietyKey    品种业务主键
+     * @param type          变动类型
+     * @param shares        变动份额
+     * @param unitPrice     成交单价
+     * @param after         变动后合计份额
+     * @param openDate      业务日期
+     * @param note          备注
+     * @param holdingId     对应的持仓批次主键，可为空
+     * @param beforeShares  卖出前的合计份额，买入传 null
+     * @param tradeNo       来源交易号，手工录入传 null
+     */
+    private void saveChange(String varietyKey, HoldingChangeType type, BigDecimal shares, BigDecimal unitPrice,
+                            BigDecimal after, LocalDate openDate, String note, Long holdingId,
+                            BigDecimal beforeShares, String tradeNo) {
         HoldingChange change = new HoldingChange();
+        change.setTradeNo(tradeNo == null || tradeNo.isBlank() ? null : tradeNo.strip());
         change.setVarietyKey(varietyKey);
         change.setChangeType(type);
         change.setShares(shares);

@@ -47,6 +47,11 @@ public class AlipayFundClassifier {
     private static final Pattern CONVERT_SPLIT = Pattern.compile("\\[转换至\\]");
 
     /**
+     * 转换转入侧的交易号后缀，与转出侧区分开
+     */
+    private static final String IN_SUFFIX = "#IN";
+
+    /**
      * 退款类标记，命中即视为冲销而非新动作
      */
     private static final List<String> REFUND_WORDS = List.of("退款", "撤单");
@@ -57,7 +62,7 @@ public class AlipayFundClassifier {
     private static final List<String> IGNORE_WORDS = List.of("余额宝-", "收益发放", "转账收款");
 
     /**
-     * 把账单行逐条识别为基金动作，一条原始行最多产出一个动作
+     * 把账单行逐条识别为基金动作；转换行会产出转出与转入两个动作
      *
      * @param rows 账单行
      * @return 识别结果，无法归类的也保留，action 为 UNKNOWN
@@ -90,8 +95,33 @@ public class AlipayFundClassifier {
                 order.setRefundedTradeNo(row.getTradeNo());
             }
             orders.add(order);
+            // 转换行的转入侧在账单里没有独立记录，这里补一条，否则转入基金永远没有买入批次
+            if (order.getAction() == AlipayAction.CONVERT
+                    && order.getTargetFundName() != null && !order.getTargetFundName().isBlank()) {
+                orders.add(invertedSide(order));
+            }
         }
         return orders;
+    }
+
+    /**
+     * 由转换行派生转入侧的动作：金额相同，方向相反，标记为转换转入
+     *
+     * @param order 转出侧动作
+     * @return 转入侧动作
+     */
+    private AlipayFundOrder invertedSide(AlipayFundOrder order) {
+        AlipayFundOrder target = new AlipayFundOrder();
+        // 用「交易号#IN」区分，避免与转出侧在按交易号归组时被当成重复行删掉
+        target.setTradeNo(order.getTradeNo() + IN_SUFFIX);
+        target.setProductName(order.getProductName());
+        target.setAmount(order.getAmount());
+        target.setOrderTime(order.getOrderTime());
+        target.setConfirmDate(order.getConfirmDate());
+        target.setFundName(order.getTargetFundName());
+        target.setAction(AlipayAction.CONVERT_IN);
+        target.setNote("由「" + order.getFundName() + "」转换转入");
+        return target;
     }
 
     /**

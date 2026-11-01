@@ -60,4 +60,9 @@ public class HoldingChange extends BaseEntity {
      * 卖出发生前的合计份额，供更正卖出时核对与回放
      */
     private BigDecimal beforeShares;
+
+    /**
+     * 来源渠道的交易号，账单导入时写入，用于跨次导入去重；手工录入为空
+     */
+    private String tradeNo;
 }
