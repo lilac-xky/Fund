@@ -25,6 +25,7 @@ import * as sourceHealthController from './sourceHealthController'
 import * as screenshotController from './screenshotController'
 import * as operationLogController from './operationLogController'
 import * as alipayImportController from './alipayImportController'
+import * as maintenanceController from './maintenanceController'
 export default {
   authController,
   bondController,
@@ -49,4 +50,5 @@ export default {
   screenshotController,
   operationLogController,
   alipayImportController,
+  maintenanceController,
 }

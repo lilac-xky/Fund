@@ -493,6 +493,27 @@ declare namespace API {
     reasons?: string[]
   }
 
+  type DuplicateCleanVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 品种名称 */
+    varietyName?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 份额 */
+    shares?: number
+    /** 成本价 */
+    costPrice?: number
+    /** 建仓日期 */
+    openDate?: string
+    /** 该组合出现的次数 */
+    count?: number
+    /** 将保留的批次主键，取最早创建的那条 */
+    keepId?: number
+    /** 将删除的批次主键 */
+    removeIds?: string
+  }
+
   type EstimateBatchRequest = {
     /** 品种业务主键列表，为空时按全部 HOLDING 状态的持仓预估 */
     varietyKeys?: string[]
@@ -2155,6 +2176,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: DividendWatchVO[]
+  }
+
+  type ResultListDuplicateCleanVO = {
+    code?: number
+    msg?: string
+    data?: DuplicateCleanVO[]
   }
 
   type ResultListEstimateErrorTrendVO = {
