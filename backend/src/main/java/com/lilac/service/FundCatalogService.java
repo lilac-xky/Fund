@@ -55,4 +55,14 @@ public interface FundCatalogService {
      * @return 缓存行列表
      */
     List<FundCatalog> searchByName(String nameKeyword, int limit);
+
+    /**
+     * 取全集里全部名称与代码，供导入时本地做名称相似度比对
+     *
+     * <p>SQL 的 LIKE 要求连续子串，中间插字的名字查不到；短关键词又会命中上千条无法截断取舍，
+     * 故整份拉回内存比对。全集约 2.8 万条，只在导入预览时调一次。</p>
+     *
+     * @return 全集的代码与名称
+     */
+    List<FundCatalog> listAllNames();
 }

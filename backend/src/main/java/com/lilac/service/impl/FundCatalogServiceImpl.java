@@ -157,6 +157,18 @@ public class FundCatalogServiceImpl implements FundCatalogService {
     }
 
     /**
+     * 取全集全部名称与代码，供名称相似度比对；只查两列，不拉类型等大字段
+     *
+     * @return 全集的代码与名称
+     */
+    @Override
+    public List<FundCatalog> listAllNames() {
+        return fundCatalogMapper.selectListByQuery(QueryWrapper.create()
+                .select(FundCatalog::getFundCode, FundCatalog::getFundName)
+                .orderBy(FundCatalog::getFundCode, true));
+    }
+
+    /**
      * 全量替换缓存表，必须在事务内调用
      *
      * @param items 全集数组
