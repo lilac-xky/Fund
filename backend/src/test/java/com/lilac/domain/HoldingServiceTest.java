@@ -8,6 +8,8 @@ import com.lilac.adapter.quote.MarketQuoteAdapter;
 import com.lilac.domain.dto.fund.FundConfirmRequest;
 import com.lilac.domain.dto.holding.HoldingBuyRequest;
 import com.lilac.domain.dto.holding.HoldingChangeQueryRequest;
+import com.lilac.domain.dto.holding.HoldingChangeRevokeRequest;
+import com.lilac.domain.dto.holding.HoldingChangeUpdateRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.holding.HoldingSellRequest;
 import com.lilac.domain.entity.FundCatalog;
@@ -330,6 +332,104 @@ class HoldingServiceTest {
             request.setVarietyType(VarietyType.ETF);
         }
         return fundDisambiguateService.confirm(request);
+    }
+
+    /**
+     * 买入记录可以改份额与成本价，批次要同步跟着改
+     */
+    @Test
+    @DisplayName("买入变动可更正份额与成本价")
+    void updateBuyChangeSyncsBatch() {
+        VarietyVO variety = confirmVariety("110022");
+        buy(variety.getVarietyKey(), "300", "1.0", LocalDate.of(2026, 1, 5));
+
+        HoldingChangeQueryRequest query = new HoldingChangeQueryRequest();
+        query.setVarietyKey(variety.getVarietyKey());
+        query.setChangeType(HoldingChangeType.BUY);
+        List<HoldingChangeVO> changes = holdingService.listChanges(query);
+        assertThat(changes).isNotEmpty();
+
+        HoldingChangeUpdateRequest request = new HoldingChangeUpdateRequest();
+        request.setId(Long.valueOf(changes.get(0).getId()));
+        request.setShares(new BigDecimal("500"));
+        request.setUnitPrice(new BigDecimal("1.2"));
+        assertThat(holdingService.updateSellChange(request)).isTrue();
+
+        HoldingSummaryVO summary = holdingService.summaryOf(variety.getVarietyKey());
+        assertThat(summary.getTotalShares()).isEqualByComparingTo("500");
+        assertThat(summary.getAvgCostPrice()).isEqualByComparingTo("1.2");
+    }
+
+    /**
+     * 卖出记录不能直接删除，必须走撤销批次
+     */
+    @Test
+    @DisplayName("卖出变动拒绝直接删除")
+    void deleteSellChangeRejected() {
+        VarietyVO variety = confirmVariety("110022");
+        buy(variety.getVarietyKey(), "300", "1.0", null);
+        HoldingSellRequest sell = new HoldingSellRequest();
+        sell.setVarietyKey(variety.getVarietyKey());
+        sell.setShares(new BigDecimal("100"));
+        holdingService.sell(sell);
+
+        HoldingChangeQueryRequest query = new HoldingChangeQueryRequest();
+        query.setVarietyKey(variety.getVarietyKey());
+        query.setChangeType(HoldingChangeType.SELL);
+        List<HoldingChangeVO> changes = holdingService.listChanges(query);
+
+        HoldingChangeRevokeRequest request = new HoldingChangeRevokeRequest();
+        request.setId(Long.valueOf(changes.get(0).getId()));
+        assertThatThrownBy(() -> holdingService.deleteChange(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持直接删除");
+    }
+
+    /**
+     * 未被卖出扣减过的买入记录可以删除，批次一起去掉
+     */
+    @Test
+    @DisplayName("未被卖出的买入变动可删除")
+    void deleteBuyChangeRemovesBatch() {
+        VarietyVO variety = confirmVariety("110022");
+        buy(variety.getVarietyKey(), "300", "1.0", null);
+
+        HoldingChangeQueryRequest query = new HoldingChangeQueryRequest();
+        query.setVarietyKey(variety.getVarietyKey());
+        query.setChangeType(HoldingChangeType.BUY);
+        List<HoldingChangeVO> changes = holdingService.listChanges(query);
+
+        HoldingChangeRevokeRequest request = new HoldingChangeRevokeRequest();
+        request.setId(Long.valueOf(changes.get(0).getId()));
+        assertThat(holdingService.deleteChange(request)).isTrue();
+
+        HoldingSummaryVO summary = holdingService.summaryOf(variety.getVarietyKey());
+        assertThat(summary.getHolding()).isFalse();
+    }
+
+    /**
+     * 已清仓品种要能在专门的列表里查到，否则清仓后就再也改不了
+     */
+    @Test
+    @DisplayName("已清仓品种可从专门列表查到")
+    void closedListContainsSoldOut() {
+        VarietyVO variety = confirmVariety("110022");
+        buy(variety.getVarietyKey(), "300", "1.0", null);
+        HoldingSellRequest sell = new HoldingSellRequest();
+        sell.setVarietyKey(variety.getVarietyKey());
+        sell.setShares(new BigDecimal("300"));
+        holdingService.sell(sell);
+
+        List<HoldingVarietyVO> closed = holdingService.closed();
+        assertThat(closed).extracting(HoldingVarietyVO::getVarietyKey)
+                .contains(variety.getVarietyKey());
+        HoldingVarietyVO row = closed.stream()
+                .filter(item -> variety.getVarietyKey().equals(item.getVarietyKey()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(row.getBuySharesTotal()).isEqualByComparingTo("300");
+        assertThat(row.getSellSharesTotal()).isEqualByComparingTo("300");
+        assertThat(row.getNote()).contains("已清仓");
     }
 
     /**

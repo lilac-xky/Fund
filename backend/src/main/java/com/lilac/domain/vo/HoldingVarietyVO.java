@@ -157,5 +157,20 @@ public class HoldingVarietyVO implements Serializable {
      */
     private List<HoldingBatchVO> batches;
 
+    /**
+     * 累计买入份额，已清仓列表里用它回看历史
+     */
+    private BigDecimal buySharesTotal;
+
+    /**
+     * 累计卖出份额，已清仓列表里用它回看历史
+     */
+    private BigDecimal sellSharesTotal;
+
+    /**
+     * 行说明，如已清仓的买卖合计
+     */
+    private String note;
+
     private static final long serialVersionUID = 1L;
 }

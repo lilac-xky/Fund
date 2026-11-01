@@ -13,6 +13,7 @@ import com.lilac.domain.vo.HoldingChangeVO;
 import com.lilac.domain.vo.HoldingConvertVO;
 import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
+import com.lilac.domain.vo.HoldingVarietyVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.service.HoldingService;
@@ -51,6 +52,14 @@ public class HoldingController {
     @GetMapping("/overview")
     public Result<HoldingOverviewVO> overview() {
         return Result.success(holdingService.overview());
+    }
+
+    /**
+     * 已清仓品种列表，供回溯清仓基金的历史买卖并更正
+     */
+    @GetMapping("/closed")
+    public Result<List<HoldingVarietyVO>> closed() {
+        return Result.success(holdingService.closed());
     }
 
     /**
@@ -103,11 +112,19 @@ public class HoldingController {
     }
 
     /**
-     * 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减
+     * 更正某条变动记录：卖出改业务日期与订单净值，买入改份额、成本价与日期
      */
     @PostMapping("/change/update")
     public Result<Boolean> updateChange(@RequestBody HoldingChangeUpdateRequest request) {
         return Result.success(holdingService.updateSellChange(request));
+    }
+
+    /**
+     * 删除某条变动记录，买入同时删掉对应批次；卖出须走撤销批次
+     */
+    @PostMapping("/change/delete")
+    public Result<Boolean> deleteChange(@RequestBody HoldingChangeRevokeRequest request) {
+        return Result.success(holdingService.deleteChange(request));
     }
 
     /**

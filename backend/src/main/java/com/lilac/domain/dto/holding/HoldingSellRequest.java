@@ -18,9 +18,14 @@ public class HoldingSellRequest implements Serializable {
     private String varietyKey;
 
     /**
-     * 卖出份额，必须为正数且不超过当前持有合计
+     * 卖出份额，必须为正数且不超过当前持有合计；与 amount 二选一
      */
     private BigDecimal shares;
+
+    /**
+     * 卖出金额，元；支付宝订单只有金额时用它，份额按卖出日净值反算
+     */
+    private BigDecimal amount;
 
     /**
      * 卖出业务日期，为空时取当日；补录早前的卖出用它还原真实顺序

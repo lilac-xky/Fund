@@ -55,7 +55,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * 持仓业务实现，买入校验、卖出先进先出、批次更正撤销与变动历史留痕
@@ -279,7 +281,9 @@ public class HoldingServiceImpl implements HoldingService {
         ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR);
         String varietyKey = trimKey(request.getVarietyKey());
         ThrowUtils.throwIf(varietyKey == null, HttpsCodeEnum.PARAMS_ERROR, "品种业务主键不能为空");
-        ThrowUtils.throwIf(request.getShares() == null || request.getShares().signum() <= 0,
+        // 支付宝订单只有金额，缺份额时按卖出日净值反算，与买入的「金额折算」对称
+        BigDecimal sellShares = resolveSellShares(request, varietyKey);
+        ThrowUtils.throwIf(sellShares == null || sellShares.signum() <= 0,
                 HttpsCodeEnum.PARAMS_ERROR, "卖出份额必须为正数");
         // 补录时可以指定过去的成交日，缺省仍是当天
         LocalDate tradeDate = request.getTradeDate() == null ? LocalDate.now() : request.getTradeDate();
@@ -296,7 +300,7 @@ public class HoldingServiceImpl implements HoldingService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         ThrowUtils.throwIf(available.signum() <= 0, HttpsCodeEnum.PARAMS_ERROR,
                 "品种 " + varietyKey + " 没有持有中的持仓，无法卖出");
-        ThrowUtils.throwIf(request.getShares().compareTo(available) > 0, HttpsCodeEnum.PARAMS_ERROR,
+        ThrowUtils.throwIf(sellShares.compareTo(available) > 0, HttpsCodeEnum.PARAMS_ERROR,
                 "卖出份额超过当前持有 " + plain(available) + " 份");
 
         // 先进先出：按建仓日期从早到晚逐条扣减，补录早前的卖出只扣当时已存在的批次
@@ -308,12 +312,12 @@ public class HoldingServiceImpl implements HoldingService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         ThrowUtils.throwIf(deductable.signum() <= 0, HttpsCodeEnum.PARAMS_ERROR,
                 tradeDate + " 当日尚无已建仓的批次，无法按该日期卖出");
-        ThrowUtils.throwIf(request.getShares().compareTo(deductable) > 0, HttpsCodeEnum.PARAMS_ERROR,
+        ThrowUtils.throwIf(sellShares.compareTo(deductable) > 0, HttpsCodeEnum.PARAMS_ERROR,
                 "按卖出日 " + tradeDate + " 口径只有 " + plain(deductable) + " 份已建仓，"
                         + "请核对卖出日期或份额");
 
         // 先进先出：按建仓日期从早到晚逐条扣减
-        BigDecimal remaining = request.getShares();
+        BigDecimal remaining = sellShares;
         List<String> deductNotes = new ArrayList<>();
         BigDecimal weightedCost = BigDecimal.ZERO;
         for (Holding holding : deductables) {
@@ -337,20 +341,48 @@ public class HoldingServiceImpl implements HoldingService {
 
         BigDecimal avgPrice = request.getUnitPrice() != null && request.getUnitPrice().signum() > 0
                 ? request.getUnitPrice()
-                : weightedCost.divide(request.getShares(), PRICE_SCALE, RoundingMode.HALF_UP);
+                : weightedCost.divide(sellShares, PRICE_SCALE, RoundingMode.HALF_UP);
         BigDecimal after = totalShares(varietyKey);
         String priceNote = request.getUnitPrice() != null && request.getUnitPrice().signum() > 0
                 ? "按订单净值 " + plain(request.getUnitPrice()) + " 元/份记账，扣减 "
                         + String.join("、", deductNotes)
                 : "按先进先出扣减 " + String.join("、", deductNotes);
-        saveChange(varietyKey, HoldingChangeType.SELL, request.getShares(), avgPrice, after,
+        saveChange(varietyKey, HoldingChangeType.SELL, sellShares, avgPrice, after,
                 tradeDate, priceNote, null, available);
-        log.info("卖出扣减 varietyKey={} shares={} 均价={} 卖出日={}", varietyKey, request.getShares(),
+        log.info("卖出扣减 varietyKey={} shares={} 均价={} 卖出日={}", varietyKey, sellShares,
                 avgPrice, tradeDate);
         // 只返回仍持有中的记录，已清仓的留在历史里
         return listHolding(byVariety(varietyKey)).stream()
                 .filter(holding -> holding.getStatus() == HoldingStatus.HOLDING)
                 .toList();
+    }
+
+    /**
+     * 解析卖出份额：手填份额优先，只有金额时按卖出日当日或之前最近净值反算
+     *
+     * @param request    卖出请求
+     * @param varietyKey 品种业务主键
+     * @return 份额，无法确定返回 null
+     */
+    private BigDecimal resolveSellShares(HoldingSellRequest request, String varietyKey) {
+        if (request.getShares() != null && request.getShares().signum() > 0) {
+            return request.getShares();
+        }
+        if (request.getAmount() == null || request.getAmount().signum() <= 0) {
+            return null;
+        }
+        Variety variety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(Variety::getVarietyKey, varietyKey));
+        if (variety == null) {
+            return null;
+        }
+        LocalDate tradeDate = request.getTradeDate() == null ? LocalDate.now() : request.getTradeDate();
+        FundNetWorthPoint point = netWorthOnOrBefore(variety, tradeDate);
+        if (point == null || point.getUnitNetWorth() == null
+                || point.getUnitNetWorth().signum() <= 0) {
+            return null;
+        }
+        return request.getAmount().divide(point.getUnitNetWorth(), 2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -435,15 +467,21 @@ public class HoldingServiceImpl implements HoldingService {
     public boolean updateSellChange(HoldingChangeUpdateRequest request) {
         ThrowUtils.throwIf(request == null || request.getId() == null, HttpsCodeEnum.PARAMS_ERROR,
                 "变动记录主键不能为空");
-        ThrowUtils.throwIf(request.getTradeDate() == null && request.getUnitPrice() == null,
-                HttpsCodeEnum.PARAMS_ERROR, "卖出日期与订单净值至少填一个");
+        ThrowUtils.throwIf(request.getTradeDate() == null && request.getUnitPrice() == null
+                        && request.getShares() == null,
+                HttpsCodeEnum.PARAMS_ERROR, "日期、净值与份额至少填一个");
         HoldingChange change = holdingChangeMapper.selectOneById(request.getId());
         ThrowUtils.throwIf(change == null, HttpsCodeEnum.NOT_FOUND_ERROR,
                 "变动记录 " + request.getId() + " 不存在");
-        ThrowUtils.throwIf(change.getChangeType() != HoldingChangeType.SELL,
-                HttpsCodeEnum.PARAMS_ERROR, "只有卖出记录支持更正；买入请用「改批次」");
         ThrowUtils.throwIf(request.getTradeDate() != null && request.getTradeDate().isAfter(LocalDate.now()),
-                HttpsCodeEnum.PARAMS_ERROR, "卖出日期不能晚于今天");
+                HttpsCodeEnum.PARAMS_ERROR, "业务日期不能晚于今天");
+
+        // 买入直接改对应批次，卖出只改留痕口径（份额扣减已发生，重算会重写历史批次归属）
+        if (change.getChangeType() == HoldingChangeType.BUY) {
+            return updateBuyChange(change, request);
+        }
+        ThrowUtils.throwIf(request.getShares() != null, HttpsCodeEnum.PARAMS_ERROR,
+                "卖出记录的份额不支持在此修改；如需调整请撤销批次后重录");
 
         LocalDate oldDate = change.getOpenDate();
         BigDecimal oldPrice = change.getUnitPrice();
@@ -461,6 +499,80 @@ public class HoldingServiceImpl implements HoldingService {
                         + "，净值 " + plain(oldPrice) + " → " + plain(change.getUnitPrice()),
                 null, change.getBeforeShares());
         log.info("卖出记录已更正 id={} key={}", change.getId(), change.getVarietyKey());
+        return true;
+    }
+
+    /**
+     * 更正买入记录：同步改对应持仓批次的份额、成本价与建仓日，并追加说明留痕
+     *
+     * @param change  变动记录
+     * @param request 更正请求
+     * @return 是否成功
+     */
+    private boolean updateBuyChange(HoldingChange change, HoldingChangeUpdateRequest request) {
+        if (request.getShares() != null) {
+            ThrowUtils.throwIf(request.getShares().signum() <= 0, HttpsCodeEnum.PARAMS_ERROR,
+                    "份额必须为正数");
+            change.setShares(request.getShares());
+        }
+        if (request.getUnitPrice() != null) {
+            ThrowUtils.throwIf(request.getUnitPrice().signum() <= 0, HttpsCodeEnum.PARAMS_ERROR,
+                    "成本价必须为正数");
+            change.setUnitPrice(request.getUnitPrice());
+        }
+        if (request.getTradeDate() != null) {
+            change.setOpenDate(request.getTradeDate());
+        }
+        holdingChangeMapper.update(change);
+        // 买入对应一个持仓批次，批次必须同步改，否则总览与历史会对不上；updateBatch 自带更正留痕
+        if (change.getHoldingId() != null) {
+            Holding holding = holdingMapper.selectOneById(change.getHoldingId());
+            if (holding != null) {
+                LocalDate date = request.getTradeDate() != null ? request.getTradeDate()
+                        : holding.getOpenDate();
+                HoldingBatchUpdateRequest batch = new HoldingBatchUpdateRequest();
+                batch.setId(holding.getId());
+                batch.setShares(change.getShares());
+                batch.setCostPrice(change.getUnitPrice());
+                batch.setOpenDate(date);
+                updateBatch(batch);
+            }
+        }
+        log.info("买入记录已更正 id={} key={}", change.getId(), change.getVarietyKey());
+        return true;
+    }
+
+    /**
+     * 删除一条变动记录：买入同时删掉对应批次，卖出拒绝删除以免份额账目错乱
+     *
+     * @param request 删除请求
+     * @return 是否成功
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean deleteChange(HoldingChangeRevokeRequest request) {
+        ThrowUtils.throwIf(request == null || request.getId() == null, HttpsCodeEnum.PARAMS_ERROR,
+                "变动记录主键不能为空");
+        HoldingChange change = holdingChangeMapper.selectOneById(request.getId());
+        ThrowUtils.throwIf(change == null, HttpsCodeEnum.NOT_FOUND_ERROR,
+                "变动记录 " + request.getId() + " 不存在");
+        // 卖出已经按 FIFO 扣减过批次，直接删记录会让份额对不上，必须走撤销批次
+        ThrowUtils.throwIf(change.getChangeType() == HoldingChangeType.SELL,
+                HttpsCodeEnum.PARAMS_ERROR,
+                "卖出记录不支持直接删除；请到「改批次」里撤销对应批次，或先撤掉后续卖出再改");
+
+        if (change.getHoldingId() != null) {
+            // 逻辑删除批次；批次已卖出时同样拒绝，保证份额账目自洽
+            Holding holding = holdingMapper.selectOneById(change.getHoldingId());
+            if (holding != null) {
+                ThrowUtils.throwIf(soldShares(holding).signum() > 0, HttpsCodeEnum.PARAMS_ERROR,
+                        "该买入已被卖出扣减过，不能删除；请先撤掉后续卖出");
+                holdingMapper.deleteById(holding.getId());
+            }
+        }
+        holdingChangeMapper.deleteById(change.getId());
+        log.info("变动记录已删除 id={} key={} 类型={}", change.getId(), change.getVarietyKey(),
+                change.getChangeType());
         return true;
     }
 
@@ -546,6 +658,82 @@ public class HoldingServiceImpl implements HoldingService {
             return row;
         }
         return buildVarietyRow(varietyKey, holdings);
+    }
+
+    /**
+     * 已清仓品种列表：持仓全部为 CLOSED 的品种，带出最后清仓日与历史买卖合计
+     *
+     * <p>清仓后品种会从总览里消失，历史买卖就再也改不了；这个列表把它们找回来。</p>
+     *
+     * @return 已清仓品种
+     */
+    @Override
+    public List<HoldingVarietyVO> closed() {
+        // 先取所有持仓行的品种，再排除仍有持有中批次的
+        List<Holding> holders = holdingMapper.selectListByQuery(QueryWrapper.create()
+                .eq(Holding::getStatus, HoldingStatus.HOLDING));
+        Set<String> holdingKeys = holders.stream().map(Holding::getVarietyKey)
+                .collect(Collectors.toSet());
+        List<Holding> closedRows = holdingMapper.selectListByQuery(QueryWrapper.create()
+                .eq(Holding::getStatus, HoldingStatus.CLOSED));
+        Map<String, List<Holding>> grouped = new LinkedHashMap<>();
+        for (Holding row : closedRows) {
+            if (holdingKeys.contains(row.getVarietyKey())) {
+                continue;
+            }
+            grouped.computeIfAbsent(row.getVarietyKey(), key -> new ArrayList<>()).add(row);
+        }
+        List<HoldingVarietyVO> result = new ArrayList<>();
+        for (Map.Entry<String, List<Holding>> entry : grouped.entrySet()) {
+            result.add(closedRowOf(entry.getKey()));
+        }
+        // 最后清仓的排前面，最近处理过的先看到
+        result.sort(Comparator.comparing(
+                (HoldingVarietyVO row) -> row.getLastOpenDate() == null ? LocalDate.MIN
+                        : row.getLastOpenDate()).reversed());
+        return result;
+    }
+
+    /**
+     * 拼一条已清仓品种的行：名称类型照品种表，份额与收益按变动历史合计
+     *
+     * @param varietyKey 品种业务主键
+     * @return 已清仓行
+     */
+    private HoldingVarietyVO closedRowOf(String varietyKey) {
+        HoldingVarietyVO row = new HoldingVarietyVO();
+        row.setVarietyKey(varietyKey);
+        row.setStatus(HoldingStatus.CLOSED);
+        row.setTotalShares(BigDecimal.ZERO);
+        Variety variety = varietyMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(Variety::getVarietyKey, varietyKey));
+        if (variety != null) {
+            row.setVarietyName(variety.getVarietyName());
+            row.setVarietyCode(variety.getVarietyCode());
+            row.setVarietyType(variety.getVarietyType());
+            row.setCategory(variety.getCategory());
+            row.setCategoryLabel(variety.getCategory() == null ? null : variety.getCategory().getLabel());
+            row.setConfirmed(variety.getConfirmed());
+        }
+        List<HoldingChange> changes = holdingChangeMapper.selectListByQuery(QueryWrapper.create()
+                .eq(HoldingChange::getVarietyKey, varietyKey)
+                .orderBy(HoldingChange::getOpenDate, false));
+        BigDecimal buyTotal = changes.stream()
+                .filter(change -> change.getChangeType() == HoldingChangeType.BUY)
+                .map(HoldingChange::getShares)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal sellTotal = changes.stream()
+                .filter(change -> change.getChangeType() == HoldingChangeType.SELL)
+                .map(HoldingChange::getShares)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        row.setBuySharesTotal(buyTotal);
+        row.setSellSharesTotal(sellTotal);
+        row.setLastOpenDate(changes.isEmpty() ? null : changes.get(0).getOpenDate());
+        row.setNote("已清仓：累计买入 " + plain(buyTotal) + " 份、卖出 " + plain(sellTotal)
+                + " 份，共 " + changes.size() + " 条变动记录");
+        return row;
     }
 
     /**

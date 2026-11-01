@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 卖出记录更正请求，只改业务日期与订单净值，不重算份额扣减
+ * 变动记录更正请求，卖出改日期与净值，买入改份额与净值
  */
 @Data
 public class HoldingChangeUpdateRequest implements Serializable {
@@ -18,14 +18,19 @@ public class HoldingChangeUpdateRequest implements Serializable {
     private Long id;
 
     /**
-     * 更正后的卖出日期，为空则不改
+     * 更正后的业务日期，为空则不改
      */
     private LocalDate tradeDate;
 
     /**
-     * 更正后的卖出净值，为空则不改
+     * 更正后的成交净值，为空则不改
      */
     private BigDecimal unitPrice;
+
+    /**
+     * 更正后的份额，只对买入生效，为空则不改
+     */
+    private BigDecimal shares;
 
     private static final long serialVersionUID = 1L;
 }

@@ -12,6 +12,7 @@ import com.lilac.domain.vo.HoldingChangeVO;
 import com.lilac.domain.vo.HoldingConvertVO;
 import com.lilac.domain.vo.HoldingOverviewVO;
 import com.lilac.domain.vo.HoldingSummaryVO;
+import com.lilac.domain.vo.HoldingVarietyVO;
 import com.lilac.domain.vo.HoldingVO;
 
 import java.util.List;
@@ -70,12 +71,20 @@ public interface HoldingService {
     boolean revokeBatch(HoldingChangeRevokeRequest request);
 
     /**
-     * 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减
+     * 更正某条变动记录：卖出改业务日期与订单净值，买入改份额、成本价与日期
      *
      * @param request 更正请求
      * @return 是否成功
      */
     boolean updateSellChange(HoldingChangeUpdateRequest request);
+
+    /**
+     * 删除某条变动记录，买入同时删掉对应批次；卖出拒绝，须走撤销批次
+     *
+     * @param request 删除请求
+     * @return 是否成功
+     */
+    boolean deleteChange(HoldingChangeRevokeRequest request);
 
     /**
      * 查询持仓变动历史，按时间倒序
@@ -91,6 +100,13 @@ public interface HoldingService {
      * @return 总览视图
      */
     HoldingOverviewVO overview();
+
+    /**
+     * 已清仓品种列表，带出最后一次清仓日与历史买卖合计，供回溯与更正
+     *
+     * @return 已清仓品种
+     */
+    List<HoldingVarietyVO> closed();
 
     /**
      * 按品种业务主键汇总持有中份额与加权成本，供消歧候选回显
