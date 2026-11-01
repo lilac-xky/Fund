@@ -402,6 +402,43 @@
               <span v-html="ICONS.archive" />
             </template>
 
+            <!-- 重复批次不修会让份额虚高、收益算错，入口放在这里，平时不占视线 -->
+            <div class="app-importbar">
+              <AppButton size="sm" :disabled="dupLoading" @click="onPreviewDuplicate">
+                {{ dupLoading ? '检查中…' : '检查重复批次' }}
+              </AppButton>
+              <AppButton
+                v-if="dupRows.length"
+                size="sm"
+                :disabled="dupCleaning"
+                @click="onCleanDuplicate"
+              >
+                {{ dupCleaning ? '清理中…' : `清理 ${dupRows.length} 组重复` }}
+              </AppButton>
+              <span v-if="dupNote" class="app-importbar__note">{{ dupNote }}</span>
+            </div>
+
+            <div v-if="dupRows.length" class="app-orders">
+              <div
+                v-for="row in dupRows"
+                :key="`${row.varietyKey}-${row.keepId}`"
+                class="app-order"
+              >
+                <div class="app-order__main">
+                  <div class="app-order__top">
+                    <b class="app-order__name">{{ row.varietyName }}</b>
+                    <span class="app-order__action">重复 {{ row.count }} 条</span>
+                    <span class="app-order__amount">{{ fmt(row.shares) }} 份</span>
+                  </div>
+                  <div class="app-order__meta">
+                    <span>成本价 {{ fmt(row.costPrice) }}</span>
+                    <span>建仓 {{ row.openDate ?? '—' }}</span>
+                    <span>保留最早一条，删 {{ (row.count ?? 1) - 1 }} 条</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="!closedItems.length" class="app-listempty">
               还没有清仓过的品种。全部卖出后，品种会出现在这里，历史买卖仍可更正或删除。
             </div>
@@ -472,7 +509,7 @@
                 </span>
                 <div class="app-change__tx">
                   <b>{{ change.varietyName ?? change.varietyKey }}</b>
-                  <span>{{ fmt(change.shares) }} 份 @ {{ fmt(change.unitPrice) }}</span>
+                  <span>{{ fmt(change.shares) }} 份 · 净值 {{ fmt(change.unitPrice) }}</span>
                   <span v-if="change.openDate" class="app-change__bizdate">
                     {{ change.changeType === 'BUY' ? '建仓' : '卖出' }} {{ change.openDate }}
                   </span>
@@ -686,7 +723,7 @@
               {{ row.changeType === 'BUY' ? '买入' : '卖出' }}
             </span>
             <div class="app-change__tx">
-              <b>{{ fmt(row.shares) }} 份 @ {{ fmt(row.unitPrice) }}</b>
+              <b>{{ fmt(row.shares) }} 份 · 净值 {{ fmt(row.unitPrice) }}</b>
               <span v-if="row.openDate" class="app-change__bizdate">
                 {{ row.changeType === 'BUY' ? '建仓' : '卖出' }} {{ row.openDate }}
               </span>
@@ -915,6 +952,7 @@ import {
   updateChange as updateSellChangeApi,
 } from '@/api/holdingController'
 import { reset as resetVarietyApi, save as saveVariety } from '@/api/varietyController'
+import { clean as duplicateClean, preview as duplicatePreview } from '@/api/maintenanceController'
 import {
   catalogStatus as catalogStatusApi,
   confirm as confirmCandidate,
@@ -1120,6 +1158,12 @@ const sellEditSaving = ref(false)
 
 /** 已清仓品种列表 */
 const closedItems = ref<HoldingVarietyDisplay[]>([])
+
+/** 重复批次检查结果与进行态 */
+const dupRows = ref<API.DuplicateCleanVO[]>([])
+const dupLoading = ref(false)
+const dupCleaning = ref(false)
+const dupNote = ref('')
 
 /** 当前页签的中文标题，面包屑与标题共用 */
 const paneTitle = computed(() => {
@@ -1656,6 +1700,46 @@ async function onDeleteChange(row: API.HoldingChangeVO): Promise<void> {
     }
   } catch {
     // request 层已弹出具体原因
+  }
+}
+
+/** 检查重复批次，只读不写 */
+async function onPreviewDuplicate(): Promise<void> {
+  dupLoading.value = true
+  dupNote.value = ''
+  try {
+    const result = await duplicatePreview()
+    dupRows.value = result.data ?? []
+    dupNote.value = dupRows.value.length
+      ? `发现 ${dupRows.value.length} 组完全重复的批次，清理后每只基金只保留最早一条`
+      : '没有发现完全重复的批次'
+  } catch {
+    dupRows.value = []
+  } finally {
+    dupLoading.value = false
+  }
+}
+
+/** 执行清理，二次确认后才写库 */
+async function onCleanDuplicate(): Promise<void> {
+  if (!dupRows.value.length) {
+    return
+  }
+  if (!window.confirm(`确认清理 ${dupRows.value.length} 组重复？每组只保留最早一条，其余删除。`)) {
+    return
+  }
+  dupCleaning.value = true
+  try {
+    const result = await duplicateClean()
+    dupNote.value = result.data ?? '已清理'
+    dupRows.value = []
+    ElMessage.success(dupNote.value)
+    await loadAll()
+    await loadClosed()
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    dupCleaning.value = false
   }
 }
 
@@ -2380,6 +2464,75 @@ onMounted(() => {
   padding: 22px 0;
   text-align: center;
   font-size: 12px;
+  color: var(--t4);
+}
+/* 重复批次清单：与核对页的行样式同构，这里只需最简的一套 */
+.app-importbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.app-importbar__note {
+  font-size: 11px;
+  color: var(--t4);
+}
+
+.app-orders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+}
+
+.app-order {
+  display: flex;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--hair);
+  border-radius: 9px;
+  background: var(--s1);
+}
+
+.app-order__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-order__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.app-order__name {
+  font-weight: 650;
+  color: var(--t1);
+}
+
+.app-order__action {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--acc-soft);
+  color: var(--acc);
+  font-size: 10.5px;
+}
+
+.app-order__amount {
+  font-variant-numeric: tabular-nums;
+  color: var(--t2);
+}
+
+.app-order__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 3px;
+  font-size: 11px;
   color: var(--t4);
 }
 

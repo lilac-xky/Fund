@@ -134,6 +134,10 @@
                   <input v-model="onlyImportable" type="checkbox" />
                   <span>只看可导入</span>
                 </label>
+                <label class="app-check">
+                  <input v-model="hideImported" type="checkbox" />
+                  <span>隐藏已导入（{{ importedCount }} 条）</span>
+                </label>
                 <AppButton size="sm" @click="clearFilter">清除筛选</AppButton>
               </div>
 
@@ -210,27 +214,8 @@
                     </div>
 
                     <!-- 转换只有金额，两边份额与净值必须人工补 -->
+                    <!-- 转换拆成两行：这行管转出的卖出，转入侧由 #IN 那行管，避免买两遍 -->
                     <div v-if="row.action === 'CONVERT'" class="app-order__fill">
-                      <div class="app-order__pick">
-                        <span>转入基金</span>
-                        <select
-                          class="app-select"
-                          :value="
-                            targetPicks[row.seq ?? -1] ?? row.targetCandidates?.[0]?.fundCode ?? ''
-                          "
-                          @change="pickTarget(row, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option value="">请选择转入基金</option>
-                          <option
-                            v-for="candidate in row.targetCandidates ?? []"
-                            :key="candidate.fundCode"
-                            :value="candidate.fundCode"
-                          >
-                            {{ candidate.fundName }}（{{ candidate.fundCode }}）
-                            {{ candidate.registered ? '' : '· 未注册' }}
-                          </option>
-                        </select>
-                      </div>
                       <div class="app-order__pick">
                         <span>转出份额</span>
                         <AppInput
@@ -239,26 +224,12 @@
                           inputmode="decimal"
                           @update:model-value="setConvertDraft(row.seq ?? -1, 'outShares', $event)"
                         />
-                        <span>转入份额</span>
-                        <AppInput
-                          :model-value="convertDraft(row.seq ?? -1).inShares"
-                          :numeric="true"
-                          inputmode="decimal"
-                          @update:model-value="setConvertDraft(row.seq ?? -1, 'inShares', $event)"
-                        />
-                        <span>转入净值</span>
-                        <AppInput
-                          :model-value="convertDraft(row.seq ?? -1).inPrice"
-                          :numeric="true"
-                          inputmode="decimal"
-                          @update:model-value="setConvertDraft(row.seq ?? -1, 'inPrice', $event)"
-                        />
                       </div>
                       <p class="app-order__reason">
                         {{
                           convertReady(row)
-                            ? '已补齐，可勾选提交（同事务内先卖后买）'
-                            : '把两边份额与转入净值填齐后才能勾选；数值请从支付宝那一笔的详情里看'
+                            ? `已填转出份额，可勾选；转入侧「${row.targetFundName ?? '转入基金'}」会自动按金额生成买入，两行一起勾选即可`
+                            : '填好转出份额后才能勾选；转入侧按金额自动折算，不用手填份额与净值'
                         }}
                       </p>
                     </div>
@@ -422,11 +393,7 @@ import {
 } from '@/api/screenshotController'
 import { preview as previewBill } from '@/api/alipayImportController'
 import { confirm as confirmCandidate } from '@/api/fundController'
-import {
-  buy as buyHolding,
-  convert as convertHolding,
-  sell as sellHolding,
-} from '@/api/holdingController'
+import { buy as buyHolding, sell as sellHolding } from '@/api/holdingController'
 import { CONTEXT_PATH } from '@/request'
 import { shortTime } from '@/utils/format'
 import { ElMessage } from '@/ui/message'
@@ -472,21 +439,22 @@ const submitNote = ref('')
 const orders = ref<API.AlipayImportRow[]>([])
 const selectedSeqs = ref<number[]>([])
 
-/** 转换行人工补的转入基金代码，键为行序号 */
-const targetPicks = ref<Record<number, string>>({})
-
 /** 转换行人工补的份额与净值，键为行序号 */
-const convertDrafts = ref<Record<number, { outShares: string; inShares: string; inPrice: string }>>(
-  {},
-)
+const convertDrafts = ref<Record<number, { outShares: string }>>({})
 
 /** 正在确认身份的行的序号 */
 const registering = ref(new Set<number>())
 
-/** 筛选条件：基金名、动作、只看可导入 */
+/** 筛选条件：基金名、动作、只看可导入、隐藏已导入 */
 const filterFund = ref('')
 const filterAction = ref('')
 const onlyImportable = ref(false)
+
+/** 上次已导入过的行默认藏起来，避免以为要重导一遍 */
+const hideImported = ref(true)
+
+/** 已导入条数，供开关回显 */
+const importedCount = computed(() => orders.value.filter((row) => row.status === '已导入').length)
 
 /** 可选的基金名，去重后按名称排序 */
 const fundNames = computed(() =>
@@ -508,6 +476,9 @@ const actionOptions = computed(() =>
 /** 按筛选条件过滤后的行 */
 const filteredOrders = computed(() =>
   orders.value.filter((row) => {
+    if (hideImported.value && row.status === '已导入') {
+      return false
+    }
     if (filterFund.value && row.fundName !== filterFund.value) {
       return false
     }
@@ -727,6 +698,7 @@ function clearFilter(): void {
   filterFund.value = ''
   filterAction.value = ''
   onlyImportable.value = false
+  hideImported.value = true
 }
 
 /**
@@ -745,8 +717,8 @@ function candidateOf(row: API.AlipayImportRow): API.Candidate | undefined {
  * @param seq 行序号
  * @returns 草稿
  */
-function convertDraft(seq: number): { outShares: string; inShares: string; inPrice: string } {
-  return convertDrafts.value[seq] ?? { outShares: '', inShares: '', inPrice: '' }
+function convertDraft(seq: number): { outShares: string } {
+  return convertDrafts.value[seq] ?? { outShares: '' }
 }
 
 /**
@@ -757,11 +729,7 @@ function convertDraft(seq: number): { outShares: string; inShares: string; inPri
  * @param value 新值
  * @returns 无
  */
-function setConvertDraft(
-  seq: number,
-  field: 'outShares' | 'inShares' | 'inPrice',
-  value: string,
-): void {
+function setConvertDraft(seq: number, field: 'outShares', value: string): void {
   convertDrafts.value = {
     ...convertDrafts.value,
     [seq]: { ...convertDraft(seq), [field]: value },
@@ -780,20 +748,8 @@ function setConvertDraft(
  */
 function convertReady(row: API.AlipayImportRow): boolean {
   const seq = row.seq ?? -1
-  const draft = convertDraft(seq)
-  const target = targetPicks.value[seq] ?? row.targetCandidates?.[0]?.fundCode
-  const out = Number(draft.outShares)
-  const into = Number(draft.inShares)
-  const price = Number(draft.inPrice)
-  return (
-    Boolean(target) &&
-    Number.isFinite(out) &&
-    out > 0 &&
-    Number.isFinite(into) &&
-    into > 0 &&
-    Number.isFinite(price) &&
-    price > 0
-  )
+  const out = Number(convertDraft(seq).outShares)
+  return Number.isFinite(out) && out > 0
 }
 
 /**
@@ -908,26 +864,6 @@ function pickCandidate(row: API.AlipayImportRow, fundCode: string): void {
 }
 
 /**
- * 转换行选定转入基金，只改展示，真正提交仍需份额与净值
- *
- * @param row      待确认行
- * @param fundCode 转入基金代码
- * @returns 无
- */
-function pickTarget(row: API.AlipayImportRow, fundCode: string): void {
-  if (row.seq == null) {
-    return
-  }
-  targetPicks.value = { ...targetPicks.value, [row.seq]: fundCode }
-  const candidate = (row.targetCandidates ?? []).find((item) => item.fundCode === fundCode)
-  // 转入基金选定后仍不可提交：转换要两边份额与净值，账单里没有
-  row.selectable = false
-  submitNote.value = candidate
-    ? `转入「${candidate.fundName}」已记下；转换还需在持仓页补齐两边份额与净值后提交`
-    : ''
-}
-
-/**
  * 提交勾选的行，按确认日从早到晚、同日先买后卖
  *
  * @returns 无
@@ -975,7 +911,8 @@ async function onSubmit(): Promise<void> {
  */
 function orderedForSubmit(rows: API.AlipayImportRow[]): API.AlipayImportRow[] {
   const rank = (action?: string): number => {
-    if (action === 'BUY' || action === 'CONVERT') {
+    // 转入侧必须先于卖出落地，否则同日卖出会因「无已建仓批次」被拒
+    if (action === 'BUY' || action === 'CONVERT' || action === 'CONVERT_IN') {
       return 0
     }
     if (action === 'SELL') {
@@ -1005,11 +942,13 @@ async function submitRow(row: API.AlipayImportRow): Promise<void> {
     throw new Error('该行还没确定基金')
   }
   const confirmDate = row.confirmDate ?? undefined
-  if (row.action === 'BUY') {
+  // 转换转入侧在账面上就是一笔按金额买入，与 BUY 同口径
+  if (row.action === 'BUY' || row.action === 'CONVERT_IN') {
     await buyHolding({
       varietyKey,
       amount: row.amount ?? undefined,
       openDate: confirmDate,
+      tradeNo: row.tradeNo ?? undefined,
     } as unknown as API.HoldingBuyRequest)
     return
   }
@@ -1018,31 +957,24 @@ async function submitRow(row: API.AlipayImportRow): Promise<void> {
       varietyKey,
       amount: row.amount ?? undefined,
       tradeDate: confirmDate,
+      tradeNo: row.tradeNo ?? undefined,
     } as unknown as API.HoldingSellRequest)
     return
   }
   if (row.action === 'CONVERT') {
     const seq = row.seq ?? -1
-    const targetCode = targetPicks.value[seq] ?? row.targetCandidates?.[0]?.fundCode
-    const target = (row.targetCandidates ?? []).find((item) => item.fundCode === targetCode)
-    if (!target?.varietyKey) {
-      throw new Error('转换的转入基金还没注册，请先确认它的身份')
+    const outShares = Number(convertDraft(seq).outShares)
+    if (!(outShares > 0)) {
+      throw new Error('转换需先填转出份额')
     }
-    const draft = convertDraft(seq)
-    const outShares = Number(draft.outShares)
-    const inShares = Number(draft.inShares)
-    const inPrice = Number(draft.inPrice)
-    if (!(outShares > 0) || !(inShares > 0) || !(inPrice > 0)) {
-      throw new Error('转换需补齐转出份额、转入份额与转入净值')
-    }
-    await convertHolding({
-      fromVarietyKey: varietyKey,
-      toVarietyKey: target.varietyKey,
+    // 只做卖出：转入侧由 #IN 那行按金额买入，走 convert 会让转入基金被买两遍
+    await sellHolding({
+      varietyKey,
       shares: outShares,
-      toShares: inShares,
-      toCostPrice: inPrice,
-      openDate: confirmDate,
-    } as unknown as API.HoldingConvertRequest)
+      tradeDate: confirmDate,
+      tradeNo: row.tradeNo ?? undefined,
+      note: `转换转出至「${row.targetFundName ?? '转入基金'}」`,
+    } as unknown as API.HoldingSellRequest)
     return
   }
   // 分红只留档，不需要写持仓
