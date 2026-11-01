@@ -44,7 +44,22 @@ export async function buy(body: API.HoldingBuyRequest, options?: { [key: string]
   })
 }
 
-/** 更正某笔卖出记录的业务日期与订单净值，只改留痕口径，不重算份额扣减 POST /api/holding/change/update */
+/** 删除某条变动记录，买入同时删掉对应批次；卖出须走撤销批次 POST /api/holding/change/delete */
+export async function deleteChange(
+  body: API.HoldingChangeRevokeRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultBoolean>('/api/holding/change/delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 更正某条变动记录：卖出改业务日期与订单净值，买入改份额、成本价与日期 POST /api/holding/change/update */
 export async function updateChange(
   body: API.HoldingChangeUpdateRequest,
   options?: { [key: string]: any },
@@ -70,6 +85,14 @@ export async function changes(
       'Content-Type': 'application/json',
     },
     data: body,
+    ...(options || {}),
+  })
+}
+
+/** 已清仓品种列表，供回溯清仓基金的历史买卖并更正 GET /api/holding/closed */
+export async function closed(options?: { [key: string]: any }) {
+  return request<API.ResultListHoldingVarietyVO>('/api/holding/closed', {
+    method: 'GET',
     ...(options || {}),
   })
 }

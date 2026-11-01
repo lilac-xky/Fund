@@ -1,4 +1,39 @@
 declare namespace API {
+  type AlipayImportRow = {
+    /** 行内序号，前端回传时用它定位 */
+    seq?: number
+    /** 原始交易号，提交时用于留痕与二次去重 */
+    tradeNo?: string
+    /** 识别出的动作 */
+    action?: string
+    /** 动作中文名 */
+    actionLabel?: string
+    /** 从账单剥出的基金名称 */
+    fundName?: string
+    /** 匹配到的 6 位代码，未匹配或歧义时为空 */
+    fundCode?: string
+    /** 匹配到的品种业务主键，需先注册才能落库 */
+    varietyKey?: string
+    /** 匹配候选，多个时由人工选 */
+    candidates?: Candidate[]
+    /** 转换行的转入基金名称 */
+    targetFundName?: string
+    /** 转换转入基金匹配到的候选 */
+    targetCandidates?: Candidate[]
+    /** 金额，元 */
+    amount?: number
+    /** 下单时间 */
+    orderTime?: string
+    /** 按 15 点口径换算的净值确认日 */
+    confirmDate?: string
+    /** 该行状态：可导入 / 待补信息 / 已存在 / 已抵消 */
+    status?: string
+    /** 状态说明，直接展示给使用者 */
+    reason?: string
+    /** 是否默认为勾选状态 */
+    selectable?: boolean
+  }
+
   type AuthStatusVO = {
     /** 是否已登录 */
     authenticated?: boolean
@@ -235,6 +270,21 @@ declare namespace API {
     netWorthRefreshed?: number
     /** 本次说明，如「当日预估缺失已跳过 2 只」 */
     notice?: string
+  }
+
+  type Candidate = {
+    /** 6 位代码 */
+    fundCode?: string
+    /** 基金简称 */
+    fundName?: string
+    /** 天天基金原始类型 */
+    fundType?: string
+    /** 是否已在品种表注册，已注册才能直接落库 */
+    registered?: boolean
+    /** 已注册时的品种业务主键 */
+    varietyKey?: string
+    /** 与账单名称的相似度，0 到 1，供人工判断为何匹配到这只 */
+    similarity?: number
   }
 
   type CategoryBatchRequest = {
@@ -1063,6 +1113,8 @@ declare namespace API {
     tradeDate?: string
     /** 更正后的卖出净值，为空则不改 */
     unitPrice?: number
+    /** 更正后的份额，只对买入生效，为空则不改 */
+    shares?: number
   }
 
   type HoldingChangeVO = {
@@ -1171,6 +1223,8 @@ declare namespace API {
     varietyKey?: string
     /** 卖出份额，必须为正数且不超过当前持有合计 */
     shares?: number
+    /** 卖出金额，元；支付宝订单只有金额时用它，份额按卖出日净值反算 */
+    amount?: number
     /** 卖出业务日期，为空时取当日；补录早前的卖出用它还原真实顺序 */
     tradeDate?: string
     /** 卖出净值，元/份；补录时按支付宝订单填写，留空按 FIFO 加权成本记账 */
@@ -1243,6 +1297,12 @@ declare namespace API {
     dividendDetails?: HoldingDividendVO[]
     /** 持有中的批次，供页面更正份额、成本价与建仓日期 */
     batches?: HoldingBatchVO[]
+    /** 累计买入份额，已清仓列表里用它回看历史 */
+    buySharesTotal?: number
+    /** 累计卖出份额，已清仓列表里用它回看历史 */
+    sellSharesTotal?: number
+    /** 行说明，如已清仓的买卖合计 */
+    note?: string
   }
 
   type HoldingVO = {
@@ -2079,6 +2139,12 @@ declare namespace API {
     data?: LessonTrialVO
   }
 
+  type ResultListAlipayImportRow = {
+    code?: number
+    msg?: string
+    data?: AlipayImportRow[]
+  }
+
   type ResultListBigDecimal = {
     code?: number
     msg?: string
@@ -2119,6 +2185,12 @@ declare namespace API {
     code?: number
     msg?: string
     data?: HoldingChangeVO[]
+  }
+
+  type ResultListHoldingVarietyVO = {
+    code?: number
+    msg?: string
+    data?: HoldingVarietyVO[]
   }
 
   type ResultListHoldingVO = {
