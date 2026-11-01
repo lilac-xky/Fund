@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-page">
     <div class="app-atmos">
       <div class="app-atmos__a" />
@@ -35,15 +35,17 @@
             <div class="app-head">
               <div class="app-crumb">
                 持仓 <span class="app-crumb__sl">/</span>
-                <b class="app-crumb__b">{{ activePane === 'entry' ? '录入' : '总览' }}</b>
+                <b class="app-crumb__b">{{ paneTitle }}</b>
               </div>
               <div class="app-eyebrow">Holdings</div>
-              <h1 class="app-h1">{{ activePane === 'entry' ? '录入持仓' : '当前持仓' }}</h1>
+              <h1 class="app-h1">{{ paneHeading }}</h1>
               <p class="app-lede">
                 {{
                   activePane === 'entry'
                     ? '只输入基金或 ETF 代码，名称、类型与最新净值自动带出。多义代码会列出候选并要求确认，确认后写入本地品种注册表。'
-                    : '按品种聚合的持有中份额、成本与收益，买入、卖出、转换与批次更正都在这里完成；新持仓请到「录入持仓」页。'
+                    : activePane === 'closed'
+                      ? '全部卖出的品种会离开总览，在这里仍能看到累计买卖与最后变动日，历史记录照样可以更正或删除。'
+                      : '按品种聚合的持有中份额、成本与收益，买入、卖出、转换与批次更正都在这里完成；新持仓请到「录入持仓」页。'
                 }}
               </p>
               <div class="app-daybar">
@@ -388,6 +390,54 @@
               </div>
             </AppGroup>
           </div>
+
+          <!-- 已清仓：清仓后品种会从总览消失，这里把它找回来继续改 -->
+          <AppGroup
+            v-show="activePane === 'closed'"
+            title="已清仓品种"
+            code="CLOSED"
+            :meta="`${closedItems.length} 只`"
+          >
+            <template #icon>
+              <span v-html="ICONS.archive" />
+            </template>
+
+            <div v-if="!closedItems.length" class="app-listempty">
+              还没有清仓过的品种。全部卖出后，品种会出现在这里，历史买卖仍可更正或删除。
+            </div>
+
+            <div v-else class="app-rows">
+              <div v-for="item in closedItems" :key="item.varietyKey" class="app-row">
+                <div class="app-row__head">
+                  <div class="app-row__id">
+                    <b class="app-row__name">{{ item.varietyName ?? item.varietyKey }}</b>
+                    <span class="app-row__key"
+                      >{{ item.varietyCode }} · {{ item.categoryLabel }}</span
+                    >
+                  </div>
+                  <div class="app-row__ops">
+                    <AppButton size="sm" @click="showChanges(item)">变动</AppButton>
+                    <AppButton size="sm" @click="onResetClosed(item)">清空记录</AppButton>
+                  </div>
+                </div>
+                <div class="app-row__grid">
+                  <div class="app-cell">
+                    <span class="app-cell__k">累计买入</span>
+                    <b class="app-cell__v">{{ fmt(item.buySharesTotal) }} 份</b>
+                  </div>
+                  <div class="app-cell">
+                    <span class="app-cell__k">累计卖出</span>
+                    <b class="app-cell__v">{{ fmt(item.sellSharesTotal) }} 份</b>
+                  </div>
+                  <div class="app-cell">
+                    <span class="app-cell__k">最后变动</span>
+                    <b class="app-cell__v">{{ item.lastOpenDate ?? '—' }}</b>
+                  </div>
+                </div>
+                <p v-if="item.note" class="app-cell__sub">{{ item.note }}</p>
+              </div>
+            </div>
+          </AppGroup>
         </main>
 
         <aside class="app-aside">
@@ -644,25 +694,45 @@
             </div>
             <span class="app-change__ops">
               <button
-                v-if="row.changeType === 'SELL' && row.note && !row.note.includes('更正卖出记录')"
+                v-if="row.note && !row.note.includes('更正')"
                 type="button"
                 class="app-cell__link"
-                @click="startEditSell(row)"
+                @click="startEditChange(row)"
               >
                 更正
+              </button>
+              <button
+                v-if="row.changeType === 'BUY' && row.note && !row.note.includes('更正')"
+                type="button"
+                class="app-cell__link"
+                @click="onDeleteChange(row)"
+              >
+                删除
               </button>
               <span>{{ shortTime(row.createTime) }}</span>
             </span>
           </div>
         </div>
         <div v-if="editingSell" class="app-selledit">
-          <b>更正卖出记录 {{ editingSell.id }}</b>
+          <b>
+            {{ editingSell.changeType === 'BUY' ? '更正买入' : '更正卖出' }}记录
+            {{ editingSell.id }}
+          </b>
           <div class="app-selledit__row">
-            <label>卖出日期</label>
+            <label>{{ editingSell.changeType === 'BUY' ? '建仓日期' : '卖出日期' }}</label>
             <input v-model="sellEditDate" type="date" class="app-input app-date" />
           </div>
+          <div v-if="editingSell.changeType === 'BUY'" class="app-selledit__row">
+            <label>份额</label>
+            <AppInput
+              :model-value="buyEditShares"
+              :numeric="true"
+              inputmode="decimal"
+              @update:model-value="buyEditShares = $event"
+            />
+          </div>
           <div class="app-selledit__row">
-            <label>订单净值</label>
+            <label>{{ editingSell.changeType === 'BUY' ? '成本价' : '订单净值' }}</label>
             <AppInput
               :model-value="sellEditPrice"
               :numeric="true"
@@ -706,6 +776,19 @@
               </button>
             </div>
           </AppField>
+          <!-- 清空入口放在弹层头部：录错太多时整只推倒重录，比逐批次撤销快 -->
+          <div class="app-reset">
+            <div class="app-reset__tx">
+              <b>清空该基金的全部本地记录</b>
+              <span>
+                删除持仓批次、变动历史、预估留存、误差与黄金 β；品种本身（名称、代码、类型）保留，
+                净值序列是公共数据不清。
+              </span>
+            </div>
+            <AppButton size="sm" :disabled="resetting" @click="onResetVariety">
+              {{ resetting ? '清空中…' : '清空重录' }}
+            </AppButton>
+          </div>
         </div>
         <div class="app-dialog__body">
           <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
@@ -822,7 +905,9 @@ import { ElMessage } from '@/ui/message'
 import {
   buy as buyHolding,
   changes as holdingChanges,
+  closed as holdingClosed,
   convert as convertHolding,
+  deleteChange as deleteChangeApi,
   overview as holdingOverview,
   revokeBatch as revokeBatchApi,
   sell as sellHolding,
@@ -848,6 +933,8 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/></svg>',
   compass:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="m15.2 8.8-2 4.4-4.4 2 2-4.4z"/></svg>',
+  archive:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4.5" rx="1.2"/><path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5"/><path d="M10 12.5h4"/></svg>',
 }
 
 /** 分红方式选项，红利再投时分红已折成份额，不能再算一遍现金 */
@@ -868,6 +955,7 @@ const CATEGORY_OPTIONS = [
 /** 侧栏锚点：默认展示当前持仓，录入是独立页面 */
 const railItems = [
   { key: 'list', label: '当前持仓', icon: ICONS.list! },
+  { key: 'closed', label: '已清仓', icon: ICONS.archive! },
   { key: 'entry', label: '录入持仓', icon: ICONS.search! },
 ]
 
@@ -883,6 +971,10 @@ function onPaneSelect(key: string | number): void {
   const pane = String(key)
   activePane.value = pane
   void router.push({ name: pane === 'entry' ? 'holding-entry' : 'holding' })
+  // 已清仓列表独立于总览，切进去时现拉一次
+  if (pane === 'closed') {
+    void loadClosed()
+  }
 }
 
 /** 头部按钮：在两个页面间往返 */
@@ -1022,7 +1114,28 @@ const historyRows = ref<API.HoldingChangeVO[]>([])
 const editingSell = ref<API.HoldingChangeVO | null>(null)
 const sellEditDate = ref('')
 const sellEditPrice = ref('')
+/** 买入更正时的份额，卖出更正不用这个字段 */
+const buyEditShares = ref('')
 const sellEditSaving = ref(false)
+
+/** 已清仓品种列表 */
+const closedItems = ref<HoldingVarietyDisplay[]>([])
+
+/** 当前页签的中文标题，面包屑与标题共用 */
+const paneTitle = computed(() => {
+  if (activePane.value === 'entry') {
+    return '录入'
+  }
+  return activePane.value === 'closed' ? '已清仓' : '总览'
+})
+
+/** 当前页签的页面标题 */
+const paneHeading = computed(() => {
+  if (activePane.value === 'entry') {
+    return '录入持仓'
+  }
+  return activePane.value === 'closed' ? '已清仓品种' : '当前持仓'
+})
 
 /** 批次更正弹层状态，批次单独用本地类型，因为主键是字符串形态的雪花 ID */
 const batchOf = ref<
@@ -1032,6 +1145,9 @@ const editingBatchId = ref<string | null>(null)
 const batchDraft = ref({ shares: '', costPrice: '', openDate: '' })
 const batchError = ref('')
 const batchSaving = ref(false)
+
+/** 清空该品种全部本地记录时的进行态，避免连点触发两次 */
+const resetting = ref(false)
 
 /** 分红明细弹层状态 */
 const dividendOf = ref<HoldingVarietyDisplay | null>(null)
@@ -1458,26 +1574,37 @@ async function showChanges(item: API.HoldingVarietyVO): Promise<void> {
   }
 }
 
-/** 进入卖出更正态，把当前值带进表单 */
-function startEditSell(row: API.HoldingChangeVO): void {
+/** 进入更正态，买入与卖出共用一套表单，字段按类型显隐 */
+function startEditChange(row: API.HoldingChangeVO): void {
   editingSell.value = row
   sellEditDate.value = row.openDate ?? ''
   sellEditPrice.value = row.unitPrice != null ? String(row.unitPrice) : ''
+  buyEditShares.value = row.shares != null ? String(row.shares) : ''
 }
 
-/** 保存卖出更正，只改业务日期与订单净值，份额扣减不动 */
+/** 保存更正：买入可改份额、成本价与日期，卖出只改日期与净值 */
 async function onSaveSellEdit(): Promise<void> {
   const row = editingSell.value
   if (row?.id == null) {
     return
   }
-  if (!sellEditDate.value && sellEditPrice.value.trim() === '') {
-    ElMessage.info('卖出日期与订单净值至少改一个')
+  const isBuy = row.changeType === 'BUY'
+  if (
+    !sellEditDate.value &&
+    sellEditPrice.value.trim() === '' &&
+    !(isBuy && buyEditShares.value.trim())
+  ) {
+    ElMessage.info('日期、份额与净值至少改一个')
     return
   }
   const priceValue = sellEditPrice.value.trim() === '' ? null : Number(sellEditPrice.value)
   if (priceValue !== null && (!Number.isFinite(priceValue) || priceValue <= 0)) {
-    ElMessage.error('订单净值必须为正数')
+    ElMessage.error(isBuy ? '成本价必须为正数' : '订单净值必须为正数')
+    return
+  }
+  const sharesValue = buyEditShares.value.trim() === '' ? null : Number(buyEditShares.value)
+  if (isBuy && sharesValue !== null && (!Number.isFinite(sharesValue) || sharesValue <= 0)) {
+    ElMessage.error('份额必须为正数')
     return
   }
   sellEditSaving.value = true
@@ -1487,6 +1614,7 @@ async function onSaveSellEdit(): Promise<void> {
         id: row.id,
         ...(sellEditDate.value ? { tradeDate: sellEditDate.value } : {}),
         ...(priceValue !== null ? { unitPrice: priceValue } : {}),
+        ...(isBuy && sharesValue !== null ? { shares: sharesValue } : {}),
       },
       { silent: true },
     )
@@ -1496,10 +1624,68 @@ async function onSaveSellEdit(): Promise<void> {
       await showChanges(historyOf.value)
     }
     await loadAll()
+    if (activePane.value === 'closed') {
+      await loadClosed()
+    }
   } catch {
     // request 层已弹出具体原因
   } finally {
     sellEditSaving.value = false
+  }
+}
+
+/** 删除一条买入变动，卖出不支持直接删，后端会拒绝并说明原因 */
+async function onDeleteChange(row: API.HoldingChangeVO): Promise<void> {
+  if (row.id == null) {
+    return
+  }
+  if (!window.confirm(`确认删除这条买入记录？对应的持仓批次也会一并删除。`)) {
+    return
+  }
+  try {
+    await deleteChangeApi({ id: row.id } as unknown as API.HoldingChangeRevokeRequest, {
+      silent: true,
+    })
+    ElMessage.success('已删除')
+    if (historyOf.value) {
+      await showChanges(historyOf.value)
+    }
+    await loadAll()
+    if (activePane.value === 'closed') {
+      await loadClosed()
+    }
+  } catch {
+    // request 层已弹出具体原因
+  }
+}
+
+/** 拉取已清仓品种 */
+async function loadClosed(): Promise<void> {
+  try {
+    const result = await holdingClosed()
+    closedItems.value = (result.data ?? []) as HoldingVarietyDisplay[]
+  } catch {
+    closedItems.value = []
+  }
+}
+
+/** 清空某只已清仓品种的全部记录，与「改批次」里的清空重录同义 */
+async function onResetClosed(item: HoldingVarietyDisplay): Promise<void> {
+  const key = item.varietyKey
+  if (!key) {
+    return
+  }
+  const label = item.varietyName ?? key
+  if (!window.confirm(`确认清空「${label}」的全部记录？此操作不可撤销。`)) {
+    return
+  }
+  try {
+    await resetVarietyApi({ varietyKey: key } as unknown as API.resetParams)
+    ElMessage.success('已清空')
+    await loadClosed()
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
   }
 }
 
@@ -1638,6 +1824,31 @@ async function onRevokeBatch(batch: HoldingBatchVO): Promise<void> {
   }
 }
 
+/** 清空该品种的全部本地记录，品种注册与净值序列保留；二次确认后才发请求 */
+async function onResetVariety(): Promise<void> {
+  const item = batchOf.value
+  const key = item?.varietyKey
+  if (!key || resetting.value) {
+    return
+  }
+  const label = item?.varietyName ?? key
+  if (!window.confirm(`确认清空「${label}」的全部持仓、变动与预估留存？此操作不可撤销。`)) {
+    return
+  }
+  resetting.value = true
+  try {
+    // 生成层里 resetParams 有两份（参数重置与品种重置同名），TS 认成了 group 那份，这里按实际契约断言
+    const result = await resetVarietyApi({ varietyKey: key } as unknown as API.resetParams)
+    ElMessage.success(result.data ? String(result.data) : '已清空，可以重新录入')
+    batchOf.value = null
+    await loadAll()
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    resetting.value = false
+  }
+}
+
 /** 打开分红明细弹层 */
 function showDividend(item: HoldingVarietyDisplay): void {
   dividendOf.value = item
@@ -1722,6 +1933,8 @@ async function toggleDividendOverride(date: string): Promise<void> {
 
 onMounted(() => {
   void loadAll()
+  // 已清仓数量在侧栏不显示，但进来就拉一次，切页签时不用等
+  void loadClosed()
 })
 </script>
 
@@ -2642,6 +2855,34 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-top: 14px;
+}
+
+/* 清空入口：靠下并用描边圈出，避免和上面的常规操作混在一起 */
+.app-reset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--hair-2);
+  border-radius: 10px;
+  background: var(--s2);
+}
+
+.app-reset__tx {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--t3);
+}
+
+.app-reset__tx b {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--t2);
 }
 
 .app-history {

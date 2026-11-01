@@ -204,23 +204,61 @@ export function buildOption(
   const rsi = rsiSeries(closes, params.rsiPeriod)
   const { dif, dea, bar } = macdSeries(closes, params.macdFast, params.macdSlow, params.macdSignal)
   const { k, d, j } = kdjSeries(bars, params.kdjPeriod, params.kdjKSmooth, params.kdjDSmooth)
+  const macdCrosses = crossPoints(dif, dea, dates)
+  // KDJ 与后端同口径：金叉要在低位、死叉要在高位才算，震荡区里的穿越不标
+  const kdjCrosses = crossPoints(k, d, dates, { low: 30, high: 70 })
+  const divergences = divergencesOf(bars, dif)
+  const panelTitles = [
+    { title: netWorth ? '① 单位净值' : '① 日线 K 线', top: 18 },
+    { title: `② ${netWorth ? '净值日变动' : '日涨跌幅'}（%）`, top: '35%' },
+    { title: `③ MACD(${params.macdFast},${params.macdSlow},${params.macdSignal})`, top: '49%' },
+    { title: `④ RSI(${params.rsiPeriod})`, top: '64%' },
+    { title: `⑤ KDJ(${params.kdjPeriod},${params.kdjKSmooth},${params.kdjDSmooth})`, top: '79%' },
+  ]
   return {
     animation: false,
     color: SERIES_COLORS,
-    title: {
-      left: 0,
-      top: 0,
-      textStyle: { fontSize: 12, fontWeight: 'normal' },
-      // 参数必须标在图上，与计算层一致才不会误读
-      text: paramSummary(params),
-    },
+    // 五栏各带自己的标题：只给一个参数串的话，副图看不出是哪一栏
+    title: [
+      {
+        left: 0,
+        top: 0,
+        textStyle: { fontSize: 12, fontWeight: 'normal' },
+        // 参数必须标在图上，与计算层一致才不会误读
+        text: paramSummary(params),
+      },
+      ...panelTitles.map((item) => ({
+        left: 56,
+        top: item.top,
+        text: item.title,
+        textStyle: { fontSize: 11, fontWeight: 'bold', color: '#5a6270' },
+      })),
+    ],
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'cross' },
       valueFormatter: (value: unknown) => fmtNumber(value),
     },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
-    legend: { top: 4, right: 0, itemWidth: 18, itemHeight: 8, textStyle: { fontSize: 11 } },
+    legend: {
+      top: 4,
+      right: 0,
+      itemWidth: 18,
+      itemHeight: 8,
+      textStyle: { fontSize: 11 },
+      // 标记类系列不进图例，否则图例被十来个条目撑满，与栏标题也会打架
+      data: [
+        netWorth ? '单位净值' : 'K 线',
+        netWorth ? '净值日变动' : '涨跌幅',
+        'MACD',
+        'DIF',
+        'DEA',
+        `RSI(${params.rsiPeriod})`,
+        'K',
+        'D',
+        'J',
+      ],
+    },
     grid: [
       { left: 56, right: 56, top: 34, height: '26%' },
       { left: 56, right: 56, top: '39%', height: '10%' },
@@ -377,8 +415,228 @@ export function buildOption(
         showSymbol: false,
         lineStyle: { width: 1, type: 'dotted', color: SERIES_COLORS[6] },
       },
+      // 金叉死叉打点：挂在快线上，位置就是交叉当天的那根
+      crossMarker('MACD 金叉', dif, macdCrosses.golden, 2, '#d64a6e'),
+      crossMarker('MACD 死叉', dif, macdCrosses.dead, 2, '#3f8f4a'),
+      crossMarker('KDJ 金叉', k, kdjCrosses.golden, 4, '#d64a6e'),
+      crossMarker('KDJ 死叉', k, kdjCrosses.dead, 4, '#3f8f4a'),
+      // 背离用竖向虚线引到主图对应那根，顶背离在价格高点、底背离在价格低点
+      divergenceMarker('顶背离', divergences.top, closes, 0, '#d64a6e'),
+      divergenceMarker('底背离', divergences.bottom, closes, 0, '#3f8f4a'),
     ],
   }
+}
+
+/**
+ * 金叉死叉的打点系列：只有点、没有线，不进图例
+ *
+ * @param name   系列名
+ * @param source 快线序列，点画在它的值上
+ * @param marks  交叉下标
+ * @param grid   所在网格
+ * @param color  颜色
+ * @returns ECharts 系列
+ */
+function crossMarker(
+  name: string,
+  source: Array<number | null>,
+  marks: number[],
+  grid: number,
+  color: string,
+): Record<string, unknown> {
+  const data = marks.map((index) => [index, source[index] ?? null])
+  return {
+    name,
+    type: 'scatter',
+    data,
+    xAxisIndex: grid,
+    yAxisIndex: grid,
+    symbolSize: 7,
+    itemStyle: { color },
+    // 用实心圆两种信号分不开，按方向给符号：金叉三角、死叉菱形
+    symbol: name.includes('金叉') ? 'triangle' : 'diamond',
+    label: {
+      // 交叉密集时只留符号，逐点写「金 / 死」会把副图糊满
+      show: marks.length <= 12,
+      position: 'top',
+      fontSize: 9,
+      color,
+      formatter: name.includes('金叉') ? '金' : '死',
+    },
+    z: 20,
+  }
+}
+
+/**
+ * 背离的标注系列：在主图对应那根上打 pin 并标出「顶背离 / 底背离」，不进图例
+ *
+ * @param name   标注名
+ * @param marks  背离点下标
+ * @param closes 收盘价或净值序列，标记的高度取该根价格
+ * @param grid   所在网格
+ * @param color  颜色
+ * @returns ECharts 系列
+ */
+function divergenceMarker(
+  name: string,
+  marks: number[],
+  closes: number[],
+  grid: number,
+  color: string,
+): Record<string, unknown> {
+  const data = marks.map((index) => [index, closes[index] ?? null])
+  return {
+    name,
+    type: 'scatter',
+    data,
+    xAxisIndex: grid,
+    yAxisIndex: grid,
+    symbol: 'pin',
+    symbolSize: 26,
+    itemStyle: { color },
+    label: {
+      show: true,
+      position: 'top',
+      fontSize: 9,
+      color,
+      formatter: name,
+    },
+    z: 21,
+  }
+}
+
+/**
+ * 找快慢线的交叉点：上一根在另一侧、本根越过来
+ *
+ * @param fast  快线
+ * @param slow  慢线
+ * @param dates 日期序列，仅用于跳过缺失值
+ * @param zone  可选的低位高位阈值，给了就按后端 KDJ 口径过滤震荡区
+ * @returns 金叉与死叉的下标
+ */
+function crossPoints(
+  fast: Array<number | null>,
+  slow: Array<number | null>,
+  dates: string[],
+  zone?: { low: number; high: number },
+): { golden: number[]; dead: number[] } {
+  const golden: number[] = []
+  const dead: number[] = []
+  for (let index = 1; index < dates.length; index++) {
+    const fastNow = fast[index]
+    const slowNow = slow[index]
+    const fastPrev = fast[index - 1]
+    const slowPrev = slow[index - 1]
+    if (fastNow == null || slowNow == null || fastPrev == null || slowPrev == null) {
+      continue
+    }
+    const gapPrev = fastPrev - slowPrev
+    const gapNow = fastNow - slowNow
+    if (gapPrev <= 0 && gapNow > 0) {
+      // 低位金叉才有意义，高位穿越不标，避免图上一片噪声
+      if (!zone || slowNow < zone.low || fastNow < zone.low) {
+        golden.push(index)
+      }
+    } else if (gapPrev >= 0 && gapNow < 0) {
+      if (!zone || slowNow > zone.high || fastNow > zone.high) {
+        dead.push(index)
+      }
+    }
+  }
+  return { golden, dead }
+}
+
+/**
+ * 背离检测：价格创新高但 DIF 没跟着创新高为顶背离，价格创新低而 DIF 抬高为底背离
+ *
+ * @param bars 日线
+ * @param dif  DIF 序列
+ * @returns 顶背离与底背离的下标
+ */
+function divergencesOf(bars: Bar[], dif: number[]): { top: number[]; bottom: number[] } {
+  const top: number[] = []
+  const bottom: number[] = []
+  // 只看最近一段：跨太远的两个高点比较，中间已经换了一轮趋势，标出来是误导
+  const window = 60
+  const start = Math.max(1, bars.length - window)
+  for (let index = start + 1; index < bars.length - 1; index++) {
+    const priceNow = bars[index]?.close
+    const difNow = dif[index]
+    if (priceNow == null || difNow == null) {
+      continue
+    }
+    const previousPeak = localExtreme(bars, dif, index, window, 'peak')
+    const previousTrough = localExtreme(bars, dif, index, window, 'trough')
+    if (
+      previousPeak != null &&
+      priceNow > (bars[previousPeak]?.close ?? 0) &&
+      difNow < (dif[previousPeak] ?? 0)
+    ) {
+      top.push(index)
+    }
+    if (
+      previousTrough != null &&
+      priceNow < (bars[previousTrough]?.close ?? 0) &&
+      difNow > (dif[previousTrough] ?? 0)
+    ) {
+      bottom.push(index)
+    }
+  }
+  return { top: dedupeAdjacent(top), bottom: dedupeAdjacent(bottom) }
+}
+
+/**
+ * 找窗口内离当前最近的一个价格极值点，用于与当前点比较是否背离
+ *
+ * @param bars   日线
+ * @param dif    DIF 序列
+ * @param index  当前下标
+ * @param window 回看根数
+ * @param kind   峰或谷
+ * @returns 极值点下标，找不到返回 null
+ */
+function localExtreme(
+  bars: Bar[],
+  dif: number[],
+  index: number,
+  window: number,
+  kind: 'peak' | 'trough',
+): number | null {
+  const from = Math.max(0, index - window)
+  let found: number | null = null
+  for (let cursor = from; cursor < index - 1; cursor++) {
+    const price = bars[cursor]?.close
+    const next = bars[cursor + 1]?.close
+    const before = bars[cursor - 1]?.close
+    if (price == null || next == null || before == null || dif[cursor] == null) {
+      continue
+    }
+    if (kind === 'peak' && price >= before && price >= next) {
+      found = cursor
+    } else if (kind === 'trough' && price <= before && price <= next) {
+      found = cursor
+    }
+  }
+  return found
+}
+
+/**
+ * 去掉挨在一起的重复标记，连续两根都满足条件时只留后一根
+ *
+ * @param marks 下标序列
+ * @returns 去重后的下标
+ */
+function dedupeAdjacent(marks: number[]): number[] {
+  const result: number[] = []
+  for (const index of marks) {
+    const last = result[result.length - 1]
+    if (last != null && index - last <= 3) {
+      result[result.length - 1] = index
+      continue
+    }
+    result.push(index)
+  }
+  return result
 }
 
 /** 各系列的固定色板：相邻曲线色相差拉大，配合线型做三重区分 */

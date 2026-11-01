@@ -14,83 +14,98 @@
     />
 
     <div class="pt-[calc(var(--topbar)+var(--pulse))] max-[860px]:pt-[var(--topbar)]">
-      <div class="mx-auto max-w-[1180px] px-5 pb-16">
-        <div class="app-head mb-4">
-          <div class="app-crumb">
-            行情 <span class="app-crumb__sl">/</span>
-            <b class="app-crumb__b">技术指标</b>
-          </div>
-          <h1 class="app-h1">指标图表</h1>
-          <p class="app-lede">
-            K 线叠加 MACD、RSI 与 KDJ，参数与参数设置页的 INDICATOR 分组一致。
-            图表库随构建产物本地打包，断网仍可打开。
-          </p>
-        </div>
-
-        <AppGroup
-          title="图表"
-          code="CHART"
-          :meta="symbol || '尚未选择标的'"
-          :meta-ok="Boolean(symbol)"
-        >
-          <template #icon>
-            <span v-html="CHART_ICON" />
-          </template>
-
-          <div class="mb-3 flex flex-wrap items-center gap-2">
-            <label class="text-[12px] text-[var(--t3)]">标的</label>
-            <select v-model="varietyKey" class="app-select" @change="loadByVariety">
-              <option value="">— 选择持仓 —</option>
-              <option v-for="row in watchRows" :key="row.varietyKey" :value="row.varietyKey">
-                {{ row.varietyName }}（{{ row.varietyCode }}）{{ row.onExchange ? '' : ' · 场外' }}
-              </option>
-            </select>
-            <span class="app-basis">{{ basisLabel }}</span>
-            <span v-if="errorText" class="app-alert-line">{{ errorText }}</span>
-          </div>
-
-          <div v-if="!symbol" class="app-listempty">
-            先选一个持仓标的；没有持仓时请到「持仓」页录入。
-          </div>
-          <template v-else>
-            <div v-if="loading" class="app-loading">正在取数…</div>
-            <div v-else-if="!bars.length" class="app-listempty">{{ emptyHint }}</div>
-            <div v-show="bars.length > 0" class="app-chgbar">
-              <span
-                >最新 <b>{{ fmt(lastClose) }}</b></span
-              >
-              <span :class="toneClass(lastChange)">{{ signedPercent(lastChange) }}</span>
-              <span>
-                区间
-                <span :class="toneClass(rangeChange)">{{ signedPercent(rangeChange) }}</span>
-              </span>
-              <span class="app-chgbar__note">
-                第二栏为逐日涨跌幅（{{ basis === 'NET_WORTH' ? '净值日变动' : '按收盘价' }}）， RSI
-                栏 30/70 为超卖超买参考线
-              </span>
+      <div class="app-stage app-stage--no-aside">
+        <main class="app-center">
+          <div class="app-center__in">
+            <div class="app-head mb-4">
+              <div class="app-crumb">
+                行情 <span class="app-crumb__sl">/</span>
+                <b class="app-crumb__b">技术指标</b>
+              </div>
+              <h1 class="app-h1">指标图表</h1>
+              <p class="app-lede">
+                K 线叠加 MACD、RSI 与 KDJ，参数与参数设置页的 INDICATOR 分组一致。
+                图表库随构建产物本地打包，断网仍可打开。
+              </p>
             </div>
-            <!-- 容器必须常驻 DOM：render() 在 loading 翻 false 之前执行，放进条件链会在那一刻拿不到节点 -->
-            <div v-show="bars.length > 0" ref="chartHost" class="app-chart" />
-          </template>
 
-          <p v-if="indicator" class="app-disclaimer">
-            接口计算：RSI {{ fmt(indicator.rsi) }} · K {{ fmt(indicator.k) }} · D
-            {{ fmt(indicator.d) }} · DIF {{ fmt(indicator.dif) }} · DEA {{ fmt(indicator.dea) }}。
-            <template v-if="basis === 'NET_WORTH'">
-              场外基金按单位净值计算，没有日线最高最低价，故 KDJ 无法计算；主图是净值折线而非 K
-              线，副图 RSI 与 MACD 有效。
-            </template>
-            <template v-else-if="indicator.adjusted === false"
-              >日线为不复权口径（备用源），与行情软件可能有差异。</template
+            <AppGroup
+              title="图表"
+              code="CHART"
+              :meta="symbol || '尚未选择标的'"
+              :meta-ok="Boolean(symbol)"
             >
-            <template v-else>日线为前复权口径。</template>
-          </p>
-        </AppGroup>
+              <template #icon>
+                <span v-html="CHART_ICON" />
+              </template>
 
-        <p class="app-disclaimer">
-          图表由本页按接口返回的序列现算副图，主图指标数值与后端计算同口径（EMA 首值作种子、KDJ 以
-          50 起递推）。 两处小差异属正常：图表按全部返回序列连续计算，后端按参数所需最少根数计算。
-        </p>
+              <div class="mb-3 flex flex-wrap items-center gap-2">
+                <label class="text-[12px] text-[var(--t3)]">标的</label>
+                <select v-model="varietyKey" class="app-select" @change="loadByVariety">
+                  <option value="">— 选择持仓 —</option>
+                  <option v-for="row in watchRows" :key="row.varietyKey" :value="row.varietyKey">
+                    {{ row.varietyName }}（{{ row.varietyCode }}）{{
+                      row.onExchange ? '' : ' · 场外'
+                    }}
+                  </option>
+                </select>
+                <span class="app-basis">{{ basisLabel }}</span>
+                <span v-if="errorText" class="app-alert-line">{{ errorText }}</span>
+              </div>
+
+              <div v-if="!symbol" class="app-listempty">
+                先选一个持仓标的；没有持仓时请到「持仓」页录入。
+              </div>
+              <template v-else>
+                <div v-if="loading" class="app-loading">正在取数…</div>
+                <div v-else-if="!bars.length" class="app-listempty">{{ emptyHint }}</div>
+                <div v-show="bars.length > 0" class="app-chgbar">
+                  <span
+                    >最新 <b>{{ fmt(lastClose) }}</b></span
+                  >
+                  <span :class="toneClass(lastChange)">{{ signedPercent(lastChange) }}</span>
+                  <span>
+                    区间
+                    <span :class="toneClass(rangeChange)">{{ signedPercent(rangeChange) }}</span>
+                  </span>
+                  <span class="app-chgbar__note">
+                    五栏各带标题，自上而下为净值/日线、涨跌幅、MACD、RSI、KDJ。
+                    图上三角为金叉、菱形为死叉，主图 pin 标出顶/底背离；RSI 栏 30/70
+                    为超卖超买参考线
+                  </span>
+                </div>
+                <!-- 容器必须常驻 DOM：render() 在 loading 翻 false 之前执行，放进条件链会在那一刻拿不到节点 -->
+                <div v-show="bars.length > 0" ref="chartHost" class="app-chart" />
+              </template>
+
+              <p v-if="indicator" class="app-disclaimer">
+                接口计算：RSI {{ fmt(indicator.rsi) }} · K {{ fmt(indicator.k) }} · D
+                {{ fmt(indicator.d) }} · DIF {{ fmt(indicator.dif) }} · DEA
+                {{ fmt(indicator.dea) }}。
+                <template v-if="basis === 'NET_WORTH'">
+                  场外基金按单位净值计算，没有日线最高最低价，故 KDJ 无法计算；主图是净值折线而非 K
+                  线，副图 RSI 与 MACD 有效。
+                </template>
+                <template v-else-if="indicator.adjusted === false"
+                  >日线为不复权口径（备用源），与行情软件可能有差异。</template
+                >
+                <template v-else>日线为前复权口径。</template>
+              </p>
+            </AppGroup>
+
+            <p class="app-disclaimer">
+              图表由本页按接口返回的序列现算副图，主图指标数值与后端计算同口径（EMA 首值作种子、KDJ
+              以 50 起递推）。
+              两处小差异属正常：图表按全部返回序列连续计算，后端按参数所需最少根数计算。
+            </p>
+            <p class="app-disclaimer">
+              金叉死叉与背离都在前端按同一套参数现算：MACD 看 DIF 与 DEA 的穿越，KDJ
+              沿用后端「低位金叉 / 高位死叉」的过滤（K 或 D 低于 30 才算金叉、高于 70 才算死叉），
+              背离看最近 60 根内价格创新高/新低而 DIF
+              没有同步。它们只是图上标注，不参与邮件提醒的触发判定。
+            </p>
+          </div>
+        </main>
       </div>
     </div>
   </div>
@@ -102,7 +117,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import * as echarts from 'echarts/core'
-import { BarChart, CandlestickChart, LineChart } from 'echarts/charts'
+import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
   DataZoomComponent,
   GridComponent,
@@ -130,6 +145,7 @@ echarts.use([
   BarChart,
   CandlestickChart,
   LineChart,
+  ScatterChart,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
