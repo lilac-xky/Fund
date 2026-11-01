@@ -3,6 +3,7 @@ package com.lilac.adapter.alipay;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,9 +20,14 @@ public class AlipayBillRow {
     private String tradeNo;
 
     /**
-     * 交易创建时间
+     * 交易创建时间；注意这是支付宝侧记录时间，基金申赎的「下单时间」要看交易号前 8 位
      */
     private LocalDateTime createdTime;
+
+    /**
+     * 下单日，取自交易号前 8 位；账单的「交易创建时间」在卖出与转换行里是确认时间，不能拿来算净值
+     */
+    private LocalDate orderDate;
 
     /**
      * 付款时间，网络交易可能为空

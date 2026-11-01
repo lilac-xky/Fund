@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app-page">
     <div class="app-atmos">
       <div class="app-atmos__a" />
@@ -432,7 +432,7 @@
                   </div>
                   <div class="app-order__meta">
                     <span>成本价 {{ fmt(row.costPrice) }}</span>
-                    <span>建仓 {{ row.openDate ?? '—' }}</span>
+                    <span>买入 {{ row.openDate ?? '—' }}</span>
                     <span>保留最早一条，删 {{ (row.count ?? 1) - 1 }} 条</span>
                   </div>
                 </div>
@@ -511,7 +511,7 @@
                   <b>{{ change.varietyName ?? change.varietyKey }}</b>
                   <span>{{ fmt(change.shares) }} 份 · 净值 {{ fmt(change.unitPrice) }}</span>
                   <span v-if="change.openDate" class="app-change__bizdate">
-                    {{ change.changeType === 'BUY' ? '建仓' : '卖出' }} {{ change.openDate }}
+                    {{ change.changeType === 'BUY' ? '买入' : '卖出' }} {{ change.openDate }}
                   </span>
                 </div>
                 <span class="app-change__time">{{ shortTime(change.createTime) }}</span>
@@ -724,8 +724,11 @@
             </span>
             <div class="app-change__tx">
               <b>{{ fmt(row.shares) }} 份 · 净值 {{ fmt(row.unitPrice) }}</b>
+              <span v-if="row.amount != null" class="app-change__amt">
+                {{ fmtMoney(row.amount) }} 元
+              </span>
               <span v-if="row.openDate" class="app-change__bizdate">
-                {{ row.changeType === 'BUY' ? '建仓' : '卖出' }} {{ row.openDate }}
+                {{ row.changeType === 'BUY' ? '买入' : '卖出' }} {{ row.openDate }}
               </span>
               <span class="app-change__note">{{ row.note }}</span>
             </div>
@@ -829,51 +832,16 @@
         </div>
         <div class="app-dialog__body">
           <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
-          <div v-else class="app-batches">
-            <div v-for="batch in batchOf.batches" :key="batch.id" class="app-batch">
-              <div v-if="editingBatchId === batch.id" class="app-batch__form">
-                <AppField label="份额" :error="batchError">
-                  <AppInput
-                    :model-value="batchDraft.shares"
-                    :numeric="true"
-                    inputmode="decimal"
-                    @update:model-value="updateBatchDraft('shares', $event)"
-                  />
-                  <span class="app-unit">份</span>
-                </AppField>
-                <AppField label="成本价">
-                  <AppInput
-                    :model-value="batchDraft.costPrice"
-                    :numeric="true"
-                    inputmode="decimal"
-                    @update:model-value="updateBatchDraft('costPrice', $event)"
-                  />
-                  <span class="app-unit">元/份</span>
-                </AppField>
-                <AppField label="建仓日期">
-                  <input
-                    :value="batchDraft.openDate"
-                    type="date"
-                    class="app-input app-date"
-                    @input="updateBatchDraft('openDate', ($event.target as HTMLInputElement).value)"
-                  />
-                </AppField>
-                <div class="app-dialog__ops">
-                  <AppButton variant="primary" :disabled="batchSaving" @click="onSaveBatch">
-                    {{ batchSaving ? '保存中…' : '保存更正' }}
-                  </AppButton>
-                  <AppButton @click="editingBatchId = null">取消</AppButton>
+          <div class="app-dialog__body">
+            <div v-if="!batchOf.batches?.length" class="app-changes__empty">没有持有中的批次</div>
+            <div v-else class="app-batches">
+              <div v-for="batch in batchOf.batches" :key="batch.id" class="app-batch">
+                <div class="app-batch__row">
+                  <span class="app-batch__shares">{{ fmt(batch.shares) }} 份</span>
+                  <span class="app-batch__cost">{{ fmt(batch.costPrice) }} 元/份</span>
+                  <span class="app-batch__money">成本 {{ fmtMoney(batch.costAmount) }} 元</span>
+                  <span class="app-batch__date">买入 {{ batch.openDate ?? '—' }}</span>
                 </div>
-              </div>
-              <div v-else class="app-batch__row">
-                <span class="app-batch__shares">{{ fmt(batch.shares) }} 份</span>
-                <span class="app-batch__cost">{{ fmt(batch.costPrice) }} 元/份</span>
-                <span class="app-batch__money">成本 {{ fmtMoney(batch.costAmount) }} 元</span>
-                <span class="app-batch__date">建仓 {{ batch.openDate ?? '—' }}</span>
-                <span class="app-batch__ops">
-                  <AppButton size="sm" @click="startEditBatch(batch)">更正</AppButton>
-                  <AppButton size="sm" @click="onRevokeBatch(batch)">撤销</AppButton>
-                </span>
               </div>
             </div>
           </div>
@@ -946,9 +914,7 @@ import {
   convert as convertHolding,
   deleteChange as deleteChangeApi,
   overview as holdingOverview,
-  revokeBatch as revokeBatchApi,
   sell as sellHolding,
-  updateBatch as updateBatchApi,
   updateChange as updateSellChangeApi,
 } from '@/api/holdingController'
 import { reset as resetVarietyApi, save as saveVariety } from '@/api/varietyController'
@@ -1185,10 +1151,6 @@ const paneHeading = computed(() => {
 const batchOf = ref<
   (Omit<HoldingVarietyDisplay, 'batches'> & { batches?: HoldingBatchVO[] }) | null
 >(null)
-const editingBatchId = ref<string | null>(null)
-const batchDraft = ref({ shares: '', costPrice: '', openDate: '' })
-const batchError = ref('')
-const batchSaving = ref(false)
 
 /** 清空该品种全部本地记录时的进行态，避免连点触发两次 */
 const resetting = ref(false)
@@ -1829,83 +1791,10 @@ async function loadAll(): Promise<void> {
 }
 
 /** 打开批次更正弹层 */
+/** 打开批次更正弹层 */
 function openBatches(item: HoldingVarietyDisplay): void {
   // 生成的 typings 把批次 id 标为 number，后端实际下发字符串，这里按本地类型对齐
   batchOf.value = item as Omit<HoldingVarietyDisplay, 'batches'> & { batches?: HoldingBatchVO[] }
-  editingBatchId.value = null
-  batchError.value = ''
-}
-
-/** 进入某个批次的编辑态，把当前值带进表单 */
-function startEditBatch(batch: HoldingBatchVO): void {
-  if (batch.id == null) {
-    return
-  }
-  editingBatchId.value = batch.id
-  batchDraft.value = {
-    shares: batch.shares != null ? String(batch.shares) : '',
-    costPrice: batch.costPrice != null ? String(batch.costPrice) : '',
-    openDate: batch.openDate ?? '',
-  }
-  batchError.value = ''
-}
-
-/** 更新批次表单的某个字段 */
-function updateBatchDraft(field: 'shares' | 'costPrice' | 'openDate', value: string): void {
-  batchDraft.value = { ...batchDraft.value, [field]: value }
-  batchError.value = ''
-}
-
-/** 提交批次更正 */
-async function onSaveBatch(): Promise<void> {
-  const id = editingBatchId.value
-  if (id == null) {
-    return
-  }
-  const sharesValue = Number(batchDraft.value.shares)
-  const costValue = Number(batchDraft.value.costPrice)
-  if (!Number.isFinite(sharesValue) || sharesValue <= 0) {
-    batchError.value = '份额必须为正数'
-    return
-  }
-  if (!Number.isFinite(costValue) || costValue <= 0) {
-    batchError.value = '成本价必须为正数'
-    return
-  }
-  batchSaving.value = true
-  try {
-    // 生成的 typings 把 id 标成 number，但后端契约是字符串形式的雪花 ID，直接传字符串才不会丢精度
-    await updateBatchApi({
-      id,
-      shares: sharesValue,
-      costPrice: costValue,
-      ...(batchDraft.value.openDate ? { openDate: batchDraft.value.openDate } : {}),
-    } as unknown as API.HoldingBatchUpdateRequest)
-    ElMessage.success('已更正，变动历史里追加了一条说明')
-    editingBatchId.value = null
-    batchOf.value = null
-    await loadAll()
-  } catch {
-    // request 层已弹出具体原因
-  } finally {
-    batchSaving.value = false
-  }
-}
-
-/** 撤销一个批次，后端会拒绝已卖出过的批次 */
-async function onRevokeBatch(batch: HoldingBatchVO): Promise<void> {
-  if (batch.id == null) {
-    return
-  }
-  try {
-    // 同更正接口，id 必须是字符串形态才不丢精度
-    await revokeBatchApi({ id: batch.id } as unknown as API.HoldingChangeRevokeRequest)
-    ElMessage.success('已撤销该批次')
-    batchOf.value = null
-    await loadAll()
-  } catch {
-    // request 层已弹出具体原因
-  }
 }
 
 /** 清空该品种的全部本地记录，品种注册与净值序列保留；二次确认后才发请求 */

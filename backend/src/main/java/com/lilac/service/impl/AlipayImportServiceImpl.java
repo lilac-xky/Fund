@@ -21,6 +21,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -116,7 +117,7 @@ public class AlipayImportServiceImpl implements AlipayImportService {
      * @return 抵消后的结果
      */
     private List<AlipayFundOrder> dropRefunded(List<AlipayFundOrder> orders) {
-        // 先按交易号归组：同一笔订单的「买入 + 买入退款」共用交易号
+        // 按交易号归组：同组的「买入 + 买入退款」（含转换找零）整组丢弃，金额即已扣差异的净额
         Map<String, List<AlipayFundOrder>> byTradeNo = new LinkedHashMap<>();
         for (AlipayFundOrder order : orders) {
             byTradeNo.computeIfAbsent(order.getTradeNo(), key -> new ArrayList<>()).add(order);
@@ -139,9 +140,10 @@ public class AlipayImportServiceImpl implements AlipayImportService {
             kept.addAll(unique.values());
         }
         // 交易号为空的行无法归组，原样保留交人工判断
+        List<AlipayFundOrder> rest = new ArrayList<>();
         for (AlipayFundOrder order : orders) {
             if (order.getTradeNo() == null || order.getTradeNo().isBlank()) {
-                kept.add(order);
+                rest.add(order);
             }
         }
         kept.sort((left, right) -> {
@@ -152,7 +154,6 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         });
         return kept;
     }
-
     /**
      * 把一条动作转成待确认行，含基金代码匹配结果
      *

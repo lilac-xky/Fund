@@ -6,8 +6,8 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -22,8 +22,6 @@ public class AlipayFundClassifier {
     /**
      * 基金申赎确认的分界时刻，这个点之后的订单按下一交易日净值算
      */
-    private static final LocalTime CUTOFF = LocalTime.of(15, 0);
-
     /**
      * 平台前缀，蚂蚁财富同一机构会写成多种，统一剥掉
      */
@@ -42,14 +40,14 @@ public class AlipayFundClassifier {
             "-赎回至余额宝", "-赎回至银行卡", "-赎回");
 
     /**
+     * 基金申赎确认的分界时刻，这个点之后的订单按下一交易日净值算
+     */
+    private static final LocalTime CUTOFF = LocalTime.of(15, 0);
+
+    /**
      * 转换行里分隔转入转出的标记
      */
     private static final Pattern CONVERT_SPLIT = Pattern.compile("\\[转换至\\]");
-
-    /**
-     * 转换转入侧的交易号后缀，与转出侧区分开
-     */
-    private static final String IN_SUFFIX = "#IN";
 
     /**
      * 退款类标记，命中即视为冲销而非新动作
@@ -88,7 +86,10 @@ public class AlipayFundClassifier {
             order.setOrderTime(row.getCreatedTime());
             order.setNote(row.getNote());
             order.setAction(actionOf(product));
-            order.setConfirmDate(confirmDateOf(row.getCreatedTime()));
+            // 交易号日不受 15 点影响，转换与它的退款靠它配对
+            order.setTradeDate(row.getOrderDate());
+            // 15 点判断只对买入与转换成立，卖出传进去也只会退回下单日
+            order.setConfirmDate(confirmDateOf(row, order.getAction()));
             fillFundNames(order, product);
             // 退款行记下它冲销的是同交易号上的原动作，上层据此抵消
             if (order.getAction() == AlipayAction.REFUND) {
@@ -113,10 +114,11 @@ public class AlipayFundClassifier {
     private AlipayFundOrder invertedSide(AlipayFundOrder order) {
         AlipayFundOrder target = new AlipayFundOrder();
         // 用「交易号#IN」区分，避免与转出侧在按交易号归组时被当成重复行删掉
-        target.setTradeNo(order.getTradeNo() + IN_SUFFIX);
+        target.setTradeNo(order.getTradeNo() + AlipayAction.CONVERT_IN_SUFFIX);
         target.setProductName(order.getProductName());
         target.setAmount(order.getAmount());
         target.setOrderTime(order.getOrderTime());
+        target.setTradeDate(order.getTradeDate());
         target.setConfirmDate(order.getConfirmDate());
         target.setFundName(order.getTargetFundName());
         target.setAction(AlipayAction.CONVERT_IN);
@@ -264,37 +266,44 @@ public class AlipayFundClassifier {
     }
 
     /**
-     * 按下单时间换算净值确认日：15 点后与周末顺延到下一交易日
+     * 取成交净值日：买入与转换按创建时刻判 15 点顺延，卖出固定取交易号日（其创建时刻是到账时间，不可判）
      *
-     * @param orderTime 下单时间
-     * @return 确认日，时间为空时返回 null
+     * @param row    账单行
+     * @param action 动作类型
+     * @return 成交净值日；解析不出时退回创建时间的日期
      */
-    private LocalDate confirmDateOf(LocalDateTime orderTime) {
-        if (orderTime == null) {
+    private LocalDate confirmDateOf(AlipayBillRow row, AlipayAction action) {
+        LocalDate orderDate = row.getOrderDate() != null
+                ? row.getOrderDate()
+                : (row.getCreatedTime() == null ? null : row.getCreatedTime().toLocalDate());
+        if (orderDate == null) {
             return null;
         }
-        LocalDate date = orderTime.toLocalDate();
-        // 15:00 及之后下单算下一交易日；周末下单同理
-        if (!orderTime.toLocalTime().isBefore(CUTOFF)) {
-            date = date.plusDays(1);
+        // 卖出与转换退款的创建时刻是到账时刻，不参与 15 点判断
+        boolean cutoffApplies = action == AlipayAction.BUY || action == AlipayAction.CONVERT
+                || action == AlipayAction.CONVERT_IN;
+        if (!cutoffApplies || row.getCreatedTime() == null) {
+            return orderDate;
         }
-        while (isWeekend(date)) {
-            date = date.plusDays(1);
+        if (row.getCreatedTime().toLocalTime().isBefore(CUTOFF)) {
+            return orderDate;
         }
-        return date;
+        return nextWeekday(orderDate.plusDays(1));
     }
 
     /**
-     * 是否周末，节假日由调用方另有口径，这里只处理普适规则
+     * 往后找最近的周一至周五，只处理周末；节假日不影响 15 点这条规则的主体逻辑
      *
-     * @param date 日期
-     * @return 周末返回 true
+     * @param date 起始日
+     * @return 非周末的日期
      */
-    private boolean isWeekend(LocalDate date) {
-        return switch (date.getDayOfWeek()) {
-            case SATURDAY, SUNDAY -> true;
-            default -> false;
-        };
+    private LocalDate nextWeekday(LocalDate date) {
+        LocalDate current = date;
+        while (current.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
+                || current.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            current = current.plusDays(1);
+        }
+        return current;
     }
 
     /**

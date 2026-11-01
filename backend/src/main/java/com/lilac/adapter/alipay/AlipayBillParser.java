@@ -225,6 +225,7 @@ public class AlipayBillParser {
         row.setTradeNo(index.text(cells, index.tradeNo));
         row.setCreatedTime(index.time(cells, index.created));
         row.setPaidTime(index.time(cells, index.paid));
+        row.setOrderDate(orderDateOf(row.getTradeNo()));
         row.setCounterparty(index.text(cells, index.counterparty));
         row.setProductName(index.text(cells, index.product));
         row.setRawAmount(index.text(cells, index.amount));
@@ -234,6 +235,38 @@ public class AlipayBillParser {
         row.setNote(index.text(cells, index.note));
         row.setFundStatus(index.text(cells, index.fundStatus));
         return row;
+    }
+
+    /**
+     * 从交易号前 8 位取下单日（账单创建时间在卖出行是到账时间，不能当下单时刻）
+     *
+     * @param tradeNo 交易号
+     * @return 下单日，解析不出返回 null
+     */
+    private LocalDate orderDateOf(String tradeNo) {
+        if (tradeNo == null) {
+            return null;
+        }
+        String value = tradeNo.strip();
+        // 退款行是「原交易号_退款交易号」，取前一段即可
+        int underscore = value.indexOf('_');
+        if (underscore > 0) {
+            value = value.substring(0, underscore);
+        }
+        if (value.length() < 8) {
+            return null;
+        }
+        String head = value.substring(0, 8);
+        if (!head.chars().allMatch(Character::isDigit)) {
+            return null;
+        }
+        try {
+            return LocalDate.of(Integer.parseInt(head.substring(0, 4)),
+                    Integer.parseInt(head.substring(4, 6)), Integer.parseInt(head.substring(6, 8)));
+        } catch (RuntimeException e) {
+            log.warn("交易号前 8 位不是合法日期，已忽略下单日：{}", tradeNo);
+            return null;
+        }
     }
 
     /**

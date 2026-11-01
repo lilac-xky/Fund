@@ -54,6 +54,11 @@ public class AlipayFundOrder {
     private LocalDate confirmDate;
 
     /**
+     * 交易号前 8 位表示的下单日，不做 15 点顺延；转换与它的退款靠这个字段配对
+     */
+    private LocalDate tradeDate;
+
+    /**
      * 原始行备注
      */
     private String note;

@@ -325,7 +325,7 @@ public class HoldingServiceImpl implements HoldingService {
             }
             BigDecimal take = holding.getShares().min(remaining);
             weightedCost = weightedCost.add(take.multiply(holding.getCostPrice()));
-            deductNotes.add(plain(take) + " 份（" + plain(holding.getCostPrice()) + " 元/份，建仓 "
+            deductNotes.add(plain(take) + " 份（" + plain(holding.getCostPrice()) + " 元/份，买入 "
                     + holding.getOpenDate() + "）");
             BigDecimal left = holding.getShares().subtract(take);
             remaining = remaining.subtract(take);
@@ -385,6 +385,8 @@ public class HoldingServiceImpl implements HoldingService {
                 || point.getUnitNetWorth().signum() <= 0) {
             return null;
         }
+        // 金额按此净值折成份额，这个净值就是成交净值，回填给记账用
+        request.setUnitPrice(point.getUnitNetWorth());
         return request.getAmount().divide(point.getUnitNetWorth(), 2, RoundingMode.HALF_UP);
     }
 
@@ -453,7 +455,7 @@ public class HoldingServiceImpl implements HoldingService {
         saveChange(holding.getVarietyKey(), HoldingChangeType.SELL, holding.getShares(), holding.getCostPrice(),
                 totalShares(holding.getVarietyKey()), holding.getOpenDate(),
                 "撤销录入错误的批次 " + holding.getId() + "（" + plain(holding.getShares()) + " 份 @ "
-                        + plain(holding.getCostPrice()) + " 元/份，建仓 " + holding.getOpenDate() + "）",
+                        + plain(holding.getCostPrice()) + " 元/份，买入 " + holding.getOpenDate() + "）",
                 holding.getId());
         log.info("持仓批次已撤销 id={} key={}", holding.getId(), holding.getVarietyKey());
         return true;

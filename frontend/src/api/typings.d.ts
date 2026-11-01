@@ -1111,6 +1111,8 @@ declare namespace API {
     amount?: number
     /** 建仓日期，为空时取当日 */
     openDate?: string
+    /** 来源交易号，账单导入时带上，用于跨次导入去重 */
+    tradeNo?: string
   }
 
   type HoldingChangeQueryRequest = {
@@ -1250,6 +1252,10 @@ declare namespace API {
     tradeDate?: string
     /** 卖出净值，元/份；补录时按支付宝订单填写，留空按 FIFO 加权成本记账 */
     unitPrice?: number
+    /** 来源交易号，账单导入时带上，用于跨次导入去重 */
+    tradeNo?: string
+    /** 备注，账单导入的转换转出侧用它写明「由转换产生」，手工卖出留空 */
+    note?: string
   }
 
   type HoldingSummaryVO = {

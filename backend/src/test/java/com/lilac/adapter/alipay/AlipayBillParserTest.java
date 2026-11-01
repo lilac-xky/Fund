@@ -79,23 +79,23 @@ class AlipayBillParserTest {
     @DisplayName("五种动作各自识别正确")
     void classifyActions() {
         Map<String, AlipayFundOrder> byNo = byTradeNo(
-                row("2026010000000000000001", "2026/10/12 14:21", "蚂蚁财富-华商均衡成长混合C-买入",
+                row("2026011500000000000001", "2026/10/12 14:21", "蚂蚁财富-华商均衡成长混合C-买入",
                         "10"),
-                row("2026010000000000000002", "2026/9/21 15:28",
+                row("2026011500000000000002", "2026/9/21 15:28",
                         "蚂蚁财富-华商均衡成长混合C-卖出至余额宝", "18.08"),
-                row("2026010000000000000003", "2026/10/19 15:39",
+                row("2026011500000000000003", "2026/10/19 15:39",
                         "蚂蚁财富-华泰柏瑞中证红利低波动ETF联接C-现金分红至余额宝", "0.24"),
-                row("2026010000000000000004", "2026/10/27 20:36",
+                row("2026011500000000000004", "2026/10/27 20:36",
                         "蚂蚁财富-中信保诚至泰中短债债券C[转换至]金信民兴债券C", "403.32"),
-                row("2026010000000000000005", "2026/10/27 10:26", "国泰黄金ETF联接C-买入退款",
+                row("2026011500000000000005", "2026/10/27 10:26", "国泰黄金ETF联接C-买入退款",
                         "9.39"));
 
-        assertThat(byNo.get("2026010000000000000001").getAction()).isEqualTo(AlipayAction.BUY);
-        assertThat(byNo.get("2026010000000000000002").getAction()).isEqualTo(AlipayAction.SELL);
-        assertThat(byNo.get("2026010000000000000003").getAction())
+        assertThat(byNo.get("2026011500000000000001").getAction()).isEqualTo(AlipayAction.BUY);
+        assertThat(byNo.get("2026011500000000000002").getAction()).isEqualTo(AlipayAction.SELL);
+        assertThat(byNo.get("2026011500000000000003").getAction())
                 .isEqualTo(AlipayAction.CASH_DIVIDEND);
-        assertThat(byNo.get("2026010000000000000004").getAction()).isEqualTo(AlipayAction.CONVERT);
-        assertThat(byNo.get("2026010000000000000005").getAction()).isEqualTo(AlipayAction.REFUND);
+        assertThat(byNo.get("2026011500000000000004").getAction()).isEqualTo(AlipayAction.CONVERT);
+        assertThat(byNo.get("2026011500000000000005").getAction()).isEqualTo(AlipayAction.REFUND);
     }
 
     /**
@@ -105,40 +105,50 @@ class AlipayBillParserTest {
     @DisplayName("剥掉前缀与动作词，得到纯基金名称")
     void stripName() {
         Map<String, AlipayFundOrder> byNo = byTradeNo(
-                row("2026010000000000000011", "2026/10/12 14:21", "蚂蚁财富-华商均衡成长混合C-买入   ",
+                row("2026011500000000000011", "2026/10/12 14:21", "蚂蚁财富-华商均衡成长混合C-买入   ",
                         "10"),
-                row("2026010000000000000012", "2026/10/27 20:36",
+                row("2026011500000000000012", "2026/10/27 20:36",
                         "蚂蚁财富-中信保诚至泰中短债债券C[转换至]金信民兴债券C", "403.32"),
-                row("2026010000000000000013", "2026/10/27 10:20", "国泰黄金ETF联接C-买入", "9.39"));
+                row("2026011500000000000013", "2026/10/27 10:20", "国泰黄金ETF联接C-买入", "9.39"));
 
-        assertThat(byNo.get("2026010000000000000011").getFundName()).isEqualTo("华商均衡成长混合C");
-        assertThat(byNo.get("2026010000000000000012").getFundName())
+        assertThat(byNo.get("2026011500000000000011").getFundName()).isEqualTo("华商均衡成长混合C");
+        assertThat(byNo.get("2026011500000000000012").getFundName())
                 .isEqualTo("中信保诚至泰中短债债券C");
-        assertThat(byNo.get("2026010000000000000012").getTargetFundName()).isEqualTo("金信民兴债券C");
-        assertThat(byNo.get("2026010000000000000013").getFundName()).isEqualTo("国泰黄金ETF联接C");
+        assertThat(byNo.get("2026011500000000000012").getTargetFundName()).isEqualTo("金信民兴债券C");
+        assertThat(byNo.get("2026011500000000000013").getFundName()).isEqualTo("国泰黄金ETF联接C");
     }
 
     /**
-     * 15 点前算当日、15 点整与之后顺延、周末顺延到下一交易日
+     * 净值日的判定规则按动作分流：
+     * 买入与转换的创建时刻可信，15 点后顺延到下一交易日；
+     * 卖出的创建时刻是到账时间，不可用，固定取交易号那天。
+     *
+     * <p>实测依据：持仓里 6-05 15:18 那笔买入的成本价是 3.8413 = 6-08 净值（次一交易日），
+     * 证明买入 15 点后确实顺延；而 9-18 的卖出创建时间 9-21 15:28，实际按 9-18 净值成交，
+     * 说明卖出的创建时刻只是到账时刻。</p>
      */
     @Test
-    @DisplayName("15 点口径换算净值确认日")
-    void confirmDateByCutOff() {
-        // 2026-10-23 是周五，2026-10-24 是周六，用硬编码基准避免依赖运行时星期
+    @DisplayName("买入按 15 点顺延，卖出固定取交易号日")
+    void confirmDateByAction() {
+        // 交易号以 20261023（周五）开头；2026-10-26 是周一
         LocalDate friday = LocalDate.of(2026, 10, 23);
-        assertThat(friday.getDayOfWeek()).isEqualTo(DayOfWeek.FRIDAY);
+        LocalDate monday = LocalDate.of(2026, 10, 26);
         Map<String, AlipayFundOrder> byNo = byTradeNo(
-                row("2026010000000000000021", "2026/10/23 10:58", "蚂蚁财富-某基金-买入", "20"),
-                row("2026010000000000000022", "2026/10/23 15:00", "蚂蚁财富-某基金-买入", "20"),
-                row("2026010000000000000023", "2026/10/23 14:59", "蚂蚁财富-某基金-买入", "20"),
-                row("2026010000000000000024", "2026/10/24 10:00", "蚂蚁财富-某基金-买入", "20"));
+                // 买入 15:00 后：顺延到周一
+                row("2026102300000000000022", "2026/10/23 15:00", "蚂蚁财富-某基金-买入", "20"),
+                // 买入 15:00 前：当日
+                row("2026102300000000000023", "2026/10/23 14:59", "蚂蚁财富-某基金-买入", "20"),
+                // 卖出创建时间即使到了下周二，仍取交易号那天
+                row("2026102300000000000024", "2026/10/27 15:28",
+                        "蚂蚁财富-某基金-卖出至余额宝", "20"),
+                // 转换 15:00 后：与买入同样顺延
+                row("2026102300000000000025", "2026/10/23 20:36",
+                        "蚂蚁财富-某基金[转换至]另一只基金", "20"));
 
-        assertThat(byNo.get("2026010000000000000021").getConfirmDate()).isEqualTo(friday);
-        assertThat(byNo.get("2026010000000000000022").getConfirmDate())
-                .isEqualTo(LocalDate.of(2026, 10, 26));
-        assertThat(byNo.get("2026010000000000000023").getConfirmDate()).isEqualTo(friday);
-        assertThat(byNo.get("2026010000000000000024").getConfirmDate())
-                .isEqualTo(LocalDate.of(2026, 10, 26));
+        assertThat(byNo.get("2026102300000000000022").getConfirmDate()).isEqualTo(monday);
+        assertThat(byNo.get("2026102300000000000023").getConfirmDate()).isEqualTo(friday);
+        assertThat(byNo.get("2026102300000000000024").getConfirmDate()).isEqualTo(friday);
+        assertThat(byNo.get("2026102300000000000025").getConfirmDate()).isEqualTo(monday);
     }
 
     /**
@@ -148,8 +158,8 @@ class AlipayBillParserTest {
     @DisplayName("余额宝收益发放不算基金动作")
     void skipYuEbao() {
         List<AlipayBillRow> rows = parser.parse(bytesOf(HEAD + HEADER
-                + row("2026010000000000000031", "2026/11/1 2:10", "余额宝-2026.10.31-收益发放", "0.01")
-                + "\n" + row("2026010000000000000032", "2026/10/25 12:13", "转账收款到余额宝", "58.33")));
+                + row("2026011500000000000031", "2026/11/1 2:10", "余额宝-2026.10.31-收益发放", "0.01")
+                + "\n" + row("2026011500000000000032", "2026/10/25 12:13", "转账收款到余额宝", "58.33")));
 
         // 先确认解析本身没丢行，再确认分类把它们排除了，否则用例会因为「解析出 0 行」而假通过
         assertThat(rows).hasSize(2);

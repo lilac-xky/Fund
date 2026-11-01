@@ -54,4 +54,9 @@ public enum AlipayAction {
     public String getLabel() {
         return label;
     }
+
+    /**
+     * 转换转入侧交易号的后缀，与转出侧区分开，供导入层识别成对的两条
+     */
+    public static final String CONVERT_IN_SUFFIX = "#IN";
 }
