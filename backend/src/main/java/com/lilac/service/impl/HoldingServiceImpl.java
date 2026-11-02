@@ -133,7 +133,10 @@ public class HoldingServiceImpl implements HoldingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public HoldingVO buy(HoldingBuyRequest request) {
-        return doBuy(request, null);
+        // 红利再投补录要留下分红来源，普通买入不带备注
+        String note = request == null || request.getNote() == null || request.getNote().isBlank()
+                ? null : request.getNote().strip();
+        return doBuy(request, note);
     }
 
     /**

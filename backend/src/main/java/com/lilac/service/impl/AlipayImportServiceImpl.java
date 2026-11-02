@@ -117,7 +117,7 @@ public class AlipayImportServiceImpl implements AlipayImportService {
      * @return 抵消后的结果
      */
     private List<AlipayFundOrder> dropRefunded(List<AlipayFundOrder> orders) {
-        // 按交易号归组：同组的「买入 + 买入退款」（含转换找零）整组丢弃，金额即已扣差异的净额
+        // 同交易号只可能是买入卖出与它自己的退款，整组丢弃；转换找零的退款交易号不同，靠备注解析
         Map<String, List<AlipayFundOrder>> byTradeNo = new LinkedHashMap<>();
         for (AlipayFundOrder order : orders) {
             byTradeNo.computeIfAbsent(order.getTradeNo(), key -> new ArrayList<>()).add(order);
@@ -139,13 +139,6 @@ public class AlipayImportServiceImpl implements AlipayImportService {
             }
             kept.addAll(unique.values());
         }
-        // 交易号为空的行无法归组，原样保留交人工判断
-        List<AlipayFundOrder> rest = new ArrayList<>();
-        for (AlipayFundOrder order : orders) {
-            if (order.getTradeNo() == null || order.getTradeNo().isBlank()) {
-                rest.add(order);
-            }
-        }
         kept.sort((left, right) -> {
             if (left.getOrderTime() == null || right.getOrderTime() == null) {
                 return 0;
@@ -154,6 +147,7 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         });
         return kept;
     }
+
     /**
      * 把一条动作转成待确认行，含基金代码匹配结果
      *
@@ -170,6 +164,12 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         row.setFundName(order.getFundName());
         row.setTargetFundName(order.getTargetFundName());
         row.setAmount(order.getAmount());
+        if (order.getAction() == AlipayAction.CONVERT) {
+            // 转出侧的真实回款是账单金额加找零，转入侧仍按账单金额买入
+            BigDecimal refund = order.getRefundAmount();
+            row.setRefundAmount(refund);
+            row.setTransferOutAmount(refund == null ? order.getAmount() : order.getAmount().add(refund));
+        }
         row.setOrderTime(order.getOrderTime());
         row.setConfirmDate(order.getConfirmDate());
         List<AlipayImportRow.Candidate> candidates = candidatesOf(order.getFundName());
@@ -339,6 +339,16 @@ public class AlipayImportServiceImpl implements AlipayImportService {
     }
 
     /**
+     * 金额转成不带多余零的文本，用于拼说明文案
+     *
+     * @param amount 金额
+     * @return 文本，为空时返回 0
+     */
+    private String plain(BigDecimal amount) {
+        return amount == null ? "0" : amount.stripTrailingZeros().toPlainString();
+    }
+
+    /**
      * 取库里已有变动记录上的交易号，用于跨次导入去重
      *
      * @return 交易号集合
@@ -395,8 +405,9 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         if (order.getAction() == AlipayAction.UNKNOWN) {
             return "未识别";
         }
-        if (order.getAction() == AlipayAction.CONVERT) {
-            return "待补信息";
+        // 现金分红只留档、不写持仓，单独给状态，避免被自动勾选后提交失败
+        if (order.getAction() == AlipayAction.CASH_DIVIDEND) {
+            return "仅留档";
         }
         if (row.getCandidates().isEmpty()) {
             return "未匹配";
@@ -405,6 +416,7 @@ public class AlipayImportServiceImpl implements AlipayImportService {
         if (row.getCandidates().size() > AMBIGUOUS_THRESHOLD) {
             return "待选择";
         }
+        // 转换行不用再人工补份额：转出金额由账单净额加找零算出，份额后端按确认日净值反推
         return row.getVarietyKey() != null ? "可导入" : "待注册";
     }
 
@@ -422,7 +434,20 @@ public class AlipayImportServiceImpl implements AlipayImportService {
             return "商品名称里没有识别到买入、卖出、分红或转换，请手工处理";
         }
         if (order.getAction() == AlipayAction.CONVERT) {
-            return "转换只有金额，两边份额与净值不在账单里，需要在支付宝里点开这一笔补齐后提交";
+            BigDecimal refund = order.getRefundAmount();
+            if (refund != null && refund.signum() > 0) {
+                return "账单金额 " + plain(order.getAmount()) + " 元只是转出侧净额，另有 " + plain(refund)
+                        + " 元找零退回余额宝，转出按 " + plain(order.getAmount().add(refund))
+                        + " 元计；转出份额按确认日净值反推，转入侧按账单金额买入";
+            }
+            return "转换只有金额，两边份额与净值不在账单里，转出份额按确认日净值反推，提交后请核对一遍";
+        }
+        // 分红与转换转入不需要选基金，说明要排在「查不到基金」之前，否则会被误报成未匹配
+        if (order.getAction() == AlipayAction.CASH_DIVIDEND) {
+            return "现金分红只留档核对，不计入持仓与收益，避免与系统自动推算的除息重复";
+        }
+        if (order.getAction() == AlipayAction.CONVERT_IN) {
+            return "由「" + order.getNote() + "」；金额按确认日净值折算份额，与买入同口径";
         }
         if (candidates.isEmpty()) {
             return "基金全集里没查到「" + order.getFundName() + "」，请先同步基金全集或手工指定代码";
@@ -439,12 +464,6 @@ public class AlipayImportServiceImpl implements AlipayImportService {
             Double score = candidates.get(0).getSimilarity();
             return "按名称相似度 " + (score == null ? "1" : score) + " 对到「" + matched
                     + "」（账单写的是「" + order.getFundName() + "」），确认无误再导入";
-        }
-        if (order.getAction() == AlipayAction.CASH_DIVIDEND) {
-            return "现金分红只留档核对，不计入持仓与收益，避免与系统自动推算的除息重复";
-        }
-        if (order.getAction() == AlipayAction.CONVERT_IN) {
-            return "由「" + order.getNote() + "」；金额按确认日净值折算份额，与买入同口径";
         }
         return "确认日期 " + order.getConfirmDate() + "（按 15:00 口径换算）";
     }

@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -19,9 +20,6 @@ import java.util.regex.Pattern;
 @Component
 public class AlipayFundClassifier {
 
-    /**
-     * 基金申赎确认的分界时刻，这个点之后的订单按下一交易日净值算
-     */
     /**
      * 平台前缀，蚂蚁财富同一机构会写成多种，统一剥掉
      */
@@ -48,6 +46,11 @@ public class AlipayFundClassifier {
      * 转换行里分隔转入转出的标记
      */
     private static final Pattern CONVERT_SPLIT = Pattern.compile("\\[转换至\\]");
+
+    /**
+     * 转换备注里的找零金额，如「0.84元转入余额宝」
+     */
+    private static final Pattern REFUND_NOTE = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)元转入余额宝");
 
     /**
      * 退款类标记，命中即视为冲销而非新动作
@@ -86,6 +89,10 @@ public class AlipayFundClassifier {
             order.setOrderTime(row.getCreatedTime());
             order.setNote(row.getNote());
             order.setAction(actionOf(product));
+            // 转换行的备注写着找零金额，转出所得 = 账单金额 + 退回余额宝的找零
+            if (order.getAction() == AlipayAction.CONVERT) {
+                order.setRefundAmount(refundNoteAmount(order.getNote()));
+            }
             // 交易号日不受 15 点影响，转换与它的退款靠它配对
             order.setTradeDate(row.getOrderDate());
             // 15 点判断只对买入与转换成立，卖出传进去也只会退回下单日
@@ -106,7 +113,7 @@ public class AlipayFundClassifier {
     }
 
     /**
-     * 由转换行派生转入侧的动作：金额相同，方向相反，标记为转换转入
+     * 由转换行派生转入侧的动作：金额取账单金额，方向相反，标记为转换转入
      *
      * @param order 转出侧动作
      * @return 转入侧动作
@@ -124,6 +131,29 @@ public class AlipayFundClassifier {
         target.setAction(AlipayAction.CONVERT_IN);
         target.setNote("由「" + order.getFundName() + "」转换转入");
         return target;
+    }
+
+    /**
+     * 从备注里取转换找零金额，没有或解析不出时返回 null
+     *
+     * @param note 原始行备注
+     * @return 退回余额宝的金额
+     */
+    private BigDecimal refundNoteAmount(String note) {
+        if (note == null || note.isBlank()) {
+            return null;
+        }
+        Matcher matcher = REFUND_NOTE.matcher(note);
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(matcher.group(1));
+        } catch (NumberFormatException e) {
+            // 备注格式异常不影响主流程，按无找零处理
+            log.warn("转换备注里的找零金额解析失败：{}", note);
+            return null;
+        }
     }
 
     /**

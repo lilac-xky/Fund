@@ -143,7 +143,7 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
     }
 
     /**
-     * 确认候选并写入品种注册表，类型待确认时必须显式指定
+     * 确认候选并写入品种注册表，请求未给类型时按已注册记录、场内身份、号段与名称自动判定
      *
      * @param request 确认请求
      * @return 已写入的品种
@@ -154,7 +154,6 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         ThrowUtils.throwIf(request == null || request.getCode() == null, HttpsCodeEnum.PARAMS_ERROR);
         String code = request.getCode().trim();
         ThrowUtils.throwIf(!CODE_PATTERN.matcher(code).matches(), HttpsCodeEnum.PARAMS_ERROR, "代码必须是 6 位数字");
-        ThrowUtils.throwIf(request.getVarietyType() == null, HttpsCodeEnum.PARAMS_ERROR, "必须指定品种类型");
         ThrowUtils.throwIf(request.getVarietyType() == VarietyType.IDX, HttpsCodeEnum.PARAMS_ERROR,
                 "指数不从持仓入口录入");
 
@@ -168,7 +167,8 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         ThrowUtils.throwIf(fundName == null, HttpsCodeEnum.NOT_FOUND_ERROR,
                 "未找到代码 " + code + " 对应的基金，请核对代码");
 
-        boolean exchangeTraded = request.getVarietyType() == VarietyType.ETF;
+        VarietyType varietyType = resolveVarietyType(code, catalog, request.getVarietyType());
+        boolean exchangeTraded = varietyType == VarietyType.ETF;
         FundCategory inferred = fundCategoryResolver.resolve(fundType, fundName, exchangeTraded);
         FundCategory category = request.getCategory() == null ? inferred : request.getCategory();
         // 自动判定不出类型时不给默认值，避免把黄金当普通股票型静默使用
@@ -176,8 +176,8 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         String trackIndexCode = resolveTrackIndexCode(code, category, request.getTrackIndexCode());
 
         VarietySaveRequest saveRequest = new VarietySaveRequest();
-        saveRequest.setVarietyKey(request.getVarietyType().name() + ":" + code);
-        saveRequest.setVarietyType(request.getVarietyType());
+        saveRequest.setVarietyKey(varietyType.name() + ":" + code);
+        saveRequest.setVarietyType(varietyType);
         saveRequest.setVarietyCode(code);
         saveRequest.setVarietyName(fundName);
         saveRequest.setCategory(category);
@@ -188,6 +188,43 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
         Variety saved = varietyMapper.selectOneByQuery(QueryWrapper.create()
                 .eq(Variety::getVarietyKey, saveRequest.getVarietyKey()));
         return BeanUtil.copyProperties(saved, VarietyVO.class);
+    }
+
+    /**
+     * 解析品种类型：显式指定优先，其次沿用已注册记录，再按场内身份与号段名称判定，兜底为场外
+     *
+     * @param code    6 位代码
+     * @param catalog 全集行，可为 null
+     * @param wanted  请求显式指定的类型，可为 null
+     * @return 品种类型
+     */
+    private VarietyType resolveVarietyType(String code, FundCatalog catalog, VarietyType wanted) {
+        if (wanted != null) {
+            return wanted;
+        }
+        // 已清仓的基金品种仍在注册表里，直接沿用原类型，避免重复登记成另一个 key
+        List<Variety> registered = varietyMapper.selectListByQuery(QueryWrapper.create()
+                .eq(Variety::getVarietyCode, code));
+        if (!registered.isEmpty() && registered.getFirst().getVarietyType() != null) {
+            return registered.getFirst().getVarietyType();
+        }
+        ExchangeIdentity etf = pickIdentity(identitiesOf(code), ExchangeKind.ETF);
+        return isExchangeTraded(code, catalog, etf) ? VarietyType.ETF : VarietyType.OF;
+    }
+
+    /**
+     * 取场内身份，上游失败时返回空列表由号段规则兜底
+     *
+     * @param code 6 位代码
+     * @return 身份列表，取不到返回空列表
+     */
+    private List<ExchangeIdentity> identitiesOf(String code) {
+        try {
+            return exchangeIdentityAdapter.resolveAll(code);
+        } catch (Exception e) {
+            log.warn("场内身份查询失败 code={}：{}", code, e.getMessage());
+            return List.of();
+        }
     }
 
     /**
@@ -359,6 +396,9 @@ public class FundDisambiguateServiceImpl implements FundDisambiguateService {
     private boolean isExchangeTraded(String code, FundCatalog catalog, ExchangeIdentity identity) {
         if (identity != null) {
             return identity.kind() == ExchangeKind.ETF;
+        }
+        if (catalog == null || catalog.getFundName() == null) {
+            return false;
         }
         // ETF 联接与 LOF 也能走到 50~59/15~19 号段，必须靠名称排除
         boolean nameLookLikeEtf = catalog.getFundName().toUpperCase().contains("ETF")

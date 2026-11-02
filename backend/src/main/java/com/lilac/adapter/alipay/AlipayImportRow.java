@@ -70,6 +70,16 @@ public class AlipayImportRow {
     private BigDecimal amount;
 
     /**
+     * 转换行退回余额宝的找零金额，元
+     */
+    private BigDecimal refundAmount;
+
+    /**
+     * 转换转出所得合计，等于账单金额加找零，元
+     */
+    private BigDecimal transferOutAmount;
+
+    /**
      * 下单时间
      */
     private LocalDateTime orderTime;

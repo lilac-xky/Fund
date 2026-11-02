@@ -42,5 +42,10 @@ public class HoldingBuyRequest implements Serializable {
      */
     private String tradeNo;
 
+    /**
+     * 变动备注，红利再投补录时写明来源，普通买入留空
+     */
+    private String note;
+
     private static final long serialVersionUID = 1L;
 }

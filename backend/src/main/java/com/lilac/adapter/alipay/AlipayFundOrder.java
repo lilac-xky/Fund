@@ -64,6 +64,11 @@ public class AlipayFundOrder {
     private String note;
 
     /**
+     * 转换找零退回余额宝的金额，取自备注「N.NN元转入余额宝」
+     */
+    private BigDecimal refundAmount;
+
+    /**
      * 若该行被判定为退款，其冲销的原交易号
      */
     private String refundedTradeNo;
