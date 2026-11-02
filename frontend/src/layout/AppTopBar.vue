@@ -343,19 +343,45 @@ defineProps<{
 }
 
 @media (max-width: 860px) {
+  .app-top {
+    padding: 0 12px;
+  }
+
   .app-top__burger {
     display: grid;
   }
 
+  /* 手机上导航不藏，改成一条可横向滑动的页签，否则全站没有任何入口 */
   .app-top__nav {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .app-top__nav::-webkit-scrollbar {
     display: none;
+  }
+
+  .app-tab {
+    padding: 7px 10px;
+    font-size: 12.5px;
   }
 
   .app-top__brand {
     width: auto;
+    gap: 8px;
   }
 
+  .app-top__en,
   .app-top__status {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-top__name {
     display: none;
   }
 }

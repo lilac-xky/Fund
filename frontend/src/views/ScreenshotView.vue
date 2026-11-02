@@ -31,7 +31,7 @@
             <div class="app-head">
               <div class="app-crumb">
                 持仓 <span class="app-crumb__sl">/</span>
-                <b class="app-crumb__b">截核对</b>
+                <b class="app-crumb__b">截图核对</b>
               </div>
               <div class="app-eyebrow">Screenshot</div>
               <h1 class="app-h1">账单导入与截图核对</h1>
@@ -42,7 +42,8 @@
             </div>
 
             <AppAlert kind="info">
-              账单里的<strong>退款会抵消同一笔买入</strong>，余额宝收益不算基金申赎会被跳过。
+              账单里的<strong>退款会抵消同一笔买入</strong>，转换退回余额宝的找零会
+              <strong>并入转出金额</strong>；余额宝收益不算基金申赎会被跳过。
               分红只留档、不计入持仓与收益，避免与系统自动推算的除息重复。
             </AppAlert>
 
@@ -213,23 +214,11 @@
                       <span class="app-order__reason">确认后即可勾选导入</span>
                     </div>
 
-                    <!-- 转换只有金额，两边份额与净值必须人工补 -->
                     <!-- 转换拆成两行：这行管转出的卖出，转入侧由 #IN 那行管，避免买两遍 -->
                     <div v-if="row.action === 'CONVERT'" class="app-order__fill">
-                      <div class="app-order__pick">
-                        <span>转出份额</span>
-                        <AppInput
-                          :model-value="convertDraft(row.seq ?? -1).outShares"
-                          :numeric="true"
-                          inputmode="decimal"
-                          @update:model-value="setConvertDraft(row.seq ?? -1, 'outShares', $event)"
-                        />
-                      </div>
                       <p class="app-order__reason">
                         {{
-                          convertReady(row)
-                            ? `已填转出份额，可勾选；转入侧「${row.targetFundName ?? '转入基金'}」会自动按金额生成买入，两行一起勾选即可`
-                            : '填好转出份额后才能勾选；转入侧按金额自动折算，不用手填份额与净值'
+                          `转出按 ${transferOutOf(row)} 元记账（账单净额${refundOf(row) > 0 ? ` ${row.amount} 元 + 找零 ${refundOf(row)} 元` : ''}），份额按确认日净值反推；转入侧「${row.targetFundName ?? '转入基金'}」按账单金额买入，两行一起勾选即可`
                         }}
                       </p>
                     </div>
@@ -248,6 +237,66 @@
                 </AppButton>
                 <span v-if="submitNote" class="app-order__reason">{{ submitNote }}</span>
               </div>
+            </AppGroup>
+
+            <!-- 红利再投在账单里没有独立记录，只能对着分红流水手工补一批次 -->
+            <AppGroup
+              title="补录红利再投"
+              code="REINVEST"
+              meta="账单不记红利再投，按支付宝的「份额确认」补一批"
+            >
+              <template #icon>
+                <span v-html="ICONS.reinvest" />
+              </template>
+
+              <div class="app-importbar">
+                <label class="app-check">
+                  <span>基金</span>
+                  <select v-model="reinvestForm.varietyKey" class="app-select">
+                    <option value="">请选择已注册的基金</option>
+                    <option
+                      v-for="item in varietyOptions"
+                      :key="item.varietyKey"
+                      :value="item.varietyKey"
+                    >
+                      {{ item.varietyName }}（{{ item.varietyCode }}）
+                    </option>
+                  </select>
+                </label>
+                <label class="app-check">
+                  <span>份额</span>
+                  <AppInput
+                    :model-value="reinvestForm.shares"
+                    :numeric="true"
+                    inputmode="decimal"
+                    placeholder="1.78"
+                    @update:model-value="reinvestForm.shares = $event"
+                  />
+                </label>
+                <label class="app-check">
+                  <span>除息日</span>
+                  <input
+                    :value="reinvestForm.date"
+                    type="date"
+                    class="app-date"
+                    @input="reinvestForm.date = ($event.target as HTMLInputElement).value"
+                  />
+                </label>
+                <AppButton
+                  variant="primary"
+                  :disabled="
+                    reinvesting || !reinvestForm.varietyKey || !(Number(reinvestForm.shares) > 0)
+                  "
+                  @click="onReinvest"
+                >
+                  {{ reinvesting ? '补录中…' : '补录这一笔' }}
+                </AppButton>
+              </div>
+              <p v-if="reinvestNote" class="app-order__reason">{{ reinvestNote }}</p>
+              <p v-else class="app-hint">
+                红利再投是「份额确认」，账单交易记录里不会出现。按支付宝里的份额与确认日补一笔买入即可，
+                成本价取除息日净值，分红收益由系统按除息记录自动推算，这里只补份额。
+              </p>
             </AppGroup>
 
             <AppGroup title="上传截图" code="UPLOAD" meta="png / jpg / webp，≤ 10MB">
@@ -379,7 +428,7 @@
 /**
  * 账单导入与持仓截图核对页：账单识别成待确认行供逐条确认入库，截图留存供人工并排比对
  */
-import { computed, onMounted, ref, watchEffect } from 'vue'
+import { computed, onMounted, reactive, ref, watchEffect } from 'vue'
 import AppAlert from '@/ui/AppAlert.vue'
 import AppButton from '@/ui/AppButton.vue'
 import AppGroup from '@/ui/AppGroup.vue'
@@ -394,6 +443,7 @@ import {
 import { preview as previewBill } from '@/api/alipayImportController'
 import { confirm as confirmCandidate } from '@/api/fundController'
 import { buy as buyHolding, sell as sellHolding } from '@/api/holdingController'
+import { list as listVariety } from '@/api/varietyController'
 import { CONTEXT_PATH } from '@/request'
 import { shortTime } from '@/utils/format'
 import { ElMessage } from '@/ui/message'
@@ -408,6 +458,8 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="8" height="14" rx="1.6"/><rect x="13.5" y="5" width="8" height="14" rx="1.6"/></svg>',
   import:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>',
+  reinvest:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/><path d="M12 8v4.5l3 1.8"/></svg>',
 }
 
 /** 后端允许的扩展名，与 ScreenshotServiceImpl 保持一致 */
@@ -439,11 +491,21 @@ const submitNote = ref('')
 const orders = ref<API.AlipayImportRow[]>([])
 const selectedSeqs = ref<number[]>([])
 
-/** 转换行人工补的份额与净值，键为行序号 */
-const convertDrafts = ref<Record<number, { outShares: string }>>({})
-
 /** 正在确认身份的行的序号 */
 const registering = ref(new Set<number>())
+
+/** 红利再投补录表单 */
+const reinvestForm = reactive({ varietyKey: '', shares: '', date: '' })
+const reinvesting = ref(false)
+const reinvestNote = ref('')
+const varieties = ref<API.VarietyVO[]>([])
+
+/** 已被确认的品种选项，补录红利再投时从这里挑 */
+const varietyOptions = computed(() =>
+  [...varieties.value].sort((left, right) =>
+    (left.varietyName ?? '').localeCompare(right.varietyName ?? '', 'zh-CN'),
+  ),
+)
 
 /** 筛选条件：基金名、动作、只看可导入、隐藏已导入 */
 const filterFund = ref('')
@@ -528,6 +590,21 @@ const rawUrl = computed(() => {
   const fileName = current.value?.fileName
   return fileName ? `${CONTEXT_PATH}/screenshot/raw?fileName=${encodeURIComponent(fileName)}` : ''
 })
+
+/**
+ * 读取已确认的品种，供红利再投补录下拉使用
+ *
+ * @returns 无
+ */
+async function loadVarieties(): Promise<void> {
+  try {
+    const result = await listVariety({ confirmed: true })
+    varieties.value = (result.data ?? []).filter((item) => item.varietyKey && item.varietyName)
+  } catch {
+    // 品种列表只是补录用的下拉，取不到不影响账单导入
+    varieties.value = []
+  }
+}
 
 /**
  * 读取已留存列表并选中一张
@@ -712,44 +789,23 @@ function candidateOf(row: API.AlipayImportRow): API.Candidate | undefined {
 }
 
 /**
- * 取转换行的补填草稿，没有时给空串
- *
- * @param seq 行序号
- * @returns 草稿
- */
-function convertDraft(seq: number): { outShares: string } {
-  return convertDrafts.value[seq] ?? { outShares: '' }
-}
-
-/**
- * 更新转换行的补填字段
- *
- * @param seq   行序号
- * @param field 字段名
- * @param value 新值
- * @returns 无
- */
-function setConvertDraft(seq: number, field: 'outShares', value: string): void {
-  convertDrafts.value = {
-    ...convertDrafts.value,
-    [seq]: { ...convertDraft(seq), [field]: value },
-  }
-  const row = orders.value.find((item) => item.seq === seq)
-  if (row) {
-    row.selectable = convertReady(row)
-  }
-}
-
-/**
- * 转换行的补填是否齐全
+ * 取转换行退回余额宝的找零
  *
  * @param row 待确认行
- * @returns 齐全返回 true
+ * @returns 找零金额
  */
-function convertReady(row: API.AlipayImportRow): boolean {
-  const seq = row.seq ?? -1
-  const out = Number(convertDraft(seq).outShares)
-  return Number.isFinite(out) && out > 0
+function refundOf(row: API.AlipayImportRow): number {
+  return Number(row.refundAmount ?? 0)
+}
+
+/**
+ * 取转换行的转出所得，缺字段时退回账单金额
+ *
+ * @param row 待确认行
+ * @returns 转出侧记账金额
+ */
+function transferOutOf(row: API.AlipayImportRow): number {
+  return Number(row.transferOutAmount ?? row.amount ?? 0)
 }
 
 /**
@@ -766,8 +822,8 @@ async function register(row: API.AlipayImportRow): Promise<void> {
   }
   registering.value = new Set([...registering.value, seq])
   try {
-    // 类型与分类留空交给后端自动判定，判不出来的会明确报「需手工指定类型」
-    const result = await confirmCandidate({ code } as unknown as API.FundConfirmRequest)
+    // 类型留空由后端按已注册记录、场内身份、号段与名称判定
+    const result = await confirmCandidate({ code })
     const variety = result.data
     const candidate = candidateOf(row)
     if (candidate) {
@@ -857,7 +913,7 @@ function pickCandidate(row: API.AlipayImportRow, fundCode: string): void {
   row.fundCode = candidate?.fundCode
   row.varietyKey = candidate?.varietyKey
   // 选到已注册的那只才能提交，未注册的仍要先回去确认身份
-  row.selectable = Boolean(candidate?.registered) && row.action !== 'CONVERT'
+  row.selectable = Boolean(candidate?.registered)
   if (!row.selectable && row.seq != null) {
     selectedSeqs.value = selectedSeqs.value.filter((seq) => seq !== row.seq)
   }
@@ -949,7 +1005,7 @@ async function submitRow(row: API.AlipayImportRow): Promise<void> {
       amount: row.amount ?? undefined,
       openDate: confirmDate,
       tradeNo: row.tradeNo ?? undefined,
-    } as unknown as API.HoldingBuyRequest)
+    })
     return
   }
   if (row.action === 'SELL') {
@@ -958,27 +1014,57 @@ async function submitRow(row: API.AlipayImportRow): Promise<void> {
       amount: row.amount ?? undefined,
       tradeDate: confirmDate,
       tradeNo: row.tradeNo ?? undefined,
-    } as unknown as API.HoldingSellRequest)
+    })
     return
   }
   if (row.action === 'CONVERT') {
-    const seq = row.seq ?? -1
-    const outShares = Number(convertDraft(seq).outShares)
-    if (!(outShares > 0)) {
-      throw new Error('转换需先填转出份额')
-    }
     // 只做卖出：转入侧由 #IN 那行按金额买入，走 convert 会让转入基金被买两遍
     await sellHolding({
       varietyKey,
-      shares: outShares,
+      amount: transferOutOf(row),
       tradeDate: confirmDate,
       tradeNo: row.tradeNo ?? undefined,
       note: `转换转出至「${row.targetFundName ?? '转入基金'}」`,
-    } as unknown as API.HoldingSellRequest)
+    })
     return
   }
   // 分红只留档，不需要写持仓
   throw new Error(`${row.actionLabel ?? '该类'}行无需写入持仓`)
+}
+
+/**
+ * 补录一笔红利再投：账单不记这类份额确认，只能对着支付宝的流水手工补一批
+ *
+ * @returns 无
+ */
+async function onReinvest(): Promise<void> {
+  const shares = Number(reinvestForm.shares)
+  if (!reinvestForm.varietyKey) {
+    reinvestNote.value = '先选一只已注册的基金'
+    return
+  }
+  if (!Number.isFinite(shares) || shares <= 0) {
+    reinvestNote.value = '份额要填正数，按支付宝「份额确认」里的数字填'
+    return
+  }
+  reinvesting.value = true
+  reinvestNote.value = ''
+  try {
+    const date = reinvestForm.date || undefined
+    await buyHolding({
+      varietyKey: reinvestForm.varietyKey,
+      shares,
+      openDate: date,
+      note: `红利再投，除息日 ${date ?? '未填'}，账单无记录，手工补录`,
+    })
+    ElMessage.success(`已补录 ${shares} 份红利再投`)
+    reinvestForm.shares = ''
+    reinvestForm.date = ''
+  } catch (error) {
+    reinvestNote.value = `补录失败：${messageOf(error)}`
+  } finally {
+    reinvesting.value = false
+  }
 }
 
 /**
@@ -1036,6 +1122,7 @@ function num(value?: number | null): string {
 
 onMounted(() => {
   void load()
+  void loadVarieties()
 })
 </script>
 
@@ -1052,6 +1139,36 @@ onMounted(() => {
 .app-importbar__note {
   font-size: 11px;
   color: var(--t4);
+}
+
+/* 筛选与补录行里的标签块，带上控件边框 */
+.app-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--t3);
+}
+
+.app-select,
+.app-date {
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--hair);
+  border-radius: 7px;
+  background: var(--inp-bg);
+  color: var(--t1);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.app-select {
+  max-width: 220px;
+}
+
+.app-date {
+  width: 138px;
 }
 
 .app-orders {
@@ -1203,6 +1320,48 @@ onMounted(() => {
 @media (max-width: 900px) {
   .app-compare {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 手机上表格比屏幕宽，横向滚动而不是撑破页面 */
+@media (max-width: 720px) {
+  .app-order {
+    padding: 8px 9px;
+  }
+
+  .app-order__status {
+    margin-left: 0;
+  }
+
+  .app-order__meta {
+    gap: 4px 10px;
+  }
+
+  .app-importbar {
+    gap: 8px;
+  }
+
+  .app-check {
+    flex: 1 1 100%;
+  }
+
+  .app-select,
+  .app-date {
+    flex: 1;
+    max-width: none;
+    width: auto;
+  }
+
+  .app-orders {
+    max-height: none;
+  }
+
+  .app-compare__right {
+    overflow-x: auto;
+  }
+
+  .app-table {
+    min-width: 420px;
   }
 }
 

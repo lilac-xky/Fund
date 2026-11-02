@@ -22,6 +22,10 @@ declare namespace API {
     targetCandidates?: Candidate[]
     /** 金额，元 */
     amount?: number
+    /** 转换行退回余额宝的找零金额，元 */
+    refundAmount?: number
+    /** 转换转出所得合计，等于账单金额加找零，元 */
+    transferOutAmount?: number
     /** 下单时间 */
     orderTime?: string
     /** 按 15 点口径换算的净值确认日 */
@@ -1113,6 +1117,8 @@ declare namespace API {
     openDate?: string
     /** 来源交易号，账单导入时带上，用于跨次导入去重 */
     tradeNo?: string
+    /** 变动备注，红利再投补录时写明来源，普通买入留空 */
+    note?: string
   }
 
   type HoldingChangeQueryRequest = {
