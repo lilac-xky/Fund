@@ -106,11 +106,11 @@ class AlipayImportServiceTest {
     }
 
     /**
-     * 转换行拆成转出与转入两条：转出侧待补信息，转入侧走普通买入口径
+     * 转换行拆成转出与转入两条：转出金额按账单加找零，两侧都能直接导入
      */
     @Test
-    @DisplayName("转换行拆出转入侧，转出侧标为待补信息")
-    void convertNeedsManual() {
+    @DisplayName("转换行拆出转入侧，转出侧带上找零金额")
+    void convertSplitsIntoTwoRows() {
         List<AlipayImportRow> rows = preview(row("2026010000000000000009", "2026/10/27 20:36",
                 "蚂蚁财富-华商均衡成长混合C[转换至]华商均衡成长混合A", "403.32"));
 
@@ -121,8 +121,9 @@ class AlipayImportServiceTest {
         AlipayImportRow in = rows.stream()
                 .filter(item -> "CONVERT_IN".equals(item.getAction())).findFirst().orElseThrow();
 
-        assertThat(out.getStatus()).isEqualTo("待补信息");
-        assertThat(out.getSelectable()).isFalse();
+        // 转出侧不用再人工填份额，份额由后端按确认日净值反推
+        assertThat(out.getStatus()).isEqualTo("可导入");
+        assertThat(out.getSelectable()).isTrue();
         assertThat(out.getTargetFundName()).isEqualTo("华商均衡成长混合A");
         assertThat(out.getReason()).contains("转换");
 
@@ -133,6 +134,29 @@ class AlipayImportServiceTest {
         assertThat(in.getCandidates()).isNotEmpty();
         assertThat(in.getCandidates()).extracting(AlipayImportRow.Candidate::getFundCode)
                 .contains("011371");
+    }
+
+    /**
+     * 转换备注里的找零要算进转出金额，转入侧金额保持账单金额
+     */
+    @Test
+    @DisplayName("转换找零并入转出金额，转入金额不变")
+    void convertRefundAddedToOutgoing() {
+        List<AlipayImportRow> rows = previewWithNote(
+                row("2026010000000000000011", "2026/10/27 20:36",
+                        "蚂蚁财富-华商均衡成长混合C[转换至]华商均衡成长混合A", "403.32"),
+                "0.30元转入余额宝");
+
+        AlipayImportRow out = rows.stream()
+                .filter(item -> "CONVERT".equals(item.getAction())).findFirst().orElseThrow();
+        AlipayImportRow in = rows.stream()
+                .filter(item -> "CONVERT_IN".equals(item.getAction())).findFirst().orElseThrow();
+
+        assertThat(out.getAmount()).isEqualByComparingTo("403.32");
+        assertThat(out.getRefundAmount()).isEqualByComparingTo("0.30");
+        assertThat(out.getTransferOutAmount()).isEqualByComparingTo("403.62");
+        assertThat(out.getReason()).contains("403.62");
+        assertThat(in.getAmount()).isEqualByComparingTo("403.32");
     }
 
     /**
@@ -190,13 +214,15 @@ class AlipayImportServiceTest {
      * 现金分红要明确说明只留档不参与持仓计算
      */
     @Test
-    @DisplayName("现金分红说明不计入持仓")
+    @DisplayName("现金分红只留档且不可勾选")
     void cashDividendExplained() {
         List<AlipayImportRow> rows = preview(row("2026010000000000000014", "2026/10/19 15:39",
                 "蚂蚁财富-华商均衡成长混合C-现金分红至余额宝", "0.24"));
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).getAction()).isEqualTo("CASH_DIVIDEND");
+        assertThat(rows.get(0).getStatus()).isEqualTo("仅留档");
+        assertThat(rows.get(0).getSelectable()).isFalse();
         assertThat(rows.get(0).getReason()).contains("只留档");
     }
 
@@ -252,6 +278,19 @@ class AlipayImportServiceTest {
      */
     private List<AlipayImportRow> preview(String... lines) {
         String text = HEAD + HEADER + String.join("\n", lines);
+        return service.preview(text.getBytes(Charset.forName("GBK")), "test.csv");
+    }
+
+    /**
+     * 走一遍解析与匹配，写入带备注的记录
+     *
+     * @param line 账单原始行
+     * @param note 备注列内容
+     * @return 待确认行
+     */
+    private List<AlipayImportRow> previewWithNote(String line, String note) {
+        // 备注在「成功退款」与「资金状态」之间，原本是空列
+        String text = HEAD + HEADER + line.replace("\t\t已支出", "\t" + note + "\t已支出");
         return service.preview(text.getBytes(Charset.forName("GBK")), "test.csv");
     }
 

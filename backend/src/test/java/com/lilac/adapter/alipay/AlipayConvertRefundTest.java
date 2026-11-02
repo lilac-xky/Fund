@@ -55,4 +55,37 @@ class AlipayConvertRefundTest {
         System.out.println("配对成功 " + sameKey + " / " + converts);
         org.assertj.core.api.Assertions.assertThat(sameKey).isEqualTo((int) converts);
     }
+
+    /**
+     * 转换备注里的找零要解析到行上：华商那笔 18.80 元的转换另有 0.84 元退回余额宝，
+     * 转出所得应是 19.64 元；转入侧金额仍是账单金额 18.80 元
+     */
+    @Test
+    void convertRefundAmountParsedFromNote() throws Exception {
+        Path bill = Path.of("..", "data", "alipay", "alipay_record_20261101_1642_1.csv");
+        byte[] bytes = Files.readAllBytes(bill);
+        List<AlipayFundOrder> orders = new AlipayFundClassifier()
+                .classify(new AlipayBillParser().parse(bytes));
+
+        AlipayFundOrder target = orders.stream()
+                .filter(o -> o.getAction() == AlipayAction.CONVERT
+                        && "20260810001080070004880080074862".equals(o.getTradeNo()))
+                .findFirst()
+                .orElseThrow();
+
+        org.assertj.core.api.Assertions.assertThat(target.getAmount())
+                .isEqualByComparingTo("18.80");
+        org.assertj.core.api.Assertions.assertThat(target.getRefundAmount())
+                .isEqualByComparingTo("0.84");
+
+        // 转入侧仍按账单金额买，找零只在转出侧计入
+        AlipayFundOrder incoming = orders.stream()
+                .filter(o -> o.getAction() == AlipayAction.CONVERT_IN
+                        && "20260810001080070004880080074862#IN".equals(o.getTradeNo()))
+                .findFirst()
+                .orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(incoming.getAmount())
+                .isEqualByComparingTo("18.80");
+        org.assertj.core.api.Assertions.assertThat(incoming.getFundName()).isEqualTo("金信民兴债券C");
+    }
 }
