@@ -1,14 +1,18 @@
 package com.lilac.report;
 
 import com.lilac.domain.vo.EstimateErrorVO;
+import com.lilac.domain.vo.EstimateSnapshotVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.domain.dto.estimate.EstimateErrorQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.ReportRowVO;
 import com.lilac.domain.vo.ReviewReportVO;
+import com.lilac.enums.EstimateBranch;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.VarietyType;
+import com.lilac.exception.BusinessException;
 import com.lilac.service.EstimateErrorService;
+import com.lilac.service.EstimateSnapshotService;
 import com.lilac.service.VarietyService;
 import com.lilac.service.impl.ReviewReportServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +30,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -41,6 +46,7 @@ class ReviewReportTest {
     Path tempDir;
 
     private EstimateErrorService estimateErrorService;
+    private EstimateSnapshotService estimateSnapshotService;
     private VarietyService varietyService;
     private ReviewReportServiceImpl service;
 
@@ -50,9 +56,11 @@ class ReviewReportTest {
     @BeforeEach
     void setUp() {
         estimateErrorService = mock(EstimateErrorService.class);
+        estimateSnapshotService = mock(EstimateSnapshotService.class);
         varietyService = mock(VarietyService.class);
         service = new ReviewReportServiceImpl();
         ReflectionTestUtils.setField(service, "estimateErrorService", estimateErrorService);
+        ReflectionTestUtils.setField(service, "estimateSnapshotService", estimateSnapshotService);
         ReflectionTestUtils.setField(service, "varietyService", varietyService);
         ReflectionTestUtils.setField(service, "csvWriter", new CsvWriter());
         ReflectionTestUtils.setField(service, "dataRootResolver",
@@ -161,6 +169,130 @@ class ReviewReportTest {
         String message = service.exportErrorHistory(TRADE_DATE.minusDays(7), TRADE_DATE);
 
         assertThat(message).contains("已导出").contains("2 行");
+    }
+
+    /**
+     * 区间导出的列带品种名称与类型，不再是只有业务主键
+     */
+    @Test
+    @DisplayName("区间导出带名称与类型，不再只有主键")
+    void errorHistoryHasIdentity() throws IOException {
+        stubTwoRows();
+
+        service.exportErrorHistory(TRADE_DATE.minusDays(7), TRADE_DATE);
+        String content = Files.readString(
+                Path.of(lastErrorHistoryFile()), StandardCharsets.UTF_8);
+
+        assertThat(content).contains("代码").contains("名称").contains("预估分支");
+        assertThat(content).contains("510300").contains("沪深300ETF").contains("场内 ETF");
+        assertThat(content).contains("006327").contains("易方达中债");
+    }
+
+    /**
+     * 区间上下界与方向取自当日预估留存，误差表本身不存这些字段
+     */
+    @Test
+    @DisplayName("区间导出的区间上下界与方向取自预估留存")
+    void errorHistoryJoinsSnapshot() throws IOException {
+        stubTwoRows();
+        when(estimateSnapshotService.listByRange(any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(snapshot("ETF:510300", new BigDecimal("-1.60"),
+                        new BigDecimal("-0.10"), EstimateBranch.INDEX_ONLY)));
+
+        service.exportErrorHistory(TRADE_DATE.minusDays(7), TRADE_DATE);
+        String content = Files.readString(
+                Path.of(lastErrorHistoryFile()), StandardCharsets.UTF_8);
+
+        assertThat(content).contains("-1.6").contains("-0.1").contains("指数直取");
+    }
+
+    /**
+     * 起始日晚于截止日必须报参数错误，不能默默导出一个空区间
+     */
+    @Test
+    @DisplayName("起始日晚于截止日时报参数错误")
+    void errorHistoryRejectsReversedRange() {
+        assertThatThrownBy(() -> service.exportErrorHistory(TRADE_DATE, TRADE_DATE.minusDays(3)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("起始日不能晚于截止日");
+    }
+
+    /**
+     * 区间过长直接拒绝，避免一次导出几万行把服务器拖住
+     */
+    @Test
+    @DisplayName("区间过长时报参数错误")
+    void errorHistoryRejectsHugeRange() {
+        assertThatThrownBy(() -> service.exportErrorHistory(TRADE_DATE.minusDays(500), TRADE_DATE))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("最多");
+    }
+
+    /**
+     * 区间内无记录时给出明确说明，仍写出只含表头的文件
+     */
+    @Test
+    @DisplayName("区间无记录时说明清楚")
+    void errorHistoryEmpty() {
+        when(estimateErrorService.listEstimateError(any(EstimateErrorQueryRequest.class)))
+                .thenReturn(List.of());
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of());
+
+        String message = service.exportErrorHistory(TRADE_DATE.minusDays(7), TRADE_DATE);
+
+        assertThat(message).contains("没有误差记录");
+    }
+
+    /**
+     * 导出文件名必须带上真实起止日，方便按区间归档
+     */
+    @Test
+    @DisplayName("导出文件名带起止日")
+    void errorHistoryFileName() {
+        stubTwoRows();
+
+        service.exportErrorHistory(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 11, 19));
+
+        assertThat(Path.of(lastErrorHistoryFile()))
+                .hasFileName("error-history-2026-10-20_2026-11-19.csv");
+    }
+
+    /**
+     * 取上一次导出的误差历史文件路径
+     *
+     * @return 文件绝对路径
+     */
+    private String lastErrorHistoryFile() {
+        Path dir = tempDir.resolve("report");
+        assertThat(dir).exists();
+        try (var stream = Files.list(dir)) {
+            return stream.filter(path -> path.getFileName().toString().startsWith("error-history-"))
+                    .findFirst()
+                    .map(Path::toString)
+                    .orElseThrow(() -> new IllegalStateException("未找到误差历史文件"));
+        } catch (IOException e) {
+            throw new IllegalStateException("读取导出目录失败", e);
+        }
+    }
+
+    /**
+     * 造一条当日预估留存
+     *
+     * @param varietyKey 业务主键
+     * @param low        区间下限
+     * @param high       区间上限
+     * @param branch     预估分支
+     * @return 留存
+     */
+    private EstimateSnapshotVO snapshot(String varietyKey, BigDecimal low, BigDecimal high,
+                                        EstimateBranch branch) {
+        EstimateSnapshotVO snapshot = new EstimateSnapshotVO();
+        snapshot.setVarietyKey(varietyKey);
+        snapshot.setTradeDate(TRADE_DATE);
+        snapshot.setBranch(branch);
+        snapshot.setIntervalLow(low);
+        snapshot.setIntervalHigh(high);
+        return snapshot;
     }
 
     /**
