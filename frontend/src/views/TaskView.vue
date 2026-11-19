@@ -30,10 +30,10 @@
               <div class="app-eyebrow">Schedule</div>
               <h1 class="app-h1">四时点调度</h1>
               <p class="app-lede">
-                这套工具每天在四个时刻自动产出并发一封邮件：09:30 早盘预估速览、11:30 午盘预估速览、
-                14:30 收盘前提醒（含预估、策略与建议）、20:00
-                晚间净值校准。本页展示每个时刻今天做了没有、
-                邮件投递成功还是失败、失败在哪，并提供手动触发与补跑。
+                这套工具每天在四个时刻各发一封邮件：09:30 早盘预估速览、11:30 午盘预估速览、 14:30
+                收盘前提醒（含预估、策略与建议）、晚间净值校准。晚间不等准点发——
+                当天净值公布齐了才发，齐之前显示「等待净值」，到截止时刻仍缺才按缺口发。
+                本页展示每个时刻今天做了没有、邮件投递成功还是失败、失败在哪，并提供手动触发与补跑。
               </p>
               <div class="app-daybar">
                 <label class="app-daybar__lab" for="task-date">查看日期</label>
@@ -215,7 +215,8 @@ const PURPOSES: Record<string, string> = {
   MORNING: '刷新一次全量预估，并发一封早盘预估速览',
   NOON: '复用缓存刷新午盘预估，并发一封午盘预估速览',
   PRE_CLOSE: '收盘前 30 分钟发完整提醒邮件，含预估、建议与警示',
-  EVENING: '跑晚间校准，把白天预估与实际净值逐只对照并作为正文发出',
+  EVENING:
+    '等当日净值都公布后再跑校准并发出。到点净值没齐就继续等，每晚重试，到截止时刻仍缺才按缺口发',
 }
 
 /** 内联图标 */
@@ -325,6 +326,10 @@ function statusLabel(status?: string): string {
 function pillClass(item: API.TaskPointStatusVO): string {
   if (item.status === 'SENT' || item.status === 'RESENT') {
     return 'app-pill--ok'
+  }
+  // 晚间等净值是正常流程，用中性色而不是红色，避免看起来像出错
+  if (item.statusLabel === '等待净值') {
+    return 'app-pill--pending'
   }
   if (item.status === 'FAILED' || item.overdue) {
     return 'app-pill--bad'
@@ -497,6 +502,12 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* 等待净值是正常流程，用警示色而非错误色区分 */
+.app-pill--pending {
+  background: color-mix(in oklab, var(--warn) 14%, transparent);
+  color: var(--warn);
 }
 
 .app-point__dir {
