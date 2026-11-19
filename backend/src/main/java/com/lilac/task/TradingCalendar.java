@@ -84,6 +84,16 @@ public class TradingCalendar {
     }
 
     /**
+     * 晚间净值重试的 cron，写错时退回每 10 分钟一次，避免净值到齐后要等一小时才发
+     *
+     * @return 六段 cron 表达式
+     */
+    public String eveningRetryCron() {
+        String normalized = normalizeCron("EVENING_RETRY", taskProperties.getEveningRetryCron());
+        return normalized == null ? "0 */10 20-22 * * MON-FRI" : normalized;
+    }
+
+    /**
      * 判断是否为交易日，周末与自行维护的节假日清单都不算
      *
      * @param date 日期

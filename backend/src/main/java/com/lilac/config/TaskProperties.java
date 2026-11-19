@@ -53,6 +53,11 @@ public class TaskProperties {
     private String sweepCron = "0 5 * * * *";
 
     /**
+     * 晚间净值重试 cron，夜间反复检查净值是否到齐，齐了立刻发信
+     */
+    private String eveningRetryCron = "0 */10 20-22 * * MON-FRI";
+
+    /**
      * 额外节假日清单，格式 yyyy-MM-dd，周末之外的休市日在此补充
      */
     private List<String> holidays = new ArrayList<>();
@@ -77,6 +82,11 @@ public class TaskProperties {
          * 应发时刻 HH:mm，仅在 cron 无法解出确定时刻时使用
          */
         private String time;
+
+        /**
+         * 该时点的截止时刻 HH:mm，晚间用它兜底：到点仍不齐就按缺口发
+         */
+        private String deadline;
 
         /**
          * 单时点开关，关闭后该时点不触发也不出现在总览里

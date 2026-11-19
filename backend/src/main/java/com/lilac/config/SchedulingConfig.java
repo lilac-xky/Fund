@@ -53,5 +53,8 @@ public class SchedulingConfig implements SchedulingConfigurer {
         }
         registrar.addCronTask(taskOrchestrator::sweep, tradingCalendar.sweepCron());
         log.info("注册巡检任务 cron={}", tradingCalendar.sweepCron());
+        // 晚间净值常常晚于 20:00 才公布，独立一条重试，齐了就发，不等下一个整点巡检
+        registrar.addCronTask(taskOrchestrator::retryEvening, tradingCalendar.eveningRetryCron());
+        log.info("注册晚间净值重试 cron={}", tradingCalendar.eveningRetryCron());
     }
 }

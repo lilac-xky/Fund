@@ -4,10 +4,12 @@ import com.lilac.config.TaskProperties;
 import com.lilac.domain.vo.SendRecordVO;
 import com.lilac.domain.vo.TaskOverviewVO;
 import com.lilac.domain.vo.TaskPointStatusVO;
+import com.lilac.engine.model.NetWorthReadiness;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.SendPoint;
 import com.lilac.enums.SendStatus;
 import com.lilac.enums.TaskTrigger;
+import com.lilac.service.NetWorthReadinessService;
 import com.lilac.task.model.PointOutcome;
 import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.PostConstruct;
@@ -46,25 +48,30 @@ public class TaskOrchestrator {
 
     private final com.lilac.mail.MailArchive mailArchive;
 
+    private final NetWorthReadinessService netWorthReadinessService;
+
     /**
      * 注入调度依赖，编排层只做时序与留痕，产出交给分派器
      *
-     * @param taskProperties  调度配置
-     * @param tradingCalendar 交易日历
-     * @param clockGuard      时钟跳变检测
-     * @param sendLedger      发送留痕
-     * @param dispatcher      产出分派器
-     * @param mailArchive     邮件留存，供总览带出未送达件
+     * @param taskProperties       调度配置
+     * @param tradingCalendar      交易日历
+     * @param clockGuard           时钟跳变检测
+     * @param sendLedger           发送留痕
+     * @param dispatcher           产出分派器
+     * @param mailArchive          邮件留存，供总览带出未送达件
+     * @param netWorthReadinessService 晚间净值就绪判定
      */
     public TaskOrchestrator(TaskProperties taskProperties, TradingCalendar tradingCalendar,
                             ClockGuard clockGuard, SendLedger sendLedger, TaskOutcomeDispatcher dispatcher,
-                            com.lilac.mail.MailArchive mailArchive) {
+                            com.lilac.mail.MailArchive mailArchive,
+                            NetWorthReadinessService netWorthReadinessService) {
         this.taskProperties = taskProperties;
         this.tradingCalendar = tradingCalendar;
         this.clockGuard = clockGuard;
         this.sendLedger = sendLedger;
         this.dispatcher = dispatcher;
         this.mailArchive = mailArchive;
+        this.netWorthReadinessService = netWorthReadinessService;
     }
 
     /**
@@ -141,7 +148,65 @@ public class TaskOrchestrator {
             log.info("时点 {} 未配置或已关闭，跳过", point);
             return;
         }
+        if (shouldDeferEvening(point, now)) {
+            return;
+        }
         execute(point, now.toLocalDate(), TaskTrigger.SCHEDULED, false);
+    }
+
+    /**
+     * 晚间净值没到齐时先不发，改为下次重试；其余时点始终返回 false
+     *
+     * @param point 时点
+     * @param now   触发时刻
+     * @return 本次应当延后返回 true
+     */
+    private boolean shouldDeferEvening(SendPoint point, LocalDateTime now) {
+        return shouldDeferEvening(point, now, now.toLocalDate());
+    }
+
+    /**
+     * 按指定交易日判断晚间是否该延后，补跑场景下日期可能不是今天
+     *
+     * @param point 时点
+     * @param now   当前时刻
+     * @param date  待判定交易日
+     * @return 本次应当延后返回 true
+     */
+    private boolean shouldDeferEvening(SendPoint point, LocalDateTime now, LocalDate date) {
+        if (point != SendPoint.EVENING) {
+            return false;
+        }
+        NetWorthReadiness readiness = netWorthReadinessService.check(date, now);
+        if (readiness.isReady()) {
+            return false;
+        }
+        // 不等就发一封满是缺口的邮件，正是要修的问题；这里只记等待，不写 SENT 也不写 FAILED
+        sendLedger.markPending(date, point);
+        log.info("晚间净值未到齐，暂不发信：{}", readiness.getNote());
+        return true;
+    }
+
+    /**
+     * 晚间净值重试，净值到齐就补发当晚那封，未到齐则继续等
+     */
+    public void retryEvening() {
+        if (!timerActive()) {
+            return;
+        }
+        LocalDateTime now = now();
+        LocalDate date = now.toLocalDate();
+        if (!tradingCalendar.isTradingDay(date)) {
+            return;
+        }
+        if (sendLedger.alreadySent(date, SendPoint.EVENING)) {
+            return;
+        }
+        if (shouldDeferEvening(SendPoint.EVENING, now, date)) {
+            return;
+        }
+        log.info("晚间净值已到齐，补发晚间邮件 {}", date);
+        execute(SendPoint.EVENING, date, TaskTrigger.CATCH_UP, sendLedger.alreadyFailed(date, SendPoint.EVENING));
     }
 
     /**
@@ -168,6 +233,9 @@ public class TaskOrchestrator {
                 continue;
             }
             if (!tradingCalendar.withinCatchUpWindow(schedule, date, now)) {
+                continue;
+            }
+            if (shouldDeferEvening(point, now, date)) {
                 continue;
             }
             log.info("补跑时点 {}，应发 {}", point, schedule.getTime());
@@ -293,10 +361,37 @@ public class TaskOrchestrator {
         boolean done = record != null
                 && (record.getStatus() == SendStatus.SENT || record.getStatus() == SendStatus.RESENT);
         boolean passed = now.isAfter(LocalDateTime.of(date, schedule.getTime()));
-        item.setOverdue(!done && passed);
+        // 晚间等净值是正常流程，不该标成「过期未成功」，否则又是一次误导
+        String waitingNote = waitingNoteOf(point, date, now, done);
+        item.setOverdue(!done && passed && waitingNote == null);
+        if (waitingNote != null) {
+            item.setStatusLabel("等待净值");
+            item.setFailReason(waitingNote);
+        }
         item.setSummary(pointLabel(point) + " " + schedule.getTime() + "：" + item.getStatusLabel()
                 + (item.getFailReason() == null ? "" : "（" + item.getFailReason() + "）"));
         return item;
+    }
+
+    /**
+     * 晚间仍在等净值时给出说明，其余情形返回 null
+     *
+     * @param point 时点
+     * @param date  统计日期
+     * @param now   当前时间
+     * @param done  是否已成功
+     * @return 等待说明，非等待为 null
+     */
+    private String waitingNoteOf(SendPoint point, LocalDate date, LocalDateTime now, boolean done) {
+        if (point != SendPoint.EVENING || done) {
+            return null;
+        }
+        if (!now.toLocalDate().equals(date)) {
+            return null;
+        }
+        NetWorthReadiness readiness = netWorthReadinessService.check(date, now);
+        // 已到截止时刻就不再算等待，按缺口发的结论会写进留痕
+        return readiness.isShouldWait() ? readiness.getNote() : null;
     }
 
     /**
