@@ -2,9 +2,13 @@ package com.lilac.mail;
 
 import cn.hutool.core.util.EscapeUtil;
 import com.lilac.domain.vo.BondAdvisoryVO;
+import com.lilac.domain.vo.CalibrationGapVO;
+import com.lilac.domain.vo.CalibrationItemVO;
+import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.IndicatorAdvisoryVO;
+import com.lilac.enums.SendPoint;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -34,10 +38,11 @@ public class MailRenderer {
      */
     public String subject(MailContent content, boolean resend) {
         String prefix = resend ? "【补发】" : "";
+        String title = content.getPoint() == null ? "收盘前提醒" : content.getPoint().getMailTitle();
         if (content.empty()) {
-            return prefix + "Fund " + content.getTradeDate() + " 未配置持仓，收盘前提醒改发提示";
+            return prefix + "Fund " + content.getTradeDate() + " 未配置持仓，" + title + "改发提示";
         }
-        return prefix + "Fund " + content.getTradeDate() + " 收盘前提醒（含预估与建议）";
+        return prefix + "Fund " + content.getTradeDate() + " " + title;
     }
 
     /**
@@ -56,15 +61,21 @@ public class MailRenderer {
                 .append("<div style=\"max-width:720px;margin:0 auto;background:#fff;border-radius:8px;padding:16px;\">");
         if (content.empty()) {
             appendEmptyNotice(builder, content);
+        } else if (content.getPoint() == SendPoint.EVENING) {
+            appendHeader(builder, content);
+            appendCalibrationSection(builder, content);
+            appendFooter(builder, content);
         } else {
             appendHeader(builder, content);
             appendEstimateTable(builder, content);
             appendUnavailableSection(builder, content);
-            appendDividendSection(builder, content);
-            appendGridSection(builder, content);
-            appendBondSection(builder, content);
-            appendIndicatorSection(builder, content);
-            appendLessonSection(builder, content);
+            if (content.fullSections()) {
+                appendDividendSection(builder, content);
+                appendGridSection(builder, content);
+                appendBondSection(builder, content);
+                appendIndicatorSection(builder, content);
+                appendLessonSection(builder, content);
+            }
             appendFooter(builder, content);
         }
         builder.append("</div></body></html>");
@@ -80,17 +91,26 @@ public class MailRenderer {
     public String text(MailContent content) {
         List<String> lines = new ArrayList<>();
         if (content.empty()) {
-            lines.add("Fund 收盘前提醒 " + content.getTradeDate());
+            String title = content.getPoint() == null ? "收盘前提醒" : content.getPoint().getMailTitle();
+            lines.add("Fund " + title + " " + content.getTradeDate());
             lines.add("");
-            lines.add("尚未录入任何持仓，今日不发常规提醒。");
-            lines.add("请先到页面录入持仓，录入后收盘前会收到含预估与建议的邮件。");
+            lines.add("尚未录入任何持仓，本次不发常规提醒。");
+            lines.add("请先到页面录入持仓，录入后各时点会收到含预估与建议的邮件。");
             lines.add("");
             lines.add(DISCLAIMER);
             return String.join(System.lineSeparator(), lines);
         }
-        lines.add("Fund 收盘前提醒 " + content.getTradeDate());
+        String title = content.getPoint() == null ? "收盘前提醒" : content.getPoint().getMailTitle();
+        lines.add("Fund " + title + " " + content.getTradeDate());
         lines.add("数据截止：" + dataCutoff(content) + "    行情日期：" + text(content.getQuoteDate()));
         lines.add("");
+        if (content.getPoint() == SendPoint.EVENING) {
+            appendCalibrationText(lines, content.getCalibration());
+            lines.add("");
+            lines.add("【风险说明】");
+            lines.add("  " + DISCLAIMER + "，建议金额仅供参考，买卖仍由本人执行。");
+            return String.join(System.lineSeparator(), lines);
+        }
         lines.add("【持仓预估】");
         if (content.getItems().isEmpty()) {
             lines.add("  今日无基金可给出预估，原因见下方「无法预估」。");
@@ -112,50 +132,145 @@ public class MailRenderer {
         for (MailContent.Item item : content.getUnavailableItems()) {
             lines.add("  " + item.getCode() + " " + item.getName() + "：" + text(item.getUnavailableReason()));
         }
-        lines.add("");
-        lines.add("【策略提醒】");
-        if (content.getDividendSummary().isEmpty()) {
-            lines.add("  今日无红利持仓，暂无红利加减仓建议。");
-        }
-        for (String summary : content.getDividendSummary()) {
-            lines.add("  " + summary);
-        }
-        lines.add("");
-        lines.add("【网格提醒】");
-        if (content.getGridSummary().isEmpty()) {
-            lines.add("  今日无场内 ETF 持仓，暂无网格提醒。");
-        }
-        for (String summary : content.getGridSummary()) {
-            lines.add("  " + summary);
-        }
-        lines.add("");
-        lines.add("【债券监控】");
-        if (content.getBondSummary().isEmpty()) {
-            lines.add("  今日无债券型持仓，暂无换仓提醒。");
-        }
-        for (String summary : content.getBondSummary()) {
-            lines.add("  " + summary);
-        }
-        lines.add("");
-        lines.add("【技术指标】");
-        if (content.getIndicatorSummary().isEmpty()) {
-            lines.add("  今日无触发信号，指标数值请到页面查看。");
-        }
-        for (String summary : content.getIndicatorSummary()) {
-            lines.add("  " + summary);
-        }
-        lines.add("");
-        lines.add("【历史教训警示】");
-        if (content.getLessonSummary().isEmpty()) {
-            lines.add("  本次历史操作未命中追高、盲目换仓或恐慌卖出。");
-        }
-        for (String summary : content.getLessonSummary()) {
-            lines.add("  " + summary);
+        // 策略类段落只进收盘前那封，与 HTML 保持同源
+        if (content.fullSections()) {
+            lines.add("");
+            lines.add("【策略提醒】");
+            if (content.getDividendSummary().isEmpty()) {
+                lines.add("  今日无红利持仓，暂无红利加减仓建议。");
+            }
+            for (String summary : content.getDividendSummary()) {
+                lines.add("  " + summary);
+            }
+            lines.add("");
+            lines.add("【网格提醒】");
+            if (content.getGridSummary().isEmpty()) {
+                lines.add("  今日无场内 ETF 持仓，暂无网格提醒。");
+            }
+            for (String summary : content.getGridSummary()) {
+                lines.add("  " + summary);
+            }
+            lines.add("");
+            lines.add("【债券监控】");
+            if (content.getBondSummary().isEmpty()) {
+                lines.add("  今日无债券型持仓，暂无换仓提醒。");
+            }
+            for (String summary : content.getBondSummary()) {
+                lines.add("  " + summary);
+            }
+            lines.add("");
+            lines.add("【技术指标】");
+            if (content.getIndicatorSummary().isEmpty()) {
+                lines.add("  今日无触发信号，指标数值请到页面查看。");
+            }
+            for (String summary : content.getIndicatorSummary()) {
+                lines.add("  " + summary);
+            }
+            lines.add("");
+            lines.add("【历史教训警示】");
+            if (content.getLessonSummary().isEmpty()) {
+                lines.add("  本次历史操作未命中追高、盲目换仓或恐慌卖出。");
+            }
+            for (String summary : content.getLessonSummary()) {
+                lines.add("  " + summary);
+            }
         }
         lines.add("");
         lines.add("【风险说明】");
         lines.add("  " + DISCLAIMER + "，建议金额仅供参考，买卖仍由本人执行。");
         return String.join(System.lineSeparator(), lines);
+    }
+
+    /**
+     * 拼晚间校准的纯文本段，逐只误差与缺口都不省略
+     *
+     * @param lines       行列表
+     * @param calibration 校准结果，可为空
+     */
+    private void appendCalibrationText(List<String> lines, CalibrationResultVO calibration) {
+        lines.add("【晚间校准】");
+        if (calibration == null) {
+            lines.add("  本次没有返回校准结果，请到复盘页查看。");
+            return;
+        }
+        lines.add("  对照 " + num(calibration.getCalibratedCount()) + " 只，超阈值 "
+                + num(calibration.getOverThresholdCount()) + " 只，缺口 " + num(calibration.getGapCount()) + " 只");
+        for (CalibrationItemVO item : safe(calibration.getItems())) {
+            lines.add("  " + item.getVarietyCode() + " " + text(item.getVarietyName())
+                    + " 预估 " + percent(item.getEstimatedChange())
+                    + " 实际 " + percent(item.getActualChange())
+                    + " 误差 " + percent(item.getErrorValue())
+                    + (Boolean.TRUE.equals(item.getOverThreshold()) ? "（超阈值）" : ""));
+        }
+        if (!safe(calibration.getGaps()).isEmpty()) {
+            lines.add("  未能校准：");
+            for (CalibrationGapVO gap : safe(calibration.getGaps())) {
+                lines.add("    " + gap.getVarietyCode() + " " + text(gap.getVarietyName()) + "："
+                        + text(gap.getReason()));
+            }
+        }
+        if (calibration.getNotice() != null && !calibration.getNotice().isBlank()) {
+            lines.add("  说明：" + calibration.getNotice());
+        }
+    }
+
+    /**
+     * 渲染晚间校准段，逐只对照与缺口都列，没出数时说清原因
+     *
+     * @param builder     正文构建器
+     * @param content     邮件模型
+     */
+    private void appendCalibrationSection(StringBuilder builder, MailContent content) {
+        CalibrationResultVO calibration = content.getCalibration();
+        builder.append("<h3 style=\"font-size:15px;margin:12px 0 6px;\">晚间校准</h3>");
+        if (calibration == null) {
+            builder.append("<p style=\"font-size:13px;color:#8a919f;margin:0 0 8px;\">")
+                    .append("本次没有返回校准结果，请到复盘页查看。</p>");
+            return;
+        }
+        builder.append("<p style=\"font-size:13px;margin:0 0 8px;color:#40474f;\">对照 <strong>")
+                .append(num(calibration.getCalibratedCount())).append("</strong> 只，超阈值 <strong>")
+                .append(num(calibration.getOverThresholdCount())).append("</strong> 只，缺口 <strong>")
+                .append(num(calibration.getGapCount())).append("</strong> 只</p>");
+        if (!safe(calibration.getItems()).isEmpty()) {
+            builder.append("<table style=\"width:100%;border-collapse:collapse;font-size:13px;\">")
+                    .append("<thead><tr style=\"background:#f0f2f5;\">")
+                    .append("<th style=\"text-align:left;padding:6px;\">基金</th>")
+                    .append("<th style=\"text-align:right;padding:6px;\">预估</th>")
+                    .append("<th style=\"text-align:right;padding:6px;\">实际</th>")
+                    .append("<th style=\"text-align:right;padding:6px;\">误差</th>")
+                    .append("</tr></thead><tbody>");
+            for (CalibrationItemVO item : safe(calibration.getItems())) {
+                boolean over = Boolean.TRUE.equals(item.getOverThreshold());
+                builder.append("<tr style=\"border-bottom:1px solid #eef0f3;\">")
+                        .append("<td style=\"padding:6px;\">").append(escape(item.getVarietyCode()))
+                        .append(" ").append(escape(text(item.getVarietyName())))
+                        .append(over ? " <span style=\"color:#c0392b;\">超阈值</span>" : "")
+                        .append("</td>")
+                        .append("<td style=\"padding:6px;text-align:right;\">").append(escape(percent(item.getEstimatedChange())))
+                        .append("</td>")
+                        .append("<td style=\"padding:6px;text-align:right;\">").append(escape(percent(item.getActualChange())))
+                        .append("</td>")
+                        .append("<td style=\"padding:6px;text-align:right;")
+                        .append(over ? "color:#c0392b;" : "").append("\">")
+                        .append(escape(percent(item.getErrorValue()))).append("</td></tr>");
+            }
+            builder.append("</tbody></table>");
+        }
+        if (!safe(calibration.getGaps()).isEmpty()) {
+            builder.append("<h3 style=\"font-size:15px;margin:16px 0 6px;color:#c0392b;\">未能校准</h3>")
+                    .append("<ul style=\"font-size:13px;line-height:1.8;margin:0 0 8px;padding-left:18px;\">");
+            for (CalibrationGapVO gap : safe(calibration.getGaps())) {
+                builder.append("<li>").append(escape(gap.getVarietyCode())).append(" ")
+                        .append(escape(text(gap.getVarietyName()))).append("：")
+                        .append(escape(text(gap.getReason()))).append("</li>");
+            }
+            builder.append("</ul>");
+        }
+        if (calibration.getNotice() != null && !calibration.getNotice().isBlank()) {
+            builder.append("<p style=\"font-size:12px;color:#8a919f;margin:0 0 8px;\">")
+                    .append(escape(calibration.getNotice())).append("</p>");
+        }
     }
 
     /**
@@ -165,12 +280,13 @@ public class MailRenderer {
      * @param builder 正文构建器
      */
     private void appendEmptyNotice(StringBuilder builder, MailContent content) {
+        String title = content.getPoint() == null ? "收盘前提醒" : content.getPoint().getMailTitle();
         builder.append("<h2 style=\"font-size:18px;margin:0 0 8px;\">尚未录入持仓</h2>")
                 .append("<p style=\"font-size:14px;line-height:1.7;margin:0 0 8px;\">")
-                .append(escape(content.getTradeDate() + " 的常规收盘前提醒未发送，因为没有可提醒的持仓。"))
+                .append(escape(content.getTradeDate() + " 的" + title + "未发送，因为没有可提醒的持仓。"))
                 .append("</p>")
                 .append("<p style=\"font-size:14px;line-height:1.7;margin:0 0 8px;\">")
-                .append("请先到页面录入持仓，录入后收盘前会收到含预估涨跌与建议金额的邮件。")
+                .append("请先到页面录入持仓，录入后各时点会收到含预估涨跌与建议金额的邮件。")
                 .append("</p>")
                 .append("<p style=\"font-size:12px;color:#8a919f;margin:16px 0 0;\">")
                 .append(escape(DISCLAIMER)).append("</p>");
@@ -183,7 +299,8 @@ public class MailRenderer {
      * @param content 邮件模型
      */
     private void appendHeader(StringBuilder builder, MailContent content) {
-        builder.append("<h2 style=\"font-size:18px;margin:0 0 8px;\">收盘前提醒 ")
+        String title = content.getPoint() == null ? "收盘前提醒" : content.getPoint().getMailTitle();
+        builder.append("<h2 style=\"font-size:18px;margin:0 0 8px;\">").append(escape(title)).append(" ")
                 .append(escape(content.getTradeDate().toString())).append("</h2>")
                 .append("<p style=\"font-size:13px;line-height:1.7;margin:0 0 4px;color:#40474f;\">")
                 .append("数据截止：<strong>").append(escape(dataCutoff(content))).append("</strong>")
@@ -459,6 +576,27 @@ public class MailRenderer {
      */
     private String text(Object value) {
         return value == null ? "—" : String.valueOf(value);
+    }
+
+    /**
+     * 计数空值降级为 0，避免正文出现横线
+     *
+     * @param value 计数
+     * @return 计数文本
+     */
+    private String num(Integer value) {
+        return value == null ? "0" : String.valueOf(value);
+    }
+
+    /**
+     * 空列表兜底，校准段与缺口段都可能为空
+     *
+     * @param list 原列表
+     * @return 非空列表
+     * @param <T>  元素类型
+     */
+    private <T> List<T> safe(List<T> list) {
+        return list == null ? List.of() : list;
     }
 
     /**

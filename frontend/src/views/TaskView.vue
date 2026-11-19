@@ -30,9 +30,10 @@
               <div class="app-eyebrow">Schedule</div>
               <h1 class="app-h1">四时点调度</h1>
               <p class="app-lede">
-                这套工具每天在四个时刻自动产出：09:30 刷新早盘预估、11:30 刷新午盘、 14:30
-                发收盘前邮件、20:00 跑晚间校准。本页展示每个时刻今天做了没有、
-                失败在哪，并提供手动触发与补跑。
+                这套工具每天在四个时刻自动产出并发一封邮件：09:30 早盘预估速览、11:30 午盘预估速览、
+                14:30 收盘前提醒（含预估、策略与建议）、20:00
+                晚间净值校准。本页展示每个时刻今天做了没有、
+                邮件投递成功还是失败、失败在哪，并提供手动触发与补跑。
               </p>
               <div class="app-daybar">
                 <label class="app-daybar__lab" for="task-date">查看日期</label>
@@ -99,7 +100,7 @@
                       手动触发
                     </AppButton>
                     <AppButton
-                      v-if="item.point === 'PRE_CLOSE'"
+                      v-if="item.status === 'FAILED'"
                       size="sm"
                       :disabled="busy"
                       @click="onTrigger(item, true)"
@@ -211,10 +212,10 @@ import {
 
 /** 四个时点各自是干嘛的一句话说明 */
 const PURPOSES: Record<string, string> = {
-  MORNING: '刷新一次全量预估，让页面一打开就有当日数字',
-  NOON: '复用缓存刷新午盘预估，缓存过期才重算',
-  PRE_CLOSE: '收盘前 30 分钟发提醒邮件，含预估、建议与警示',
-  EVENING: '跑晚间校准，把白天预估与实际净值逐只对照并写误差历史',
+  MORNING: '刷新一次全量预估，并发一封早盘预估速览',
+  NOON: '复用缓存刷新午盘预估，并发一封午盘预估速览',
+  PRE_CLOSE: '收盘前 30 分钟发完整提醒邮件，含预估、建议与警示',
+  EVENING: '跑晚间校准，把白天预估与实际净值逐只对照并作为正文发出',
 }
 
 /** 内联图标 */

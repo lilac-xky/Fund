@@ -2,6 +2,7 @@ package com.lilac.mail;
 
 import com.lilac.config.DataRootResolver;
 import com.lilac.domain.vo.MailArchiveVO;
+import com.lilac.enums.SendPoint;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 邮件内容留存，发送失败时把正文落到 data/mail，下次成功发送时读出来附在补发段
@@ -44,20 +46,23 @@ public class MailArchive {
      * 留存一封邮件，返回相对 data 目录的路径；留存失败只记日志，不改变发送结论
      *
      * @param tradeDate 交易日
+     * @param point     时点，文件名里带上它才能在四封之间区分
      * @param tag       文件名里用于区分场景的后缀
      * @param subject   邮件主题
      * @param html      HTML 正文
      * @param text      纯文本正文
      * @return 相对路径，失败返回 null
      */
-    public String save(LocalDate tradeDate, String tag, String subject, String html, String text) {
+    public String save(LocalDate tradeDate, SendPoint point, String tag, String subject, String html, String text) {
         try {
             Path dir = mailDir();
             Files.createDirectories(dir);
-            String fileName = tradeDate + "-" + tag + "-" + LocalDateTime.now().format(FILE_STAMP) + ".txt";
+            String prefix = tradeDate + "-" + point.name().toLowerCase(Locale.ROOT);
+            String fileName = prefix + "-" + tag + "-" + LocalDateTime.now().format(FILE_STAMP) + ".txt";
             StringBuilder builder = new StringBuilder();
             builder.append("发送时间：").append(LocalDateTime.now().format(META_STAMP)).append(System.lineSeparator());
             builder.append("交易日：").append(tradeDate).append(System.lineSeparator());
+            builder.append("时点：").append(point.getLabel()).append(System.lineSeparator());
             builder.append("主题：").append(subject).append(System.lineSeparator());
             builder.append("---- 纯文本正文 ----").append(System.lineSeparator());
             builder.append(text == null ? "" : text).append(System.lineSeparator());
@@ -66,7 +71,7 @@ public class MailArchive {
             Files.writeString(dir.resolve(fileName), builder.toString(), StandardCharsets.UTF_8);
             return relativeOf(dir.resolve(fileName));
         } catch (IOException | RuntimeException e) {
-            log.warn("邮件内容留存失败 {} {}：{}", tradeDate, tag, e.getMessage());
+            log.warn("邮件内容留存失败 {} {} {}：{}", tradeDate, point, tag, e.getMessage());
             return null;
         }
     }
@@ -235,6 +240,8 @@ public class MailArchive {
                     vo.setSentAt(line.substring("发送时间：".length()).trim());
                 } else if (line.startsWith("交易日：")) {
                     vo.setTradeDate(line.substring("交易日：".length()).trim());
+                } else if (line.startsWith("时点：")) {
+                    vo.setPointLabel(line.substring("时点：".length()).trim());
                 } else if (line.startsWith("主题：")) {
                     vo.setSubject(line.substring("主题：".length()).trim());
                     break;

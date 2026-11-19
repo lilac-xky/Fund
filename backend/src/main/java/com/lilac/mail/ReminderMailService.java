@@ -1,9 +1,10 @@
 package com.lilac.mail;
 
-import com.lilac.domain.dto.estimate.EstimateBatchRequest;
+import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.EstimateBatchVO;
-import com.lilac.service.EstimateService;
-import com.lilac.task.CloseReminderPort;
+import com.lilac.enums.SendPoint;
+import com.lilac.task.ReminderDeliveryException;
+import com.lilac.task.ReminderMailPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -11,11 +12,11 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 收盘前提醒邮件的实现，组装内容、发送 SMTP、失败留存并按需带出补发段
+ * 时点提醒邮件的实现，四个时点共用一条组装、发送、失败留存与补发链路，只有正文详略随时点变化
  */
 @Slf4j
 @Component
-public class CloseReminderMailService implements CloseReminderPort {
+public class ReminderMailService implements ReminderMailPort {
 
     private static final int RESEND_LIMIT = 5;
 
@@ -31,8 +32,6 @@ public class CloseReminderMailService implements CloseReminderPort {
 
     private final MailArchive archive;
 
-    private final EstimateService estimateService;
-
     /**
      * 注入邮件链路的全部环节，任何一个环节失败都按发送失败处理
      *
@@ -42,35 +41,36 @@ public class CloseReminderMailService implements CloseReminderPort {
      * @param mailSender       SMTP 发送
      * @param settingsResolver SMTP 参数解析
      * @param archive          失败留存
-     * @param estimateService  预估业务
      */
-    public CloseReminderMailService(MailProperties mailProperties, MailContentBuilder contentBuilder,
-                                    MailRenderer renderer, SmtpMailSender mailSender,
-                                    SmtpSettingsResolver settingsResolver, MailArchive archive,
-                                    EstimateService estimateService) {
+    public ReminderMailService(MailProperties mailProperties, MailContentBuilder contentBuilder,
+                               MailRenderer renderer, SmtpMailSender mailSender,
+                               SmtpSettingsResolver settingsResolver, MailArchive archive) {
         this.mailProperties = mailProperties;
         this.contentBuilder = contentBuilder;
         this.renderer = renderer;
         this.mailSender = mailSender;
         this.settingsResolver = settingsResolver;
         this.archive = archive;
-        this.estimateService = estimateService;
     }
 
     /**
-     * 产出并发送收盘前提醒，失败时留存正文后抛出，由编排层记失败留痕
+     * 产出并发送指定时点的提醒，失败时留存正文后抛出，由编排层记失败留痕
      *
-     * @param tradeDate 交易日
-     * @param resend    是否携带此前未送达内容的补发
+     * @param point       时点
+     * @param tradeDate   交易日
+     * @param estimate    当日预估总览，晚上时点为空
+     * @param calibration 晚间校准结果，其余时点为空
+     * @param resend      是否携带此前未送达内容的补发
      * @return 发送成功的正文留存路径，留存失败为空
      */
     @Override
-    public String send(LocalDate tradeDate, boolean resend) {
+    public String send(SendPoint point, LocalDate tradeDate, EstimateBatchVO estimate,
+                       CalibrationResultVO calibration, boolean resend) {
         if (!mailProperties.isEnabled()) {
-            throw new com.lilac.task.ReminderDeliveryException("邮件开关已关闭（fund.mail.enabled=false）", null);
+            throw new ReminderDeliveryException("邮件开关已关闭（fund.mail.enabled=false）", null);
         }
         SmtpSettingsResolver.SmtpSettings settings = settingsResolver.resolve();
-        MailContent content = contentBuilder.build(tradeDate, estimateOf());
+        MailContent content = contentBuilder.build(point, tradeDate, estimate, calibration);
         List<MailArchive.Pending> pending = resend ? archive.pendingResend(tradeDate, RESEND_LIMIT) : List.of();
         // 只有真的带上了未送达内容才自称补发，否则主题会出现没有实际补发内容的「【补发】」
         boolean withResend = !pending.isEmpty();
@@ -89,15 +89,15 @@ public class CloseReminderMailService implements CloseReminderPort {
             mailSender.send(settings, subject, html, text);
             // 发出去之后才标记，发送失败时这些失败件要留到下次继续补
             archive.markResent(pending);
-            log.info("收盘前提醒已发送 {} 收件人 {} 个 补发 {} 封", tradeDate, settings.getRecipients().size(),
-                    pending.size());
+            log.info("时点提醒已发送 {} {} 收件人 {} 个 补发 {} 封", point, tradeDate,
+                    settings.getRecipients().size(), pending.size());
         } catch (RuntimeException e) {
             // 发不出去时先把内容落盘，页面上才有东西可看、下次才有东西可补发
-            String path = archive.save(tradeDate, "failed", subject, html, text);
-            log.warn("收盘前提醒发送失败 {}：{}，内容留存 {}", tradeDate, e.getMessage(), path);
-            throw new com.lilac.task.ReminderDeliveryException("邮件未送达：" + reason(e), path);
+            String path = archive.save(tradeDate, point, "failed", subject, html, text);
+            log.warn("时点提醒发送失败 {} {}：{}，内容留存 {}", point, tradeDate, e.getMessage(), path);
+            throw new ReminderDeliveryException("邮件未送达：" + reason(e), path);
         }
-        return archive.save(tradeDate, "sent", subject, html, text);
+        return archive.save(tradeDate, point, "sent", subject, html, text);
     }
 
     /**
@@ -123,20 +123,6 @@ public class CloseReminderMailService implements CloseReminderPort {
         }
         SmtpSettingsResolver.SmtpSettings settings = settingsResolver.resolve();
         return settings.complete() ? "邮件通道已就绪" : String.join("；", settings.getMissing());
-    }
-
-    /**
-     * 取当日预估，失败时不阻断邮件，只是把「无法预估」写进正文
-     *
-     * @return 预估总览，失败返回 null
-     */
-    private EstimateBatchVO estimateOf() {
-        try {
-            return estimateService.estimateBatch(new EstimateBatchRequest());
-        } catch (RuntimeException e) {
-            log.warn("邮件取预估失败，正文按无法预估处理：{}", e.getMessage());
-            return null;
-        }
     }
 
     /**

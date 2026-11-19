@@ -1,10 +1,12 @@
 package com.lilac.mail;
 
 import com.lilac.domain.vo.BondAdvisoryVO;
+import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.GridAdvisoryVO;
 import com.lilac.domain.vo.IndicatorAdvisoryVO;
 import com.lilac.domain.vo.LessonAdvisoryVO;
+import com.lilac.enums.SendPoint;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -23,6 +25,11 @@ public class MailContent implements Serializable {
      * 交易日
      */
     private LocalDate tradeDate;
+
+    /**
+     * 本封邮件所属时点，四个时点各发一封
+     */
+    private SendPoint point;
 
     /**
      * 纳入邮件的持仓品种数，为 0 时改发「未配置持仓」提示
@@ -135,6 +142,11 @@ public class MailContent implements Serializable {
     private List<String> lessonSummary = new ArrayList<>();
 
     /**
+     * 晚间校准结果，只有 EVENING 时点装配
+     */
+    private CalibrationResultVO calibration;
+
+    /**
      * 行情数据日期
      */
     private LocalDate quoteDate;
@@ -158,6 +170,15 @@ public class MailContent implements Serializable {
      */
     public boolean empty() {
         return varietyCount == 0;
+    }
+
+    /**
+     * 是否渲染策略类段落，只有收盘前那封带红利、网格、债券、指标与教训
+     *
+     * @return 需要渲染返回 true
+     */
+    public boolean fullSections() {
+        return point == SendPoint.PRE_CLOSE;
     }
 
     /**

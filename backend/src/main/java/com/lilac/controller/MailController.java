@@ -1,14 +1,16 @@
 package com.lilac.controller;
 
+import com.lilac.domain.dto.estimate.EstimateBatchRequest;
 import com.lilac.domain.result.Result;
+import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.MailPreviewVO;
 import com.lilac.domain.vo.MailStatusVO;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.SendPoint;
-import com.lilac.mail.SmtpSettingsResolver;
 import com.lilac.mail.MailContent;
 import com.lilac.mail.MailContentBuilder;
 import com.lilac.mail.MailRenderer;
+import com.lilac.mail.SmtpSettingsResolver;
 import com.lilac.service.EstimateService;
 import com.lilac.task.TaskOrchestrator;
 import com.lilac.task.model.PointOutcome;
@@ -58,14 +60,16 @@ public class MailController {
     }
 
     /**
-     * 预览邮件正文，便于在发信前确认排版与内容
+     * 预览指定时点的邮件正文，便于在发信前确认排版与内容
      */
     @GetMapping("/preview")
     public Result<MailPreviewVO> preview(
+            @RequestParam(value = "point", required = false, defaultValue = "PRE_CLOSE") SendPoint point,
             @RequestParam(value = "tradeDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate) {
         LocalDate date = tradeDate == null ? LocalDate.now() : tradeDate;
-        MailContent content = mailContentBuilder.build(date, estimateService.estimateBatch(null));
+        EstimateBatchVO estimate = point == SendPoint.EVENING ? null : estimateService.estimateBatch(null);
+        MailContent content = mailContentBuilder.build(point, date, estimate, null);
         MailPreviewVO vo = new MailPreviewVO();
         vo.setSubject(mailRenderer.subject(content, false));
         vo.setHtml(mailRenderer.html(content));
@@ -74,15 +78,16 @@ public class MailController {
     }
 
     /**
-     * 手动补发收盘前提醒，用于改好 SMTP 口令后把未送达内容补出去
+     * 手动补发指定时点的提醒，用于改好 SMTP 口令后把未送达内容补出去
      */
     @PostMapping("/resend")
     public Result<String> resend(
+            @RequestParam(value = "point", required = false, defaultValue = "PRE_CLOSE") SendPoint point,
             @RequestParam(value = "tradeDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate tradeDate) {
         LocalDate date = tradeDate == null ? LocalDate.now() : tradeDate;
         // 走编排器补发，成功与失败都会进发送留痕，页面上才能看到「补发过、失败在哪」
-        PointOutcome outcome = taskOrchestrator.triggerManually(SendPoint.PRE_CLOSE, date, true);
+        PointOutcome outcome = taskOrchestrator.triggerManually(point, date, true);
         if (!outcome.isSuccess()) {
             return Result.error(HttpsCodeEnum.OPERATION_ERROR.getCode(), outcome.getFailReason());
         }

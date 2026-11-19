@@ -27,6 +27,11 @@ public class MailArchiveVO implements Serializable {
     private String tradeDate;
 
     /**
+     * 时点中文名，四封邮件靠它区分
+     */
+    private String pointLabel;
+
+    /**
      * 发送时间，文件头部记录
      */
     private String sentAt;

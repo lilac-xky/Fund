@@ -4,6 +4,7 @@ import com.lilac.domain.dto.dividend.DividendQueryRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.BondAdvisoryVO;
+import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.DividendAdviceVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.EstimateBatchVO;
@@ -15,6 +16,7 @@ import com.lilac.domain.vo.IndexDividendOverviewVO;
 import com.lilac.domain.vo.LessonAdvisoryVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.enums.HoldingStatus;
+import com.lilac.enums.SendPoint;
 import com.lilac.service.BondMonitorService;
 import com.lilac.service.DividendAdviceService;
 import com.lilac.service.GridAdviceService;
@@ -88,13 +90,18 @@ public class MailContentBuilder {
     /**
      * 装配邮件模型，尚无持仓时返回 holdings 为空的模型，由调用方改发提示邮件
      *
-     * @param tradeDate 交易日
-     * @param estimate  当日预估总览，可为空
+     * @param point       本封邮件所属时点
+     * @param tradeDate   交易日
+     * @param estimate    当日预估总览，晚上时点为空
+     * @param calibration 晚间校准结果，其余时点为空
      * @return 邮件模型
      */
-    public MailContent build(LocalDate tradeDate, EstimateBatchVO estimate) {
+    public MailContent build(SendPoint point, LocalDate tradeDate, EstimateBatchVO estimate,
+                             CalibrationResultVO calibration) {
         MailContent content = new MailContent();
+        content.setPoint(point);
         content.setTradeDate(tradeDate);
+        content.setCalibration(calibration);
         List<VarietyVO> varieties = holdingVarieties();
         content.setVarietyCount(varieties.size());
         if (varieties.isEmpty()) {
@@ -102,12 +109,18 @@ public class MailContentBuilder {
         }
         Map<String, VarietyVO> varietyMap = new LinkedHashMap<>();
         varieties.forEach(variety -> varietyMap.put(variety.getVarietyKey(), variety));
-        fillEstimates(content, estimate, varietyMap);
-        fillDividends(content, varieties);
-        fillGrid(content, varieties);
-        fillBonds(content, varieties);
-        fillIndicators(content, varieties);
-        fillLessons(content);
+        // 晚上讲的是预估准不准，没有当日预估可讲，只带校准段
+        if (point != SendPoint.EVENING) {
+            fillEstimates(content, estimate, varietyMap);
+        }
+        // 策略类段落只进收盘前那封，盘中每半小时发一次会把手机刷屏
+        if (point == SendPoint.PRE_CLOSE) {
+            fillDividends(content, varieties);
+            fillGrid(content, varieties);
+            fillBonds(content, varieties);
+            fillIndicators(content, varieties);
+            fillLessons(content);
+        }
         fillDataCutoff(content, estimate, varieties);
         return content;
     }
@@ -151,8 +164,7 @@ public class MailContentBuilder {
             content.setEstimateUnavailableReason("今日预估未产出，无法给出涨跌推算");
             content.getUnavailableItems().addAll(unavailableFromHoldings(varietyMap, "今日预估未产出"));
             return;
-        }
-        content.setOverallChange(estimate.getOverallChange());
+        }        content.setOverallChange(estimate.getOverallChange());
         content.setOverallNote(estimate.getOverallNote());
         content.setTradingHours(estimate.getTradingHours());
         fillRows(content.getItems(), estimate.getItems(), varietyMap);
