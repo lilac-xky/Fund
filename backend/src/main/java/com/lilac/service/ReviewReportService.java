@@ -26,7 +26,7 @@ public interface ReviewReportService {
     ReviewReportVO exportComparison(LocalDate tradeDate);
 
     /**
-     * 导出误差历史区间 CSV
+     * 按日期区间导出误差明细 CSV，含品种名称、预估分支与区间上下界
      *
      * @param startDate 起始日，含
      * @param endDate   截止日，含

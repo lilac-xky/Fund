@@ -73,6 +73,25 @@ public class EstimateSnapshotServiceImpl implements EstimateSnapshotService {
     }
 
     /**
+     * 取日期区间内的全部留存，供区间导出补齐区间上下界与方向
+     *
+     * @param startDate 起始日，含
+     * @param endDate   截止日，含
+     * @return 留存视图列表，按交易日升序
+     */
+    @Override
+    public List<EstimateSnapshotVO> listByRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            return List.of();
+        }
+        List<EstimateSnapshot> rows = estimateSnapshotMapper.selectListByQuery(QueryWrapper.create()
+                .between(EstimateSnapshot::getTradeDate, startDate, endDate, true)
+                .orderBy(EstimateSnapshot::getTradeDate, true)
+                .orderBy(EstimateSnapshot::getVarietyKey, true));
+        return BeanUtil.copyToList(rows, EstimateSnapshotVO.class);
+    }
+
+    /**
      * 取该交易日已存在的留存主键，用于判断新增还是覆盖
      *
      * @param tradeDate 交易日

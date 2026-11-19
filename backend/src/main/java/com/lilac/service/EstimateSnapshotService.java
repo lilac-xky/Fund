@@ -27,4 +27,13 @@ public interface EstimateSnapshotService {
      * @return 留存视图列表
      */
     List<EstimateSnapshotVO> listByDate(LocalDate tradeDate);
+
+    /**
+     * 取日期区间内的全部留存，供区间导出补齐区间上下界与方向
+     *
+     * @param startDate 起始日，含
+     * @param endDate   截止日，含
+     * @return 留存视图列表，按交易日升序
+     */
+    List<EstimateSnapshotVO> listByRange(LocalDate startDate, LocalDate endDate);
 }

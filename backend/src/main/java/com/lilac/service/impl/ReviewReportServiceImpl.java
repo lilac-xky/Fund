@@ -3,13 +3,17 @@ package com.lilac.service.impl;
 import com.lilac.domain.dto.estimate.EstimateErrorQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.EstimateErrorVO;
+import com.lilac.domain.vo.EstimateSnapshotVO;
 import com.lilac.domain.vo.ReportRowVO;
 import com.lilac.domain.vo.ReviewReportVO;
 import com.lilac.domain.vo.VarietyVO;
+import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.report.CsvWriter;
 import com.lilac.service.EstimateErrorService;
+import com.lilac.service.EstimateSnapshotService;
 import com.lilac.service.ReviewReportService;
 import com.lilac.service.VarietyService;
+import com.lilac.utils.ThrowUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -38,6 +43,8 @@ public class ReviewReportServiceImpl implements ReviewReportService {
 
     private static final int RESULT_SCALE = 4;
     private static final int PERCENT_SCALE = 2;
+    private static final int DEFAULT_RANGE_DAYS = 30;
+    private static final int MAX_RANGE_DAYS = 366;
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String GROUP_LABEL = "复盘";
 
@@ -46,6 +53,9 @@ public class ReviewReportServiceImpl implements ReviewReportService {
 
     @Resource
     private EstimateErrorService estimateErrorService;
+
+    @Resource
+    private EstimateSnapshotService estimateSnapshotService;
 
     @Resource
     private VarietyService varietyService;
@@ -91,7 +101,7 @@ public class ReviewReportServiceImpl implements ReviewReportService {
     }
 
     /**
-     * 导出误差历史区间 CSV
+     * 按日期区间导出误差明细 CSV
      *
      * @param startDate 起始日
      * @param endDate   截止日
@@ -99,13 +109,20 @@ public class ReviewReportServiceImpl implements ReviewReportService {
      */
     @Override
     public String exportErrorHistory(LocalDate startDate, LocalDate endDate) {
-        LocalDate start = startDate == null ? LocalDate.now().minusDays(30) : startDate;
         LocalDate end = endDate == null ? LocalDate.now() : endDate;
+        LocalDate start = startDate == null ? end.minusDays(DEFAULT_RANGE_DAYS) : startDate;
+        ThrowUtils.throwIf(start.isAfter(end), HttpsCodeEnum.PARAMS_ERROR, "起始日不能晚于截止日");
+        ThrowUtils.throwIf(ChronoUnit.DAYS.between(start, end) > MAX_RANGE_DAYS,
+                HttpsCodeEnum.PARAMS_ERROR, "单次导出最多 " + MAX_RANGE_DAYS + " 天，请拆成多段");
         List<EstimateErrorVO> errors = errorsOf(start, end);
         Path target = reportDir().resolve("error-history-" + start + "_" + end + ".csv");
+        List<List<String>> rows = errorHistoryRows(start, end, errors);
         try {
-            int written = csvWriter.write(target, errorHistoryHeader(), errorHistoryRows(errors));
-            return "已导出 " + written + " 行到 " + target;
+            csvWriter.write(target, errorHistoryHeader(), rows);
+            if (rows.isEmpty()) {
+                return "区间 " + start + " ~ " + end + " 内没有误差记录，已写出只含表头的空文件 " + target;
+            }
+            return "已导出 " + rows.size() + " 行（" + start + " ~ " + end + "）到 " + target;
         } catch (IOException e) {
             log.warn("误差历史导出失败 {}~{}：{}", start, end, e.getMessage());
             return "导出失败：" + e.getMessage();
@@ -309,27 +326,126 @@ public class ReviewReportServiceImpl implements ReviewReportService {
      * @return 表头
      */
     private List<String> errorHistoryHeader() {
-        return List.of("交易日", "品种主键", "预估涨跌幅(%)", "实际涨跌幅(%)", "误差(%)",
-                "阈值(%)", "是否超阈值", "方向命中", "区间命中", "区间宽度", "档位", "来源");
+        return List.of("交易日", "代码", "名称", "类型", "档位", "预估分支", "预估涨跌幅(%)",
+                "预估方向", "区间下限(%)", "区间上限(%)", "区间宽度(%)", "实际涨跌幅(%)", "误差(%)",
+                "阈值(%)", "是否超阈值", "方向命中", "区间命中", "来源");
     }
 
     /**
-     * 误差历史 CSV 的行
+     * 误差历史 CSV 的行，按交易日与代码排序并补上留存里的分支、方向与区间上下界
      *
+     * @param start  起始日
+     * @param end    截止日
      * @param errors 误差记录
      * @return 行数据
      */
-    private List<List<String>> errorHistoryRows(List<EstimateErrorVO> errors) {
-        List<List<String>> rows = new ArrayList<>();
-        for (EstimateErrorVO error : errors) {
-            rows.add(List.of(text(error.getTradeDate()), text(error.getVarietyKey()),
-                    plain(error.getEstimatedChange()), plain(error.getActualChange()),
-                    plain(error.getErrorValue()), plain(error.getThresholdValue()),
-                    bool(error.getOverThreshold()), bool(error.getDirectionHit()),
-                    bool(error.getInInterval()), plain(error.getIntervalWidth()),
-                    text(error.getOutputTier()), text(error.getEstimateSource())));
+    private List<List<String>> errorHistoryRows(LocalDate start, LocalDate end,
+                                                List<EstimateErrorVO> errors) {
+        if (errors.isEmpty()) {
+            return List.of();
+        }
+        Map<String, VarietyVO> varietyMap = varietyMap();
+        Map<String, EstimateSnapshotVO> snapshotMap = snapshotMap(start, end);
+        List<EstimateErrorVO> sorted = new ArrayList<>(errors);
+        sorted.sort(Comparator.comparing(EstimateErrorVO::getTradeDate,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(error -> codeOf(error, varietyMap),
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        List<List<String>> rows = new ArrayList<>(sorted.size());
+        for (EstimateErrorVO error : sorted) {
+            EstimateSnapshotVO snapshot = snapshotMap.get(snapshotKey(error));
+            VarietyVO variety = varietyMap.get(error.getVarietyKey());
+            rows.add(errorHistoryRow(error, variety, snapshot));
         }
         return rows;
+    }
+
+    /**
+     * 拼一行误差明细，留存缺失时区间与方向列留空
+     *
+     * @param error    误差记录
+     * @param variety  品种，可能为空
+     * @param snapshot 当日预估留存，可能为空
+     * @return 行数据
+     */
+    private List<String> errorHistoryRow(EstimateErrorVO error, VarietyVO variety,
+                                         EstimateSnapshotVO snapshot) {
+        return List.of(text(error.getTradeDate()),
+                text(variety == null ? null : variety.getVarietyCode()),
+                text(variety == null ? error.getVarietyKey() : variety.getVarietyName()),
+                text(variety == null || variety.getCategory() == null
+                        ? null : variety.getCategory().getLabel()),
+                text(error.getOutputTier()), branchLabel(snapshot),
+                plain(error.getEstimatedChange()), directionLabel(snapshot),
+                plain(snapshot == null ? null : snapshot.getIntervalLow()),
+                plain(snapshot == null ? null : snapshot.getIntervalHigh()),
+                plain(error.getIntervalWidth()), plain(error.getActualChange()),
+                plain(error.getErrorValue()), plain(error.getThresholdValue()),
+                bool(error.getOverThreshold()), bool(error.getDirectionHit()),
+                bool(error.getInInterval()), text(error.getEstimateSource()));
+    }
+
+    /**
+     * 取区间内全部预估留存，键为「交易日 + 品种主键」
+     *
+     * @param start 起始日
+     * @param end   截止日
+     * @return 留存映射
+     */
+    private Map<String, EstimateSnapshotVO> snapshotMap(LocalDate start, LocalDate end) {
+        Map<String, EstimateSnapshotVO> map = new LinkedHashMap<>();
+        List<EstimateSnapshotVO> snapshots = estimateSnapshotService.listByRange(start, end);
+        if (snapshots == null) {
+            return map;
+        }
+        for (EstimateSnapshotVO snapshot : snapshots) {
+            map.put(snapshot.getTradeDate() + "|" + snapshot.getVarietyKey(), snapshot);
+        }
+        return map;
+    }
+
+    /**
+     * 拼留存的查询键，与 snapshotMap 保持一致
+     *
+     * @param error 误差记录
+     * @return 查询键
+     */
+    private String snapshotKey(EstimateErrorVO error) {
+        return error.getTradeDate() + "|" + error.getVarietyKey();
+    }
+
+    /**
+     * 取品种代码，取不到时退回业务主键，只为排序稳定
+     *
+     * @param error      误差记录
+     * @param varietyMap 品种映射
+     * @return 代码
+     */
+    private String codeOf(EstimateErrorVO error, Map<String, VarietyVO> varietyMap) {
+        VarietyVO variety = varietyMap.get(error.getVarietyKey());
+        return variety == null || variety.getVarietyCode() == null
+                ? error.getVarietyKey() : variety.getVarietyCode();
+    }
+
+    /**
+     * 预估分支的中文名，留存缺失时留空
+     *
+     * @param snapshot 留存
+     * @return 分支名
+     */
+    private String branchLabel(EstimateSnapshotVO snapshot) {
+        return snapshot == null || snapshot.getBranch() == null ? "" : snapshot.getBranch().getLabel();
+    }
+
+    /**
+     * 预估方向的中文名，留存缺失时留空
+     *
+     * @param snapshot 留存
+     * @return 方向名
+     */
+    private String directionLabel(EstimateSnapshotVO snapshot) {
+        return snapshot == null || snapshot.getDirection() == null ? ""
+                : snapshot.getDirection().getLabel();
     }
 
     /**
