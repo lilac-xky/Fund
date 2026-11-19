@@ -1,5 +1,7 @@
 package com.lilac.mail;
 
+import com.lilac.domain.vo.MailArchiveVO;
+import com.lilac.enums.SendPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,14 +90,34 @@ class SecretsAndArchiveTest {
     @DisplayName("失败留存可读出，成功留存不进补发清单")
     void archiveWritesAndReads() {
         MailArchive archive = archiveAt(tempDir);
-        String path = archive.save(LocalDate.of(2026, 10, 29), "failed", "收盘前提醒 2026-10-29",
+        String path = archive.save(LocalDate.of(2026, 10, 29), SendPoint.PRE_CLOSE, "failed",
+                "收盘前提醒 2026-10-29", "<p>html</p>", "text 正文");
+        archive.save(LocalDate.of(2026, 10, 29), SendPoint.PRE_CLOSE, "sent", "成功的那封",
                 "<p>html</p>", "text 正文");
-        archive.save(LocalDate.of(2026, 10, 29), "sent", "成功的那封", "<p>html</p>", "text 正文");
 
         assertThat(path).startsWith("mail/").endsWith(".txt");
         List<MailArchive.Pending> pending = archive.pendingResend(LocalDate.of(2026, 10, 30), 5);
         assertThat(pending).hasSize(1);
         assertThat(pending.get(0).getSummary()).contains("2026-10-29").contains("收盘前提醒 2026-10-29");
+    }
+
+    /**
+     * 同一天四个时点各留一份，文件名必须互不覆盖，页面也要能说出是哪个时点
+     */
+    @Test
+    @DisplayName("四时点留存互不覆盖并带时点名")
+    void fourPointsArchiveSeparately() {
+        MailArchive archive = archiveAt(tempDir);
+        LocalDate date = LocalDate.of(2026, 10, 30);
+        for (SendPoint point : SendPoint.values()) {
+            archive.save(date, point, "sent", point.getLabel() + " 那封", "<p></p>", "text");
+        }
+
+        List<MailArchiveVO> listed = archive.listRecent(10);
+        assertThat(listed).hasSize(4);
+        assertThat(listed).extracting(MailArchiveVO::getPointLabel)
+                .containsExactlyInAnyOrder("早盘", "午盘", "收盘前", "晚间");
+        assertThat(listed).extracting(MailArchiveVO::getFileName).doesNotHaveDuplicates();
     }
 
     /**
@@ -105,7 +127,7 @@ class SecretsAndArchiveTest {
     @DisplayName("当天的失败也算补发项")
     void todayFailureIsPending() {
         MailArchive archive = archiveAt(tempDir);
-        archive.save(LocalDate.of(2026, 10, 30), "failed", "今天失败", "<p></p>", "text");
+        archive.save(LocalDate.of(2026, 10, 30), SendPoint.NOON, "failed", "今天失败", "<p></p>", "text");
         assertThat(archive.pendingResend(LocalDate.of(2026, 10, 30), 5)).hasSize(1);
     }
 
@@ -116,7 +138,7 @@ class SecretsAndArchiveTest {
     @DisplayName("已补发的失败件不再重复列出")
     void resentFailureNotListedAgain() {
         MailArchive archive = archiveAt(tempDir);
-        archive.save(LocalDate.of(2026, 10, 30), "failed", "今天失败", "<p></p>", "text");
+        archive.save(LocalDate.of(2026, 10, 30), SendPoint.PRE_CLOSE, "failed", "今天失败", "<p></p>", "text");
         List<MailArchive.Pending> first = archive.pendingResend(LocalDate.of(2026, 10, 30), 5);
         assertThat(archive.markResent(first)).isTrue();
 
@@ -130,7 +152,7 @@ class SecretsAndArchiveTest {
     @DisplayName("晚于交易日的留存不进补发清单")
     void futureArchiveExcluded() {
         MailArchive archive = archiveAt(tempDir);
-        archive.save(LocalDate.of(2026, 10, 31), "failed", "明天失败", "<p></p>", "text");
+        archive.save(LocalDate.of(2026, 10, 31), SendPoint.PRE_CLOSE, "failed", "明天失败", "<p></p>", "text");
         assertThat(archive.pendingResend(LocalDate.of(2026, 10, 30), 5)).isEmpty();
     }
 

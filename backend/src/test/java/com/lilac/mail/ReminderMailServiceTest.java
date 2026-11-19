@@ -1,11 +1,8 @@
 package com.lilac.mail;
 
-import com.lilac.domain.vo.HoldingVO;
-import com.lilac.enums.EstimateConfidence;
-import com.lilac.enums.EstimateTier;
+import com.lilac.enums.SendPoint;
 import com.lilac.mapper.HoldingMapper;
 import com.lilac.mapper.SendRecordMapper;
-import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,27 +12,25 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 邮件链路验收测试，SMTP 用桩替换，重点验证未配置、失败留存与补发三条路径
+ * 邮件链路验收测试，SMTP 用桩替换，重点验证未配置、失败留存与四个时点各自出口
  */
 @SpringBootTest
 @Transactional
-class CloseReminderMailServiceTest {
+class ReminderMailServiceTest {
 
     private static final LocalDate TRADE_DATE = LocalDate.of(2026, 10, 30);
 
     private static final String MISSING_SECRETS = "target/absent-test-secrets.env";
 
     @Autowired
-    private CloseReminderMailService mailService;
+    private ReminderMailService mailService;
 
     @Autowired
     private MailProperties mailProperties;
@@ -66,7 +61,8 @@ class CloseReminderMailServiceTest {
         mailProperties.setSecretsFile(MISSING_SECRETS);
         MailContent empty = new MailContent();
         empty.setTradeDate(TRADE_DATE);
-        Mockito.when(mailContentBuilder.build(ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(empty);
+        Mockito.when(mailContentBuilder.build(ArgumentMatchers.any(), ArgumentMatchers.any(),
+                ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(empty);
     }
 
     /**
@@ -77,10 +73,34 @@ class CloseReminderMailServiceTest {
     void failsWhenSmtpIncomplete() {
         assertThat(settingsResolver.resolve().complete()).isFalse();
         try {
-            mailService.send(TRADE_DATE, false);
+            mailService.send(SendPoint.PRE_CLOSE, TRADE_DATE, null, null, false);
             org.junit.jupiter.api.Assertions.fail("缺少 SMTP 参数时不应发送成功");
         } catch (com.lilac.task.ReminderDeliveryException e) {
             assertThat(e.getMessage()).contains("未送达").contains("SMTP");
+        }
+        Mockito.verify(mailSender, Mockito.never())
+                .send(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any());
+    }
+
+    /**
+     * 四个时点都要走同一条出口，任一关闭都说明开关关的是全部提醒
+     */
+    @Test
+    @DisplayName("邮件开关关闭时四个时点都不发送")
+    void disabledBlocksEveryPoint() {
+        boolean original = mailProperties.isEnabled();
+        try {
+            mailProperties.setEnabled(false);
+            for (SendPoint point : SendPoint.values()) {
+                try {
+                    mailService.send(point, TRADE_DATE, null, null, false);
+                    org.junit.jupiter.api.Assertions.fail("邮件开关关闭时不应发送成功：" + point);
+                } catch (com.lilac.task.ReminderDeliveryException e) {
+                    assertThat(e.getMessage()).contains("开关已关闭");
+                }
+            }
+        } finally {
+            mailProperties.setEnabled(original);
         }
         Mockito.verify(mailSender, Mockito.never())
                 .send(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any());

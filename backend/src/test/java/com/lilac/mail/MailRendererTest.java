@@ -4,6 +4,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.lilac.domain.vo.CalibrationGapVO;
+import com.lilac.domain.vo.CalibrationItemVO;
+import com.lilac.domain.vo.CalibrationResultVO;
+import com.lilac.enums.SendPoint;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -132,6 +137,80 @@ class MailRendererTest {
         content.getItems().add(item);
 
         assertThat(renderer.html(content)).doesNotContain("<script>alert(1)</script>");
+    }
+
+    /**
+     * 主题按所属时点区分，四封邮件在收件箱里一眼能分出是哪一封
+     */
+    @Test
+    @DisplayName("主题按所属时点区分")
+    void subjectNamesPoint() {
+        MailContent morning = contentWithOneEstimable();
+        morning.setPoint(SendPoint.MORNING);
+        MailContent noon = contentWithOneEstimable();
+        noon.setPoint(SendPoint.NOON);
+        MailContent preClose = contentWithOneEstimable();
+        preClose.setPoint(SendPoint.PRE_CLOSE);
+        MailContent evening = contentWithOneEstimable();
+        evening.setPoint(SendPoint.EVENING);
+
+        assertThat(renderer.subject(morning, false)).contains("早盘预估速览");
+        assertThat(renderer.subject(noon, false)).contains("午盘预估速览");
+        assertThat(renderer.subject(preClose, false)).contains("收盘前提醒");
+        assertThat(renderer.subject(evening, false)).contains("晚间净值校准");
+    }
+
+    /**
+     * 早盘午盘正文不含策略类段落，收盘前那封才全带
+     */
+    @Test
+    @DisplayName("盘中只发预估段，收盘前才带策略段")
+    void intradaySectionsTrimmed() {
+        MailContent morning = contentWithOneEstimable();
+        morning.setPoint(SendPoint.MORNING);
+        assertThat(renderer.text(morning)).contains("【持仓预估】").doesNotContain("【策略提醒】");
+        assertThat(renderer.html(morning)).doesNotContain("策略提醒</h3>");
+
+        MailContent preClose = contentWithOneEstimable();
+        preClose.setPoint(SendPoint.PRE_CLOSE);
+        assertThat(renderer.text(preClose)).contains("【策略提醒】").contains("【网格提醒】");
+    }
+
+    /**
+     * 晚间正文讲校准，逐只误差与缺口都要出现，不能只有一句汇总
+     */
+    @Test
+    @DisplayName("晚间正文带逐只误差与缺口")
+    void eveningCarriesCalibration() {
+        MailContent content = new MailContent();
+        content.setPoint(SendPoint.EVENING);
+        content.setTradeDate(TRADE_DATE);
+        content.setVarietyCount(1);
+        CalibrationResultVO calibration = new CalibrationResultVO();
+        calibration.setCalibratedCount(1);
+        calibration.setOverThresholdCount(1);
+        calibration.setGapCount(1);
+        CalibrationItemVO item = new CalibrationItemVO();
+        item.setVarietyCode("000922");
+        item.setVarietyName("中证红利ETF联接A");
+        item.setEstimatedChange(new BigDecimal("0.52"));
+        item.setActualChange(new BigDecimal("0.90"));
+        item.setErrorValue(new BigDecimal("-0.38"));
+        item.setOverThreshold(Boolean.TRUE);
+        calibration.setItems(List.of(item));
+        CalibrationGapVO gap = new CalibrationGapVO();
+        gap.setVarietyCode("005827");
+        gap.setVarietyName("易方达蓝筹精选");
+        gap.setReason("当日净值未公布");
+        calibration.setGaps(List.of(gap));
+        content.setCalibration(calibration);
+
+        String text = renderer.text(content);
+        assertThat(text).contains("【晚间校准】").contains("000922").contains("超阈值")
+                .contains("当日净值未公布");
+        String html = renderer.html(content);
+        assertThat(html).contains("晚间校准</h3>").contains("未能校准").contains("当日净值未公布");
+        assertThat(html).doesNotContain("持仓预估</h3>");
     }
 
     /**

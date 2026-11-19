@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from '@/request'
 
-/** 预览邮件正文，便于在发信前确认排版与内容 GET /api/mail/preview */
+/** 预览指定时点的邮件正文，便于在发信前确认排版与内容 GET /api/mail/preview */
 export async function preview(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.previewParams,
@@ -17,7 +17,7 @@ export async function preview(
   })
 }
 
-/** 手动补发收盘前提醒，用于改好 SMTP 口令后把未送达内容补出去 POST /api/mail/resend */
+/** 手动补发指定时点的提醒，用于改好 SMTP 口令后把未送达内容补出去 POST /api/mail/resend */
 export async function resend(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.resendParams,

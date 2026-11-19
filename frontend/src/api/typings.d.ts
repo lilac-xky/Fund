@@ -1632,6 +1632,8 @@ declare namespace API {
     subject?: string
     /** 交易日 */
     tradeDate?: string
+    /** 时点中文名，四封邮件靠它区分 */
+    pointLabel?: string
     /** 发送时间，文件头部记录 */
     sentAt?: string
     /** 是否发送失败件 */
@@ -1908,6 +1910,11 @@ declare namespace API {
   }
 
   type previewParams = {
+    /**  MORNING :早盘，约 9:30
+NOON :午盘，约 11:30 至 13:00
+PRE_CLOSE :收盘前 30 分钟，约 14:30
+EVENING :晚间净值校准，约 20:00 至 22:00 */
+    point?: string
     tradeDate?: string
   }
 
@@ -1969,6 +1976,11 @@ declare namespace API {
   }
 
   type resendParams = {
+    /**  MORNING :早盘，约 9:30
+NOON :午盘，约 11:30 至 13:00
+PRE_CLOSE :收盘前 30 分钟，约 14:30
+EVENING :晚间净值校准，约 20:00 至 22:00 */
+    point?: string
     tradeDate?: string
   }
 

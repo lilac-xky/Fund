@@ -3,6 +3,7 @@ package com.lilac.mail;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
 import com.lilac.domain.vo.BondAdvisoryVO;
+import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.DividendAdvisoryVO;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateVO;
@@ -14,6 +15,7 @@ import com.lilac.enums.EstimateConfidence;
 import com.lilac.enums.EstimateTier;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
+import com.lilac.enums.SendPoint;
 import com.lilac.enums.VarietyType;
 import com.lilac.service.BondMonitorService;
 import com.lilac.service.DividendAdviceService;
@@ -34,6 +36,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,10 +82,50 @@ class MailContentBuilderTest {
     @DisplayName("无持仓时模型为空")
     void emptyWhenNoHolding() {
         when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of());
-        MailContent content = builder.build(TRADE_DATE, null);
+        MailContent content = builder.build(SendPoint.MORNING, TRADE_DATE, null, null);
 
         assertThat(content.empty()).isTrue();
         assertThat(content.getVarietyCount()).isZero();
+    }
+
+    /**
+     * 早盘与午盘只带预估，不重复推送策略类段落，否则一天四封会把手机刷屏
+     */
+    @Test
+    @DisplayName("早盘午盘只带预估不带策略段")
+    void intradayPointsCarryEstimateOnly() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+
+        for (SendPoint point : List.of(SendPoint.MORNING, SendPoint.NOON)) {
+            MailContent content = builder.build(point, TRADE_DATE, estimateWithOne(), null);
+            assertThat(content.getItems()).hasSize(1);
+            assertThat(content.getDividendSummary()).isEmpty();
+            assertThat(content.fullSections()).isFalse();
+        }
+        // 收盘前才装配策略段，红利建议此时才会被调用
+        builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
+        verify(dividendAdviceService, times(1)).adviseAll();
+    }
+
+    /**
+     * 晚间只讲校准，不带当日预估表，避免与白天那几封重复
+     */
+    @Test
+    @DisplayName("晚间只带校准不带预估")
+    void eveningCarriesCalibrationOnly() {
+        when(holdingService.listHolding(any(HoldingQueryRequest.class))).thenReturn(List.of(holding("OF:000922")));
+        when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
+        CalibrationResultVO calibration = new CalibrationResultVO();
+        calibration.setCalibratedCount(1);
+        calibration.setOverThresholdCount(0);
+        calibration.setGapCount(0);
+
+        MailContent content = builder.build(SendPoint.EVENING, TRADE_DATE, estimateWithOne(), calibration);
+
+        assertThat(content.getItems()).isEmpty();
+        assertThat(content.getCalibration()).isSameAs(calibration);
+        assertThat(content.getDividendSummary()).isEmpty();
     }
 
     /**
@@ -94,7 +138,7 @@ class MailContentBuilderTest {
         when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
         when(dividendAdviceService.adviseAll()).thenReturn(emptyAdvisory());
 
-        MailContent content = builder.build(TRADE_DATE, null);
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, null, null);
         assertThat(content.getItems()).isEmpty();
         assertThat(content.getUnavailableItems()).hasSize(1);
         assertThat(content.getUnavailableItems().get(0).getUnavailableReason()).contains("未产出");
@@ -111,7 +155,7 @@ class MailContentBuilderTest {
         when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(dividend()));
         when(dividendAdviceService.adviseAll()).thenThrow(new IllegalStateException("参数表读取失败"));
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.isDividendAvailable()).isFalse();
         assertThat(content.getDividendSummary()).anySatisfy(item -> assertThat(item).contains("失败"));
         assertThat(content.getItems()).hasSize(1);
@@ -127,7 +171,7 @@ class MailContentBuilderTest {
         when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(bond()));
         when(bondMonitorService.adviseAll()).thenReturn(bondAdvisory(true));
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.getBondSummary()).isNotEmpty();
         assertThat(content.getBondSummary()).anySatisfy(item -> assertThat(item).contains("横盘"));
         assertThat(content.isBondAvailable()).isTrue();
@@ -143,7 +187,7 @@ class MailContentBuilderTest {
         when(varietyService.listVariety(any(VarietyQueryRequest.class))).thenReturn(List.of(bond()));
         when(bondMonitorService.adviseAll()).thenReturn(bondAdvisory(false));
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.getBondSummary()).anySatisfy(item -> assertThat(item).contains("未达换仓阈值"));
     }
 
@@ -162,7 +206,7 @@ class MailContentBuilderTest {
         advisory.setSummary(List.of("000922 RSI 超买"));
         when(indicatorService.computeAll()).thenReturn(advisory);
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.isIndicatorAvailable()).isFalse();
         assertThat(content.getIndicatorSummary()).anySatisfy(item -> assertThat(item).contains("参与提醒"));
     }
@@ -182,7 +226,7 @@ class MailContentBuilderTest {
         advisory.setSummary(List.of("000922 中证红利ETF联接A：RSI 超买，RSI 78.50"));
         when(indicatorService.computeAll()).thenReturn(advisory);
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.isIndicatorAvailable()).isTrue();
         assertThat(content.getIndicatorSummary()).anySatisfy(item -> assertThat(item).contains("RSI 超买"));
     }
@@ -203,7 +247,7 @@ class MailContentBuilderTest {
                 + "收盘价 1.10 元 9.09%，超过容忍幅度 3%。教训：你记录过「追高被套」"));
         when(lessonAdviceService.advise(null)).thenReturn(advisory);
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.isLessonAvailable()).isTrue();
         assertThat(content.getLessonSummary()).anySatisfy(item -> assertThat(item).contains("教训："));
     }
@@ -223,7 +267,7 @@ class MailContentBuilderTest {
         advisory.setSummary(List.of("追高被套｜510300 沪深300ETF"));
         when(lessonAdviceService.advise(null)).thenReturn(advisory);
 
-        MailContent content = builder.build(TRADE_DATE, estimateWithOne());
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimateWithOne(), null);
         assertThat(content.isLessonAvailable()).isFalse();
         assertThat(content.getLessonSummary()).anySatisfy(item -> assertThat(item).contains("随邮件发出"));
     }
@@ -250,7 +294,7 @@ class MailContentBuilderTest {
         estimate.setUnavailableItems(List.of(gap));
         estimate.setDataDate(LocalDate.of(2026, 10, 29));
 
-        MailContent content = builder.build(TRADE_DATE, estimate);
+        MailContent content = builder.build(SendPoint.PRE_CLOSE, TRADE_DATE, estimate, null);
         assertThat(content.getItems()).hasSize(1);
         assertThat(content.getUnavailableItems()).hasSize(1);
         assertThat(content.getQuoteDate()).isEqualTo(LocalDate.of(2026, 10, 29));
