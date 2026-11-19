@@ -55,17 +55,28 @@
                   @input="onDateChange(($event.target as HTMLInputElement).value)"
                 />
                 <AppButton size="sm" :disabled="store.busy" @click="onReload">重新读取</AppButton>
-                <AppButton size="sm" :disabled="reporting" @click="onExportCompare">
-                  {{ reporting ? '导出中…' : '导出对照 CSV' }}
-                </AppButton>
-                <AppButton size="sm" :disabled="reporting" @click="onExportErrors"
-                  >导出误差历史</AppButton
-                >
                 <AppButton size="sm" :disabled="reporting" @click="onGenerateReport">
                   生成复盘报告
                 </AppButton>
                 <span v-if="store.calibratedAt !== '—'" class="app-daybar__meta">
                   最近校准 {{ store.calibratedAt }}
+                </span>
+              </div>
+              <div class="app-daybar">
+                <label class="app-daybar__lab" for="export-from">导出区间</label>
+                <input
+                  id="export-from"
+                  v-model="exportStart"
+                  type="date"
+                  class="app-input app-date"
+                />
+                <span class="app-daybar__sep">至</span>
+                <input v-model="exportEnd" type="date" class="app-input app-date" />
+                <AppButton size="sm" :disabled="reporting" @click="onExportRange">
+                  {{ reporting ? '导出中…' : '导出区间 CSV' }}
+                </AppButton>
+                <span class="app-daybar__meta">
+                  逐只明细，含代码、名称、类型、分支与区间上下界，供修正因子
                 </span>
               </div>
             </div>
@@ -403,7 +414,7 @@
 /**
  * 晚间复盘页：逐只展示预估与实际对照、误差标记与近期误差趋势，未出数时显示待校准
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppAlert from '@/ui/AppAlert.vue'
 import AppAsideBlock from '@/layout/AppAsideBlock.vue'
 import AppButton from '@/ui/AppButton.vue'
@@ -416,11 +427,7 @@ import MessageHost from '@/ui/MessageHost.vue'
 import { ElMessage } from '@/ui/message'
 import { zeroBaselinePoints } from '@/services/indicators'
 import { today } from '@/services/review'
-import {
-  exportCompare,
-  exportErrors,
-  generate as generateReport,
-} from '@/api/reviewReportController'
+import { exportErrors, generate as generateReport } from '@/api/reviewReportController'
 import { useReviewStore } from '@/stores/review'
 import type { ReviewRow } from '@/stores/review'
 import { fullTime, plain, signedPercent, toneClass } from '@/utils/format'
@@ -466,6 +473,39 @@ const trendSeries = ref<API.EstimateErrorVO[]>([])
 
 /** 报告导出中 */
 const reporting = ref(false)
+
+/**
+ * 按偏移量推算 ISO 日期，全程用 UTC 计算，避免本地时区把日期挪一天
+ *
+ * @param base       基准日期，yyyy-MM-dd
+ * @param offsetDays 偏移天数，负数往前
+ * @returns yyyy-MM-dd
+ */
+function shiftDate(base: string, offsetDays: number): string {
+  const parsed = /^(\d{4})-(\d{2})-(\d{2})$/.exec(base)
+  if (!parsed) {
+    return today()
+  }
+  const date = new Date(
+    Date.UTC(Number(parsed[1]), Number(parsed[2]) - 1, Number(parsed[3]) + offsetDays),
+  )
+  return date.toISOString().slice(0, 10)
+}
+
+/** 导出区间起始日，默认复盘日期往前 30 天 */
+const exportStart = ref(shiftDate(store.tradeDate, -30))
+
+/** 导出区间截止日，默认跟随复盘日期 */
+const exportEnd = ref(store.tradeDate)
+
+/** 切换复盘日期时把导出区间跟着挪，避免还在导上一次的时间段 */
+watch(
+  () => store.tradeDate,
+  (next) => {
+    exportEnd.value = next
+    exportStart.value = shiftDate(next, -30)
+  },
+)
 
 /** 监听上下线的取消函数 */
 let stopWatching: (() => void) | null = null
@@ -582,43 +622,31 @@ async function onCalibrate(): Promise<void> {
 }
 
 /**
- * 导出当日对照 CSV，文件落在服务器的 data/report 下，页面只回路径
+ * 按自选区间导出误差明细 CSV，文件落在服务器的 data/report 下，页面只回路径
  *
  * @returns 无
  */
-async function onExportCompare(): Promise<void> {
+async function onExportRange(): Promise<void> {
+  if (!exportStart.value || !exportEnd.value) {
+    ElMessage.error('请先选择导出区间的起止日')
+    return
+  }
+  if (exportStart.value > exportEnd.value) {
+    ElMessage.error('起始日不能晚于截止日')
+    return
+  }
   reporting.value = true
   try {
-    const result = await exportCompare({ tradeDate: store.tradeDate })
-    const data = result.data
-    if (!data?.savedPath) {
-      ElMessage.error((data?.notes ?? []).join('；') || '导出失败，未返回文件路径')
+    const result = await exportErrors({
+      startDate: exportStart.value,
+      endDate: exportEnd.value,
+    })
+    const message = result.data ?? ''
+    if (!message || message.startsWith('导出失败')) {
+      ElMessage.error(message || '导出失败，未返回说明')
       return
     }
-    ElMessage.success(`已导出 ${data.rows?.length ?? 0} 行到 ${data.savedPath}`)
-  } catch {
-    // request 层已弹出具体原因
-  } finally {
-    reporting.value = false
-  }
-}
-
-/**
- * 导出误差历史 CSV，区间取当前复盘日期往前 30 天
- *
- * @returns 无
- */
-async function onExportErrors(): Promise<void> {
-  reporting.value = true
-  try {
-    const end = new Date(store.tradeDate)
-    const start = new Date(end)
-    start.setDate(start.getDate() - 30)
-    const result = await exportErrors({
-      startDate: start.toISOString().slice(0, 10),
-      endDate: end.toISOString().slice(0, 10),
-    })
-    ElMessage.success(result.data ?? '已导出')
+    ElMessage.success(message)
   } catch {
     // request 层已弹出具体原因
   } finally {
@@ -832,6 +860,11 @@ onBeforeUnmount(() => {
 }
 
 .app-daybar__meta {
+  font-size: 11px;
+  color: var(--t4);
+}
+
+.app-daybar__sep {
   font-size: 11px;
   color: var(--t4);
 }
