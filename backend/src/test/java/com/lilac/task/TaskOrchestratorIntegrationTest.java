@@ -5,6 +5,7 @@ import com.lilac.domain.dto.send.SendRecordQueryRequest;
 import com.lilac.domain.vo.SendRecordVO;
 import com.lilac.domain.vo.TaskOverviewVO;
 import com.lilac.domain.vo.TaskPointStatusVO;
+import com.lilac.engine.model.NetWorthReadiness;
 import com.lilac.enums.HttpsCodeEnum;
 import com.lilac.enums.SendPoint;
 import com.lilac.enums.SendStatus;
@@ -58,6 +59,9 @@ class TaskOrchestratorIntegrationTest {
     @MockitoBean
     private ClockGuard clockGuard;
 
+    @MockitoBean
+    private com.lilac.service.NetWorthReadinessService netWorthReadinessService;
+
     /**
      * 清空留痕、恢复开关，并让产出默认成功、时钟默认正常，用例自己决定何时触发
      */
@@ -71,6 +75,101 @@ class TaskOrchestratorIntegrationTest {
                 .thenReturn(PointOutcome.ok("产出成功"));
         Mockito.when(clockGuard.inGuardWindow(ArgumentMatchers.any())).thenReturn(false);
         Mockito.when(clockGuard.sample(ArgumentMatchers.any())).thenReturn(java.util.Optional.empty());
+        // 默认按「净值已到齐」处理，除专门验证等待的用例外都不该被晚间闸门挡住
+        Mockito.when(netWorthReadinessService.check(ArgumentMatchers.any(), ArgumentMatchers.any()))
+                .thenReturn(ready());
+    }
+
+    /**
+     * 造一份「已到齐」的就绪判定
+     *
+     * @return 就绪判定
+     */
+    private NetWorthReadiness ready() {
+        NetWorthReadiness readiness = new NetWorthReadiness();
+        readiness.setReady(true);
+        readiness.setShouldWait(false);
+        readiness.setNote("净值已全部到齐");
+        return readiness;
+    }
+
+    /**
+     * 造一份「还要等」的就绪判定
+     *
+     * @param pending 未出净值的只数
+     * @return 就绪判定
+     */
+    private NetWorthReadiness waiting(int pending) {
+        NetWorthReadiness readiness = new NetWorthReadiness();
+        readiness.setReady(false);
+        readiness.setShouldWait(true);
+        readiness.setExpectedCount(pending);
+        readiness.setArrivedCount(0);
+        for (int i = 0; i < pending; i++) {
+            NetWorthReadiness.Pending item = new NetWorthReadiness.Pending();
+            item.setCode("00000" + i);
+            item.setName("测试基金" + i);
+            readiness.getPending().add(item);
+        }
+        readiness.setNote("还差 " + pending + " 只未出净值，等待中");
+        return readiness;
+    }
+
+    /**
+     * 晚间净值未到齐时不发信，留痕停在待发而不是成功或失败
+     */
+    @Test
+    @DisplayName("晚间净值未到齐时不发信")
+    void eveningWaitsForNetWorth() {
+        Mockito.when(netWorthReadinessService.check(ArgumentMatchers.any(), ArgumentMatchers.any()))
+                .thenReturn(waiting(2));
+
+        orchestrator.fireAt(SendPoint.EVENING, LocalDateTime.of(2026, 10, 30, 20, 0));
+
+        SendRecordQueryRequest query = new SendRecordQueryRequest();
+        query.setSendDate(FRIDAY);
+        List<SendRecordVO> rows = sendRecordService.listSendRecord(query);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getStatus()).isEqualTo(SendStatus.PENDING);
+        // 一封都不该发出去，这是本条要钉住的核心行为
+        Mockito.verify(taskOutcomeDispatcher, Mockito.never())
+                .dispatch(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.anyBoolean());
+    }
+
+    /**
+     * 净值到齐后晚间重试立刻补发，记为已补发
+     */
+    @Test
+    @DisplayName("净值到齐后晚间重试补发成功")
+    void eveningRetrySendsWhenReady() {
+        orchestrator.retryEvening();
+
+        SendRecordQueryRequest query = new SendRecordQueryRequest();
+        query.setSendDate(LocalDate.now());
+        List<SendRecordVO> rows = sendRecordService.listSendRecord(query)
+                .stream().filter(row -> row.getSendPoint() == SendPoint.EVENING).toList();
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getStatus()).isEqualTo(SendStatus.RESENT);
+    }
+
+    /**
+     * 晚间仍在等净值时总览显示「等待净值」，不能标成过期未成功
+     */
+    @Test
+    @DisplayName("等待净值时不标为过期")
+    void waitingShowsWaitingLabel() {
+        LocalDate today = LocalDate.now();
+        Mockito.when(netWorthReadinessService.check(ArgumentMatchers.any(), ArgumentMatchers.any()))
+                .thenReturn(waiting(2));
+
+        TaskOverviewVO overview = orchestrator.overview(today);
+        TaskPointStatusVO evening = overview.getItems().stream()
+                .filter(item -> item.getPoint() == SendPoint.EVENING)
+                .findFirst().orElseThrow();
+
+        assertThat(evening.getStatusLabel()).isEqualTo("等待净值");
+        assertThat(evening.getOverdue()).isFalse();
+        assertThat(evening.getFailReason()).contains("还差 2 只");
     }
 
     /**
