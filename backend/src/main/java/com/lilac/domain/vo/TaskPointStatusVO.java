@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 /**
- * 单时点状态，页面据此显示「今日 14:30 已发送 / 未发送 / 已补发」
+ * 单时点状态，页面据此显示「今日 14:45 已发送 / 未发送 / 已补发」
  */
 @Data
 public class TaskPointStatusVO implements Serializable {

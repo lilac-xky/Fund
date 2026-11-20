@@ -39,13 +39,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TaskOrchestratorIntegrationTest {
 
     private static final LocalDate FRIDAY = LocalDate.of(2026, 10, 30);
-    private static final LocalDateTime PRE_CLOSE_DUE = LocalDateTime.of(2026, 10, 30, 14, 30);
 
     @Autowired
     private TaskOrchestrator orchestrator;
 
     @Autowired
     private TaskProperties taskProperties;
+
+    /**
+     * 收盘前时点的应发时刻，从配置读取，避免改了调度时间就得同步改测试
+     *
+     * @return 2026-10-30 当天的应发时刻
+     */
+    private LocalDateTime preCloseDue() {
+        String time = taskProperties.getPoints().get("PRE_CLOSE").getTime();
+        return FRIDAY.atTime(java.time.LocalTime.parse(time));
+    }
 
     @Autowired
     private SendRecordService sendRecordService;
@@ -230,7 +239,7 @@ class TaskOrchestratorIntegrationTest {
     @Test
     @DisplayName("跨过时点后补跑生效")
     void catchUpAfterMissedPoint() {
-        LocalDateTime afterDue = PRE_CLOSE_DUE.plusMinutes(5);
+        LocalDateTime afterDue = preCloseDue().plusMinutes(5);
         int count = orchestrator.runCatchUp(FRIDAY, afterDue);
 
         assertThat(count).isEqualTo(1);
@@ -248,7 +257,7 @@ class TaskOrchestratorIntegrationTest {
     @Test
     @DisplayName("补跑不会重复发送已成功的时点")
     void catchUpIsIdempotent() {
-        LocalDateTime afterDue = PRE_CLOSE_DUE.plusMinutes(5);
+        LocalDateTime afterDue = preCloseDue().plusMinutes(5);
         assertThat(orchestrator.runCatchUp(FRIDAY, afterDue)).isEqualTo(1);
         assertThat(orchestrator.runCatchUp(FRIDAY, afterDue)).isZero();
     }
@@ -259,7 +268,7 @@ class TaskOrchestratorIntegrationTest {
     @Test
     @DisplayName("超过补跑窗口的时点不再补发")
     void stalePointNotCaughtUp() {
-        LocalDateTime wayLate = PRE_CLOSE_DUE.plusMinutes(taskProperties.getCatchUpWindowMinutes() + 1);
+        LocalDateTime wayLate = preCloseDue().plusMinutes(taskProperties.getCatchUpWindowMinutes() + 1);
         assertThat(orchestrator.runCatchUp(FRIDAY, wayLate)).isZero();
     }
 
@@ -285,7 +294,7 @@ class TaskOrchestratorIntegrationTest {
     void clockJumpSkipsTriggerWithReason() {
         Mockito.when(clockGuard.sample(ArgumentMatchers.any()))
                 .thenReturn(java.util.Optional.of(new ClockGuard.ClockJump(3600, true)));
-        orchestrator.fireAt(SendPoint.PRE_CLOSE, PRE_CLOSE_DUE);
+        orchestrator.fireAt(SendPoint.PRE_CLOSE, preCloseDue());
 
         SendRecordQueryRequest query = new SendRecordQueryRequest();
         query.setSendDate(FRIDAY);
@@ -303,7 +312,7 @@ class TaskOrchestratorIntegrationTest {
     @Test
     @DisplayName("定时到点触发的留痕记为已发送")
     void scheduledTriggerMarksSent() {
-        orchestrator.fireAt(SendPoint.PRE_CLOSE, PRE_CLOSE_DUE);
+        orchestrator.fireAt(SendPoint.PRE_CLOSE, preCloseDue());
 
         SendRecordQueryRequest query = new SendRecordQueryRequest();
         query.setSendDate(FRIDAY);
