@@ -22,6 +22,7 @@ import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BenchmarkResolver;
 import com.lilac.engine.BetaRegressor;
 import com.lilac.engine.BondBaselineEstimator;
+import com.lilac.engine.BondMultiProxyEstimator;
 import com.lilac.engine.EstimateCache;
 import com.lilac.engine.EstimateConverter;
 import com.lilac.engine.EstimateEngine;
@@ -91,6 +92,9 @@ public class EstimateServiceImpl implements EstimateService {
 
     @Resource
     private BondBaselineEstimator bondBaselineEstimator;
+
+    @Resource
+    private BondMultiProxyEstimator bondMultiProxyEstimator;
 
     @Resource
     private BetaRegressor betaRegressor;
@@ -431,6 +435,13 @@ public class EstimateServiceImpl implements EstimateService {
             if (item.proxySymbol != null) {
                 symbols.add(item.proxySymbol);
             }
+            if (item.branch == EstimateBranch.BOND_PROXY) {
+                // 多代理需要每个代理的当日涨跌，缺一个就合不出来
+                thresholds.bondProxyCodeList().stream()
+                        .map(BenchmarkResolver::symbolOf)
+                        .filter(java.util.Objects::nonNull)
+                        .forEach(symbols::add);
+            }
             if (item.snapshot != null && item.snapshot.getStockHoldings() != null) {
                 item.snapshot.getStockHoldings().stream()
                         .map(holding -> HoldingWeightCalculator.symbolOf(holding.getCode()))
@@ -462,8 +473,17 @@ public class EstimateServiceImpl implements EstimateService {
                         && (item.branch == EstimateBranch.GOLD_PROXY
                         || item.branch == EstimateBranch.BOND_PROXY
                         || item.branch == EstimateBranch.INDEX_ONLY))
-                .forEach(item -> histories.put(item.proxySymbol,
-                        marketQuoteAdapter.history(item.proxySymbol, historyLimitOf(item))));
+                .forEach(item -> histories.computeIfAbsent(item.proxySymbol,
+                        key -> marketQuoteAdapter.history(key, historyLimitOf(item))));
+        // 债券多代理要各自一份日线，与单代理共用同一份缓存
+        prepared.stream()
+                .filter(item -> item.branch == EstimateBranch.BOND_PROXY)
+                .flatMap(item -> thresholds.bondProxyCodeList().stream())
+                .map(BenchmarkResolver::symbolOf)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .forEach(symbol -> histories.computeIfAbsent(symbol,
+                        key -> marketQuoteAdapter.history(key, GOLD_HISTORY_LIMIT)));
         return histories;
     }
 
@@ -527,8 +547,35 @@ public class EstimateServiceImpl implements EstimateService {
         context.setHkHoldings(prepared.hkHoldings);
         context.setDegraded(prepared.degraded);
         fillProxy(prepared, context, quotes);
+        fillBondProxyChanges(prepared, context, quotes);
         fillProxyModel(prepared, context, proxyHistories);
         return estimateEngine.estimate(context);
+    }
+
+    /**
+     * 填充债券各代理的当日涨跌，供多代理合成使用，缺项的直接不进映射
+     *
+     * @param prepared 中间状态
+     * @param context  上下文
+     * @param quotes   全部行情
+     */
+    private void fillBondProxyChanges(Prepared prepared, EstimateContext context, Map<String, MarketQuote> quotes) {
+        if (prepared.branch != EstimateBranch.BOND_PROXY) {
+            return;
+        }
+        Map<String, BigDecimal> changes = new LinkedHashMap<>();
+        for (String code : thresholds.bondProxyCodeList()) {
+            String symbol = BenchmarkResolver.symbolOf(code);
+            if (symbol == null) {
+                continue;
+            }
+            MarketQuote quote = findQuote(quotes, symbol);
+            if (quote == null || !quote.usable() || quote.getChangePercent() == null) {
+                continue;
+            }
+            changes.put(symbol, quote.getChangePercent());
+        }
+        context.setBondProxyChanges(changes.isEmpty() ? null : changes);
     }
 
     /**
@@ -582,6 +629,9 @@ public class EstimateServiceImpl implements EstimateService {
      */
     private void fillProxyModel(Prepared prepared, EstimateContext context,
                                 Map<String, MarketHistory> proxyHistories) {
+        if (prepared.branch == EstimateBranch.BOND_PROXY && fillBondMultiModel(prepared, context, proxyHistories)) {
+            return;
+        }
         if (prepared.proxySymbol == null) {
             return;
         }
@@ -607,6 +657,41 @@ public class EstimateServiceImpl implements EstimateService {
                         thresholds.getIndexBetaWindow(), thresholds.getIndexBetaMinPairs()));
             }
         }
+    }
+
+    /**
+     * 债券多代理回归，代理日线齐全时填入模型与当日各代理涨跌，失败返回 false 让调用方退回单代理
+     *
+     * @param prepared       中间状态
+     * @param context        上下文
+     * @param proxyHistories 代理日线
+     * @return 已填入多代理模型返回 true
+     */
+    private boolean fillBondMultiModel(Prepared prepared, EstimateContext context,
+                                       Map<String, MarketHistory> proxyHistories) {
+        Map<String, List<MarketBar>> bars = new LinkedHashMap<>();
+        for (String code : thresholds.bondProxyCodeList()) {
+            String symbol = BenchmarkResolver.symbolOf(code);
+            if (symbol == null) {
+                continue;
+            }
+            MarketHistory history = proxyHistories.get(symbol);
+            if (history == null || history.getBars() == null || history.getBars().isEmpty()) {
+                continue;
+            }
+            bars.put(symbol, history.getBars());
+        }
+        if (bars.size() < 2) {
+            // 少于两个代理时多代理退化不成问题，但边际收益也不存在，直接走单代理
+            return false;
+        }
+        BondMultiProxyEstimator.Model model = bondMultiProxyEstimator.estimate(prepared.netWorthPoints, bars,
+                thresholds.getBondWindow(), thresholds.getBondMinPairs());
+        if (model == null) {
+            return false;
+        }
+        context.setBondMultiModel(model);
+        return true;
     }
 
     /**

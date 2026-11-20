@@ -62,6 +62,11 @@ public class EstimateEngine {
     private final EstimateThresholds thresholds;
 
     /**
+     * 债券多代理回归器，为 null 时只走单代理路径
+     */
+    private BondMultiProxyEstimator bondMultiProxyEstimator;
+
+    /**
      * 注入加权、档位、可信度、误差统计与债券传导估计组件
      *
      * @param holdingWeightCalculator 持仓加权
@@ -80,6 +85,16 @@ public class EstimateEngine {
         this.errorHistoryCalculator = errorHistoryCalculator;
         this.bondBaselineEstimator = bondBaselineEstimator;
         this.thresholds = thresholds;
+    }
+
+    /**
+     * 注入债券多代理回归器，单代理回退路径不依赖它
+     *
+     * @param bondMultiProxyEstimator 债券多代理回归器
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setBondMultiProxyEstimator(BondMultiProxyEstimator bondMultiProxyEstimator) {
+        this.bondMultiProxyEstimator = bondMultiProxyEstimator;
     }
 
     /**
@@ -236,7 +251,9 @@ public class EstimateEngine {
      */
     private void estimateByBond(EstimateContext context, EstimateOutcome outcome) {
         MarketQuote quote = context.getProxyQuote();
-        if (quote == null || !quote.usable()) {
+        BondMultiProxyEstimator.Model multiModel = context.getBondMultiModel();
+        // 多代理回归可用时不依赖单代理行情，它自己就能合成
+        if (multiModel == null && (quote == null || !quote.usable())) {
             unavailable(outcome, QUOTE_MISSING, context.getProxyUnavailableReason());
             return;
         }
@@ -244,22 +261,35 @@ public class EstimateEngine {
         outcome.setTier(tierResolver.resolve(outcome.getCategory(), stats, recentStats(context),
                 context.getPreviousTier(), thresholds));
         outcome.setConfidence(confidenceResolver.resolve(HUNDRED, stats, context.isDegraded(), thresholds));
-        outcome.setQuoteDate(quote.getTradeDate());
-        outcome.setRealtime(quote.getRealtime());
-        // 债券分支用整只基金作单位，覆盖率按满额给出
+        // 多代理时没有单一代理行情可借日期，按快照的净值日兜底，避免留空
+        outcome.setQuoteDate(multiModel == null ? quote.getTradeDate()
+                : context.getSnapshot() == null ? null : context.getSnapshot().getNetWorthDate());
+        outcome.setRealtime(multiModel == null ? quote.getRealtime() : Boolean.FALSE);        // 债券分支用整只基金作单位，覆盖率按满额给出
         outcome.setCoverage(HUNDRED);
         fillSnapshotDates(context, outcome);
         fillAllocationDate(context, outcome);
-        BondBaselineEstimator.Model model = context.getBondModel();
-        BigDecimal predicted = model == null ? scale(quote.getChangePercent())
-                : scale(bondBaselineEstimator.predict(model, quote.getChangePercent()));
+        BigDecimal predicted;
+        if (multiModel != null && bondMultiProxyEstimator != null) {
+            // 多代理优先：用各代理当日涨跌按回归系数合成
+            predicted = scale(bondMultiProxyEstimator.predict(multiModel, context.getBondProxyChanges()));
+        } else {
+            BondBaselineEstimator.Model model = context.getBondModel();
+            predicted = model == null ? scale(quote.getChangePercent())
+                    : scale(bondBaselineEstimator.predict(model, quote.getChangePercent()));
+        }
         fillPointOrTier(outcome, predicted, stats);
         outcome.getRemarks().add(BOND_NOTE);
-        outcome.getRemarks().add(model == null
-                ? "该基金历史净值与债券代理配对样本不足，直接沿用债券 ETF 涨跌"
-                : "按本基金对债券 ETF 的传导系数 " + model.transmission().stripTrailingZeros().toPlainString()
-                        + " 折算，日均波动 " + model.fundMeanAbsChange().stripTrailingZeros().toPlainString()
-                        + " 个百分点");
+        if (multiModel != null) {
+            outcome.getRemarks().add("按 " + multiModel.proxyCount() + " 个债券代理加权回归合成，样本 "
+                    + multiModel.samples() + " 个交易日");
+        } else {
+            BondBaselineEstimator.Model model = context.getBondModel();
+            outcome.getRemarks().add(model == null
+                    ? "该基金历史净值与债券代理配对样本不足，直接沿用债券 ETF 涨跌"
+                    : "按本基金对债券 ETF 的传导系数 " + model.transmission().stripTrailingZeros().toPlainString()
+                            + " 折算，日均波动 " + model.fundMeanAbsChange().stripTrailingZeros().toPlainString()
+                            + " 个百分点");
+        }
     }
 
     /**

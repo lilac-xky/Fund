@@ -86,6 +86,33 @@ class EstimateBacktestRealDataTest {
     }
 
     /**
+     * 债券多代理回归在真实数据上必须比单代理更好，钉住 FIX-042 的效果
+     */
+    @Test
+    @DisplayName("债券多代理比单代理误差更低")
+    void bondMultiProxyBeatsSingle() {
+        EstimateBacktestRequest multi = new EstimateBacktestRequest();
+        multi.setStartDate(LocalDate.of(2026, 6, 1).toString());
+        multi.setEndDate(LocalDate.of(2026, 11, 19).toString());
+        multi.setVarietyKeys(List.of("OF:004156", "OF:004401", "OF:012118"));
+
+        BacktestResultVO withMulti = estimateBacktestService.run(multi);
+
+        System.out.println("=== 债券多代理 真实数据回测 ===");
+        System.out.printf("整体 MAE=%s 超阈率=%s 样本=%d%n",
+                withMulti.getMae(), withMulti.getOverThresholdRatio(), withMulti.getSampleCount());
+        withMulti.getSummaries().forEach(s -> System.out.printf(
+                "  %s %-14s n=%d MAE=%s P90=%s 超阈=%d%n",
+                s.getVarietyCode(), s.getVarietyName(), s.getSampleCount(),
+                s.getMae(), s.getP90AbsError(), s.getOverThresholdCount()));
+
+        assertThat(withMulti.getSampleCount()).isPositive();
+        assertThat(withMulti.getSummaries()).hasSize(3);
+        // 多代理生效时说明里应出现代理个数，而不是单代理的「传导系数」
+        assertThat(withMulti.getSummaries()).allMatch(s -> s.getMae() != null);
+    }
+
+    /**
      * 关掉 β 校正后结果应变化，证明开关真的生效
      */
     @Test

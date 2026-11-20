@@ -7,6 +7,7 @@ import com.lilac.domain.vo.EstimateErrorVO;
 import com.lilac.domain.vo.FundSnapshotVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BondBaselineEstimator;
+import com.lilac.engine.BondMultiProxyEstimator;
 import com.lilac.enums.EstimateTier;
 import lombok.Data;
 
@@ -58,6 +59,16 @@ public class EstimateContext {
      * 债券传导系数估计结果，仅债券分支使用；为 null 表示按 1 倍代理
      */
     private BondBaselineEstimator.Model bondModel;
+
+    /**
+     * 债券多代理回归结果，优先于 bondModel 使用；为 null 时退回单代理或直取
+     */
+    private BondMultiProxyEstimator.Model bondMultiModel;
+
+    /**
+     * 债券各代理的当日涨跌幅，按代码索引，多代理预测用
+     */
+    private Map<String, java.math.BigDecimal> bondProxyChanges;
 
     /**
      * 代理标的 α 与 β 回归结果，仅指数直取分支使用；为 null 表示直接沿用代理涨跌

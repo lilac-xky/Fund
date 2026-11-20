@@ -122,10 +122,37 @@ public class EstimateThresholds {
     private int goldMinPairs = 10;
 
     /**
-     * 债券代理标的，国泰上证 5 年期国债 ETF
+     * 债券代理标的，国泰上证 5 年期国债 ETF；多代理条件下作为回退单代理使用
      */
     @Value("${fund.estimate.bond.proxy-code:511010}")
     private String bondProxyCode = "511010";
+
+    /**
+     * 债券多代理代码列表，实测 4 个组合（国债/信用债/短融/长债）平均降误差 10.4%
+     */
+    @Value("${fund.estimate.bond.proxy-codes:511010,511030,511360,511090}")
+    private String bondProxyCodes = "511010,511030,511360,511090";
+
+    /**
+     * 债券多代理代码拆成列表，逗号分隔，空项忽略
+     *
+     * @return 代码列表，未配置时返回单代理
+     */
+    public java.util.List<String> bondProxyCodeList() {
+        java.util.List<String> codes = new java.util.ArrayList<>();
+        if (bondProxyCodes != null) {
+            for (String part : bondProxyCodes.split(",")) {
+                String trimmed = part.trim();
+                if (!trimmed.isEmpty()) {
+                    codes.add(trimmed);
+                }
+            }
+        }
+        if (codes.isEmpty() && bondProxyCode != null) {
+            codes.add(bondProxyCode.trim());
+        }
+        return codes;
+    }
 
     /**
      * 指数直取时 β 回归的滚动窗口，交易日；实测窗口越长越稳，250 日与全样本结论一致

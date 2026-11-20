@@ -2,6 +2,7 @@ package com.lilac.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.lilac.adapter.model.FundNetWorthPoint;
+import com.lilac.adapter.model.MarketBar;
 import com.lilac.adapter.model.MarketHistory;
 import com.lilac.adapter.quote.MarketQuoteAdapter;
 import com.lilac.domain.dto.estimate.EstimateBacktestRequest;
@@ -13,6 +14,7 @@ import com.lilac.domain.vo.BacktestSummaryVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BetaRegressor;
 import com.lilac.engine.BondBaselineEstimator;
+import com.lilac.engine.BondMultiProxyEstimator;
 import com.lilac.engine.BenchmarkResolver;
 import com.lilac.engine.EstimateThresholds;
 import com.lilac.engine.GoldBetaEstimator;
@@ -72,6 +74,9 @@ public class EstimateBacktestServiceImpl implements EstimateBacktestService {
 
     @Resource
     private BondBaselineEstimator bondBaselineEstimator;
+
+    @Resource
+    private BondMultiProxyEstimator bondMultiProxyEstimator;
 
     @Resource
     private MarketQuoteAdapter marketQuoteAdapter;
@@ -163,8 +168,11 @@ public class EstimateBacktestServiceImpl implements EstimateBacktestService {
             notes.add(variety.getVarietyCode() + " 代理标的 " + proxySymbol + " 日线取不到，未参与回测");
             return List.of();
         }
-        Map<LocalDate, BigDecimal> proxyReturns = proxyReturns(history);
         EstimateBranch branch = branchOf(variety, category);
+        // 债券多代理：把每个代理的日线一次取齐，逐日合成时按日期取
+        Map<String, List<MarketBar>> bondBars = branch == EstimateBranch.BOND_PROXY
+                ? fetchBondProxyBars(effective) : Map.of();
+        Map<LocalDate, BigDecimal> proxyReturns = proxyReturns(history);
         List<BacktestItemVO> items = new ArrayList<>();
         for (FundNetWorthPoint point : netWorths) {
             LocalDate day = point.getNetWorthDate();
@@ -178,13 +186,91 @@ public class EstimateBacktestServiceImpl implements EstimateBacktestService {
             // 只喂当日之前的样本，回归与统计都不许看到未来
             List<FundNetWorthPoint> pastWorths = netWorths.stream()
                     .filter(item -> item.getNetWorthDate().isBefore(day)).toList();
-            BigDecimal predicted = predict(branch, variety, proxyChange, pastWorths, history, effective);
+            BigDecimal predicted = branch == EstimateBranch.BOND_PROXY
+                    ? predictBondMulti(pastWorths, bondBars, day, proxyChange, effective)
+                    : predict(branch, variety, proxyChange, pastWorths, history, effective);
             if (predicted == null) {
                 continue;
             }
             items.add(itemOf(variety, branch, day, predicted, point.getEquityReturn(), effective));
         }
         return items;
+    }
+
+    /**
+     * 取债券多代理的日线，缺任何一个都会让回归退化，直接返回空表
+     *
+     * @param effective 生效阈值
+     * @return 代理代码到日线的映射
+     */
+    private Map<String, List<MarketBar>> fetchBondProxyBars(EstimateThresholds effective) {
+        Map<String, List<MarketBar>> bars = new LinkedHashMap<>();
+        for (String code : effective.bondProxyCodeList()) {
+            String symbol = BenchmarkResolver.symbolOf(code);
+            if (symbol == null) {
+                continue;
+            }
+            MarketHistory history = marketQuoteAdapter.history(symbol, PROXY_HISTORY_LIMIT);
+            if (history.getBars() == null || history.getBars().isEmpty()) {
+                continue;
+            }
+            bars.put(symbol, history.getBars());
+        }
+        return bars.size() >= 2 ? bars : Map.of();
+    }
+
+    /**
+     * 债券多代理重放：用当日之前的样本拟合，再用当日各代理涨跌合成
+     *
+     * @param pastWorths  当日之前的净值
+     * @param bondBars    各代理日线
+     * @param day         当日
+     * @param fallback    单代理涨跌，多代理不可用时兜底
+     * @param effective   生效阈值
+     * @return 预估涨跌，算不出返回 null
+     */
+    private BigDecimal predictBondMulti(List<FundNetWorthPoint> pastWorths, Map<String, List<MarketBar>> bondBars,
+                                        LocalDate day, BigDecimal fallback, EstimateThresholds effective) {
+        if (bondBars.isEmpty() || bondMultiProxyEstimator == null) {
+            return fallback;
+        }
+        BondMultiProxyEstimator.Model model = bondMultiProxyEstimator.estimate(pastWorths, bondBars,
+                effective.getBondWindow(), effective.getBondMinPairs());
+        if (model == null) {
+            return fallback;
+        }
+        Map<String, BigDecimal> changes = new LinkedHashMap<>();
+        for (Map.Entry<String, List<MarketBar>> entry : bondBars.entrySet()) {
+            BigDecimal change = changeAt(entry.getValue(), day);
+            if (change != null) {
+                changes.put(entry.getKey(), change);
+            }
+        }
+        BigDecimal predicted = bondMultiProxyEstimator.predict(model, changes);
+        return predicted == null ? fallback : predicted;
+    }
+
+    /**
+     * 从日线里取某个交易日的涨跌幅
+     *
+     * @param bars 日线
+     * @param day  交易日
+     * @return 涨跌幅，百分点，取不到返回 null
+     */
+    private BigDecimal changeAt(List<MarketBar> bars, LocalDate day) {
+        for (int i = 1; i < bars.size(); i++) {
+            if (!day.equals(bars.get(i).getDate())) {
+                continue;
+            }
+            BigDecimal previous = bars.get(i - 1).getClose();
+            BigDecimal current = bars.get(i).getClose();
+            if (previous == null || current == null || previous.signum() == 0) {
+                return null;
+            }
+            return current.subtract(previous).divide(previous, 8, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+        }
+        return null;
     }
 
     /**
