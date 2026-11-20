@@ -49,6 +49,120 @@ declare namespace API {
     remainingSeconds?: number
   }
 
+  type BacktestItemVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 交易日 */
+    tradeDate?: string
+    /** 当时走的分支中文名 */
+    branchLabel?: string
+    /** 重放得到的输出档位 */
+    outputTier?: string
+    /** 重放得到的预估涨跌幅，百分点；B、C 档为空 */
+    estimatedChange?: number
+    /** 重放得到的涨跌方向 */
+    direction?: string
+    /** 重放得到的区间下限，百分点 */
+    intervalLow?: number
+    /** 重放得到的区间上限，百分点 */
+    intervalHigh?: number
+    /** 实际涨跌幅，百分点 */
+    actualChange?: number
+    /** 误差，预估减实际，百分点 */
+    errorValue?: number
+    /** 本次使用的阈值，百分点 */
+    thresholdValue?: number
+    /** 是否超阈值 */
+    overThreshold?: boolean
+    /** 方向是否命中 */
+    directionHit?: boolean
+    /** 实际值是否落在区间内 */
+    inInterval?: boolean
+  }
+
+  type BacktestParamVO = {
+    /** A 档点估计的中位绝对误差上限，百分点 */
+    aMaeLimit?: number
+    /** 指数直取 β 回归窗口，交易日；0 表示不启用 β 校正 */
+    indexBetaWindow?: number
+    /** 黄金 β 滚动窗口，交易日 */
+    goldWindow?: number
+    /** 债券传导系数滚动窗口，交易日 */
+    bondWindow?: number
+    /** 区间半宽的 sigma 倍数 */
+    sigmaFactor?: number
+    /** 股票型误差阈值，百分点 */
+    stockErrorThreshold?: number
+    /** 债券型误差阈值，百分点 */
+    bondErrorThreshold?: number
+  }
+
+  type BacktestResultVO = {
+    /** 回测起始日 */
+    startDate?: string
+    /** 回测截止日 */
+    endDate?: string
+    /** 实际参与回测的交易日数 */
+    tradeDateCount?: number
+    /** 参与回测的基金数 */
+    varietyCount?: number
+    /** 产出可对照结论的记录数 */
+    sampleCount?: number
+    /** 整体平均绝对误差，百分点 */
+    mae?: number
+    /** 整体绝对误差中位数，百分点 */
+    medianAbsError?: number
+    /** 整体绝对误差 P90，百分点 */
+    p90AbsError?: number
+    /** 超阈值记录占比，0~1 */
+    overThresholdRatio?: number
+    /** 方向命中率，0~1 */
+    directionAccuracy?: number
+    /** 区间覆盖率，0~1 */
+    intervalCoverage?: number
+    /** 逐只汇总 */
+    summaries?: BacktestSummaryVO[]
+    /** 本次生效的参数回显，保证结果可复现 */
+    params?: BacktestParamVO
+    /** 逐条明细 */
+    items?: BacktestItemVO[]
+    /** 说明，如样本不足、缺口原因 */
+    notes?: string[]
+  }
+
+  type BacktestSummaryVO = {
+    /** 品种业务主键 */
+    varietyKey?: string
+    /** 6 位代码 */
+    varietyCode?: string
+    /** 标的名称 */
+    varietyName?: string
+    /** 基金类型中文名 */
+    categoryLabel?: string
+    /** 参与统计的记录数 */
+    sampleCount?: number
+    /** 平均绝对误差，百分点 */
+    mae?: number
+    /** 绝对误差中位数，百分点 */
+    medianAbsError?: number
+    /** 绝对误差 P90，百分点 */
+    p90AbsError?: number
+    /** 有符号偏差，预估均值减实际均值，百分点 */
+    bias?: number
+    /** 超阈值记录数 */
+    overThresholdCount?: number
+    /** 方向命中率，0~1 */
+    directionAccuracy?: number
+    /** 区间覆盖率，0~1 */
+    intervalCoverage?: number
+  }
+
   type BondAdvisoryVO = {
     /** 触发换仓提醒的基金 */
     items?: BondMonitorVO[]
@@ -516,6 +630,29 @@ declare namespace API {
     keepId?: number
     /** 将删除的批次主键 */
     removeIds?: string
+  }
+
+  type EstimateBacktestRequest = {
+    /** 品种业务主键，为空时取全部持有中的持仓 */
+    varietyKeys?: string[]
+    /** 回测起始日，含 */
+    startDate?: string
+    /** 回测截止日，含 */
+    endDate?: string
+    /** A 档点估计的中位绝对误差上限，百分点 */
+    aMaeLimit?: number
+    /** 指数直取的 β 回归窗口，交易日；传 0 表示不启用 β 校正、直接沿用代理涨跌 */
+    indexBetaWindow?: number
+    /** 黄金 β 的滚动窗口，交易日 */
+    goldWindow?: number
+    /** 债券传导系数的滚动窗口，交易日 */
+    bondWindow?: number
+    /** 区间半宽的 sigma 倍数 */
+    sigmaFactor?: number
+    /** 股票型的误差阈值，百分点 */
+    stockErrorThreshold?: number
+    /** 债券型的误差阈值，百分点 */
+    bondErrorThreshold?: number
   }
 
   type EstimateBatchRequest = {
@@ -1996,6 +2133,12 @@ EVENING :晚间净值校准，约 20:00 至 22:00 */
     code?: number
     msg?: string
     data?: AuthStatusVO
+  }
+
+  type ResultBacktestResultVO = {
+    code?: number
+    msg?: string
+    data?: BacktestResultVO
   }
 
   type ResultBondAdvisoryVO = {

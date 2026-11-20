@@ -2,6 +2,21 @@
 /* eslint-disable */
 import request from '@/request'
 
+/** 按指定参数重放历史区间，用于修正因子前先看效果，只读不写 POST /api/estimate/calibration/backtest */
+export async function backtest(
+  body: API.EstimateBacktestRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultBacktestResultVO>('/api/estimate/calibration/backtest', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 查询误差历史，条件为空时不过滤 POST /api/estimate/calibration/errors */
 export async function errors(
   body: API.EstimateErrorQueryRequest,

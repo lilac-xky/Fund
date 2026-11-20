@@ -376,6 +376,178 @@
                   </p>
                 </div>
               </AppGroup>
+
+              <!-- 因子回测 -->
+              <AppGroup
+                v-show="activePane === 'backtest'"
+                title="因子回测"
+                code="BACKTEST"
+                :meta="btMeta"
+                :meta-ok="!btOver"
+              >
+                <template #icon>
+                  <span v-html="ICONS.backtest" />
+                </template>
+
+                <div class="app-daybar app-daybar--flat">
+                  <label class="app-daybar__lab" for="bt-start">回测区间</label>
+                  <input id="bt-start" v-model="btStart" type="date" class="app-input app-date" />
+                  <span class="app-daybar__sep">至</span>
+                  <input v-model="btEnd" type="date" class="app-input app-date" />
+                  <AppButton size="sm" :disabled="btLoading" @click="onBacktest">
+                    {{ btLoading ? '重放中…' : '开始回测' }}
+                  </AppButton>
+                  <span class="app-daybar__meta">
+                    只重放指数直取、黄金、债券三条代理分支，混合型不参与
+                  </span>
+                </div>
+
+                <div class="app-btparams">
+                  <div class="app-btparams__row">
+                    <span class="app-btparams__k">指数 β 窗口</span>
+                    <input
+                      v-model="btBetaWindow"
+                      type="number"
+                      min="0"
+                      class="app-input app-input--num app-btparams__v"
+                    />
+                    <span class="app-btparams__u">交易日 · 0 表示关闭 β 校正</span>
+                  </div>
+                  <div class="app-btparams__row">
+                    <span class="app-btparams__k">黄金 β 窗口</span>
+                    <input
+                      v-model="btGoldWindow"
+                      type="number"
+                      min="0"
+                      class="app-input app-input--num app-btparams__v"
+                    />
+                    <span class="app-btparams__u">交易日</span>
+                  </div>
+                  <div class="app-btparams__row">
+                    <span class="app-btparams__k">债券窗口</span>
+                    <input
+                      v-model="btBondWindow"
+                      type="number"
+                      min="0"
+                      class="app-input app-input--num app-btparams__v"
+                    />
+                    <span class="app-btparams__u">交易日</span>
+                  </div>
+                  <div class="app-btparams__row">
+                    <span class="app-btparams__k">股票阈值</span>
+                    <input
+                      v-model="btStockThreshold"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="app-input app-input--num app-btparams__v"
+                    />
+                    <span class="app-btparams__u">个百分点</span>
+                  </div>
+                  <div class="app-btparams__row">
+                    <span class="app-btparams__k">债券阈值</span>
+                    <input
+                      v-model="btBondThreshold"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="app-input app-input--num app-btparams__v"
+                    />
+                    <span class="app-btparams__u">个百分点</span>
+                  </div>
+                </div>
+
+                <div v-if="!btResult" class="app-listempty">
+                  选好区间点「开始回测」，用当前参数把这段历史逐日重放一遍，
+                  就能看到改了参数之后误差会变成什么样。
+                </div>
+
+                <template v-else>
+                  <div class="app-summary app-summary--bt">
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">样本</div>
+                      <div class="app-summary__v">
+                        {{ btResult.sampleCount ?? 0 }}<span> 条</span>
+                      </div>
+                    </div>
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">交易日</div>
+                      <div class="app-summary__v">{{ btResult.tradeDateCount ?? 0 }}</div>
+                    </div>
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">MAE</div>
+                      <div class="app-summary__v">{{ plain(btResult.mae) }}</div>
+                    </div>
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">中位误差</div>
+                      <div class="app-summary__v">{{ plain(btResult.medianAbsError) }}</div>
+                    </div>
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">P90</div>
+                      <div class="app-summary__v">{{ plain(btResult.p90AbsError) }}</div>
+                    </div>
+                    <div class="app-summary__cell">
+                      <div class="app-summary__k">超阈占比</div>
+                      <div class="app-summary__v" :class="{ 'app-summary__v--bad': btOver }">
+                        {{ btRatioText(btResult.overThresholdRatio) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="btResult.summaries?.length" class="app-table app-table--bt">
+                    <div class="app-table__head">
+                      <span class="col-name">基金</span>
+                      <span class="col-num">样本</span>
+                      <span class="col-num">MAE</span>
+                      <span class="col-num">中位</span>
+                      <span class="col-num">P90</span>
+                      <span class="col-num">偏差</span>
+                      <span class="col-num">超阈</span>
+                    </div>
+                    <div
+                      v-for="row in btResult.summaries"
+                      :key="row.varietyKey"
+                      class="app-table__row"
+                      :class="{ 'app-table__row--bad': btRowBad(row) }"
+                    >
+                      <div class="col-name">
+                        <b class="app-name">{{ row.varietyName ?? row.varietyKey }}</b>
+                        <span class="app-code">
+                          {{ row.varietyCode }} · {{ row.categoryLabel }}
+                        </span>
+                      </div>
+                      <div class="col-num">{{ row.sampleCount ?? 0 }}</div>
+                      <div class="col-num">{{ plain(row.mae) }}</div>
+                      <div class="col-num">{{ plain(row.medianAbsError) }}</div>
+                      <div class="col-num">{{ plain(row.p90AbsError) }}</div>
+                      <div class="col-num" :class="toneClass(row.bias)">
+                        {{ signedPercent(row.bias) }}
+                      </div>
+                      <div class="col-num" :class="btRowBad(row) ? 'app-error' : ''">
+                        {{ row.overThresholdCount ?? 0 }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="btResult.params" class="app-btparams app-btparams--echo">
+                    <span class="app-btparams__echo">本次生效参数</span>
+                    <span>β {{ btResult.params.indexBetaWindow ?? '—' }}</span>
+                    <span>黄金 {{ btResult.params.goldWindow ?? '—' }}</span>
+                    <span>债券 {{ btResult.params.bondWindow ?? '—' }}</span>
+                    <span>股票阈值 {{ plain(btResult.params.stockErrorThreshold) }}</span>
+                    <span>债券阈值 {{ plain(btResult.params.bondErrorThreshold) }}</span>
+                  </div>
+
+                  <ul v-if="btResult.notes?.length" class="app-rules app-rules--bt">
+                    <li v-for="(note, index) in btResult.notes" :key="index">{{ note }}</li>
+                  </ul>
+
+                  <p class="app-disclaimer">
+                    回测逐日重放，每一天只用该日之前的数据，不含前视偏差。
+                    结果只反映代理分支的误差，持仓加权类基金与混合型不在其中。
+                  </p>
+                </template>
+              </AppGroup>
             </template>
           </div>
         </main>
@@ -428,6 +600,7 @@ import { ElMessage } from '@/ui/message'
 import { zeroBaselinePoints } from '@/services/indicators'
 import { today } from '@/services/review'
 import { exportErrors, generate as generateReport } from '@/api/reviewReportController'
+import { backtest as backtestEstimate } from '@/api/estimateCalibrationController'
 import { useReviewStore } from '@/stores/review'
 import type { ReviewRow } from '@/stores/review'
 import { fullTime, plain, signedPercent, toneClass } from '@/utils/format'
@@ -444,6 +617,8 @@ const ICONS: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16.5 8.5 11l3.5 3.2L20.5 6"/><path d="M20.5 11V6h-5"/></svg>',
   refresh:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/></svg>',
+  backtest:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><path d="M8 15.5 11.5 11l3 2.8L20 7"/><path d="M20 11V7h-4"/></svg>',
 }
 
 /** 读表口径，右栏常驻 */
@@ -498,12 +673,126 @@ const exportStart = ref(shiftDate(store.tradeDate, -30))
 /** 导出区间截止日，默认跟随复盘日期 */
 const exportEnd = ref(store.tradeDate)
 
+/** 回测起始日，默认复盘日期往前 90 天 */
+const btStart = ref(shiftDate(store.tradeDate, -90))
+
+/** 回测截止日，默认跟随复盘日期 */
+const btEnd = ref(store.tradeDate)
+
+/** 回测进行中 */
+const btLoading = ref(false)
+
+/** 回测结果，未跑过时为 null */
+const btResult = ref<API.BacktestResultVO | null>(null)
+
+/** 指数 β 回归窗口，0 表示关闭 β 校正，用于与直取做对照 */
+const btBetaWindow = ref('250')
+
+/** 黄金 β 滚动窗口 */
+const btGoldWindow = ref('20')
+
+/** 债券传导系数滚动窗口 */
+const btBondWindow = ref('60')
+
+/** 股票型误差阈值 */
+const btStockThreshold = ref('0.3')
+
+/** 债券型误差阈值 */
+const btBondThreshold = ref('0.1')
+
+/** 回测右上角状态 */
+const btMeta = computed(() => {
+  if (!btResult.value) {
+    return '换参数重放历史，看误差会变成什么样'
+  }
+  return `${btResult.value.varietyCount ?? 0} 只 · ${btResult.value.tradeDateCount ?? 0} 个交易日`
+})
+
+/** 是否有超阈值记录，用于右上角状态点 */
+const btOver = computed(() => {
+  const ratioValue = btResult.value?.overThresholdRatio
+  return typeof ratioValue === 'number' && ratioValue > 0
+})
+
+/** 单只基金是否超阈，超了整行标红 */
+function btRowBad(row: API.BacktestSummaryVO): boolean {
+  return (row.overThresholdCount ?? 0) > 0
+}
+
+/**
+ * 0~1 的比例转百分比文本，空值给破折号
+ *
+ * @param value 比例，0~1
+ * @returns 百分比文本
+ */
+function btRatioText(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '—'
+  }
+  return `${(value * 100).toFixed(1)}%`
+}
+
+/**
+ * 把输入框里的数字转成请求字段，空串表示不改、交给后端沿用当前配置
+ *
+ * @param raw 输入框原文
+ * @returns 数值，空或非数字返回 undefined
+ */
+function numOrUndefined(raw: string): number | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/**
+ * 按当前参数重放选定区间，只读接口，不改任何库表
+ *
+ * @returns 无
+ */
+async function onBacktest(): Promise<void> {
+  if (!btStart.value || !btEnd.value) {
+    ElMessage.error('请先选择回测区间的起止日')
+    return
+  }
+  if (btStart.value > btEnd.value) {
+    ElMessage.error('起始日不能晚于截止日')
+    return
+  }
+  btLoading.value = true
+  try {
+    const response = await backtestEstimate({
+      startDate: btStart.value,
+      endDate: btEnd.value,
+      indexBetaWindow: numOrUndefined(btBetaWindow.value),
+      goldWindow: numOrUndefined(btGoldWindow.value),
+      bondWindow: numOrUndefined(btBondWindow.value),
+      stockErrorThreshold: numOrUndefined(btStockThreshold.value),
+      bondErrorThreshold: numOrUndefined(btBondThreshold.value),
+    })
+    btResult.value = response.data ?? null
+    if (!btResult.value?.sampleCount) {
+      ElMessage.info('该区间没有可重放的数据，原因见下方说明')
+      return
+    }
+    ElMessage.success(`回测完成：${btResult.value.sampleCount} 条记录`)
+  } catch {
+    // request 层已弹出具体原因
+  } finally {
+    btLoading.value = false
+  }
+}
+
 /** 切换复盘日期时把导出区间跟着挪，避免还在导上一次的时间段 */
 watch(
   () => store.tradeDate,
   (next) => {
     exportEnd.value = next
     exportStart.value = shiftDate(next, -30)
+    btEnd.value = next
+    btStart.value = shiftDate(next, -90)
   },
 )
 
@@ -514,6 +803,7 @@ let stopWatching: (() => void) | null = null
 const railItems = [
   { key: 'compare', label: '预估对照', icon: ICONS.compare! },
   { key: 'trend', label: '误差趋势', icon: ICONS.trend! },
+  { key: 'backtest', label: '因子回测', icon: ICONS.backtest! },
 ]
 
 /** 失败环节 */
@@ -1349,6 +1639,72 @@ onBeforeUnmount(() => {
 
 .app-rules li + li {
   margin-top: 5px;
+}
+
+/* ── 因子回测 ── */
+.app-daybar--flat {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.app-btparams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.app-btparams__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.app-btparams__k {
+  font-size: 11.5px;
+  color: var(--t3);
+}
+
+.app-btparams__v {
+  width: 86px;
+  text-align: right;
+}
+
+.app-btparams__u {
+  font-size: 10.5px;
+  color: var(--t4);
+}
+
+.app-btparams--echo {
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0 2px;
+  border-bottom: 0;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--t4);
+}
+
+.app-btparams__echo {
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+.app-summary--bt {
+  margin-top: 12px;
+}
+
+.app-table--bt .col-num {
+  width: 62px;
+}
+
+.app-rules--bt {
+  padding: 8px 0 0 15px;
+  font-size: 10.5px;
+  color: var(--t4);
 }
 
 /* 涨跌配色，统一走 token */
