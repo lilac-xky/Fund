@@ -8,6 +8,7 @@ import com.lilac.domain.vo.EstimateErrorVO;
 import com.lilac.domain.vo.FundSnapshotVO;
 import com.lilac.domain.vo.HoldingItemVO;
 import com.lilac.domain.vo.VarietyVO;
+import com.lilac.engine.model.BetaModel;
 import com.lilac.engine.model.EstimateContext;
 import com.lilac.engine.model.EstimateOutcome;
 import com.lilac.engine.model.GoldBetaModel;
@@ -397,6 +398,94 @@ class EstimateEngineTest {
         variety.setVarietyName(name);
         variety.setCategory(category);
         return variety;
+    }
+
+    /**
+     * 指数直取拿到 β 模型时按 β 与 α 校正，不再直接沿用代理涨跌
+     */
+    @Test
+    @DisplayName("指数直取按 β 校正代理涨跌")
+    void indexUsesBetaModel() {
+        EstimateContext context = contextOf(variety("OF:004598", VarietyType.OF, "南方中证银行ETF发起联接C",
+                FundCategory.STOCK));
+        context.setRawFundType("指数型-股票");
+        context.setProxySymbol("sz399986");
+        context.setProxyQuote(okQuote("sz399986", "1.00"));
+        context.setSnapshot(snapshotOf("0.10"));
+        BetaModel model = new BetaModel();
+        model.setBeta(new BigDecimal("0.945"));
+        model.setAlpha(new BigDecimal("0.0183"));
+        model.setSamples(250);
+        context.setIndexBetaModel(model);
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        assertThat(outcome.getBranch()).isEqualTo(EstimateBranch.INDEX_ONLY);
+        // 0.945 × 1.00 + 0.0183 = 0.9633
+        assertThat(outcome.getEstimatedChange()).isEqualByComparingTo("0.9633");
+        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("β=0.945"));
+    }
+
+    /**
+     * 没有 β 模型时指数直取原样沿用代理涨跌，行为与改造前一致
+     */
+    @Test
+    @DisplayName("无 β 模型时指数直取原样沿用代理涨跌")
+    void indexFallsBackToDirectWhenNoBeta() {
+        EstimateContext context = contextOf(variety("OF:004598", VarietyType.OF, "南方中证银行ETF发起联接C",
+                FundCategory.STOCK));
+        context.setRawFundType("指数型-股票");
+        context.setProxySymbol("sz399986");
+        context.setProxyQuote(okQuote("sz399986", "1.00"));
+        context.setSnapshot(snapshotOf("0.10"));
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        assertThat(outcome.getEstimatedChange()).isEqualByComparingTo("1.0000");
+        assertThat(outcome.getRemarks()).noneMatch(note -> note.contains("β="));
+    }
+
+    /**
+     * 混合型没有点估计误差时，区间半宽按自身波动而不是写死的默认 sigma 给出
+     */
+    @Test
+    @DisplayName("混合型区间半宽按自身波动给出")
+    void mixedIntervalUsesVolatility() {
+        EstimateContext context = contextOf(variety("OF:011370", VarietyType.OF, "华商均衡成长混合C",
+                FundCategory.MIXED));
+        context.setRawFundType("混合型-偏股");
+        context.setSnapshot(snapshotOf("76.43"));
+        Map<String, MarketQuote> quotes = new LinkedHashMap<>();
+        quotes.put("sh600519", okQuote("sh600519", "1.60"));
+        quotes.put("sz000858", okQuote("sz000858", "1.00"));
+        context.setHoldingQuotes(quotes);
+        context.setHistory(volatileMixedHistory());
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        assertThat(outcome.getTier()).isEqualTo(EstimateTier.B);
+        BigDecimal halfWidth = outcome.getIntervalHigh().subtract(outcome.getIntervalLow())
+                .divide(BigDecimal.valueOf(2), 6, java.math.RoundingMode.HALF_UP);
+        // 写死的默认半宽是 0.3 × 1.64 = 0.492，波动 5% 的基金不该只给这么窄
+        assertThat(halfWidth).isGreaterThan(new BigDecimal("5"));
+    }
+
+    /**
+     * 构造高波动混合型历史：实际涨跌在 ±5.8 之间摆动，方向全部命中，没有点估计
+     *
+     * @return 历史序列
+     */
+    private List<EstimateErrorVO> volatileMixedHistory() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            // 混合型 B 档本来就不给点估计，estimatedChange 必须为空才有代表性
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(i % 2 == 0 ? 5.80 : -5.80));
+            vo.setDirectionHit(Boolean.TRUE);
+            history.add(vo);
+        }
+        return history;
     }
 
     /**

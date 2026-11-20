@@ -112,6 +112,38 @@ class TierResolverTest {
     }
 
     /**
+     * 混合型没有点估计误差，宽波动比恒等于 2 倍 sigma 系数，不该拿它把 B 档卡死
+     */
+    @Test
+    @DisplayName("混合型不因宽波动比被卡在 C 档")
+    void mixedNotBlockedByWidthRatio() {
+        // 方向全命中、自身波动 1.20，按 sigma 系数给出的区间宽必然超过波动
+        List<EstimateErrorVO> history = volatileMixedSeries(40);
+
+        EstimateTier tier = resolve(history, FundCategory.MIXED, null);
+
+        assertThat(tier).isEqualTo(EstimateTier.B);
+    }
+
+    /**
+     * 造一段高波动混合型历史：实际涨跌 ±1.20，方向全部命中且无点估计
+     *
+     * @param count 条数
+     * @return 历史序列
+     */
+    private List<EstimateErrorVO> volatileMixedSeries(int count) {
+        List<EstimateErrorVO> history = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(i % 2 == 0 ? 1.20 : -1.20));
+            vo.setDirectionHit(Boolean.TRUE);
+            history.add(vo);
+        }
+        return history;
+    }
+
+    /**
      * 造一段混合型历史：误差 ±0.45、方向全部命中，实际涨跌 ±2.40 使区间宽比小于 1
      *
      * @param count 条数

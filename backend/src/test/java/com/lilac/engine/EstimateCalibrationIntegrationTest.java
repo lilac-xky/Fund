@@ -11,6 +11,7 @@ import com.lilac.domain.vo.CalibrationItemVO;
 import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.EstimateBatchVO;
 import com.lilac.domain.vo.EstimateErrorTrendVO;
+import com.lilac.mapper.EstimateErrorMapper;
 import com.lilac.mapper.EstimateSnapshotMapper;
 import com.lilac.mapper.FundCatalogMapper;
 import com.lilac.mapper.FundNetWorthMapper;
@@ -75,6 +76,9 @@ class EstimateCalibrationIntegrationTest {
     private EstimateSnapshotMapper estimateSnapshotMapper;
 
     @Autowired
+    private EstimateErrorMapper estimateErrorMapper;
+
+    @Autowired
     private FundNetWorthMapper fundNetWorthMapper;
 
     @Autowired
@@ -101,6 +105,8 @@ class EstimateCalibrationIntegrationTest {
     @BeforeEach
     void setUp() {
         estimateSnapshotMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // 误差表是共享的，用例里有「断言全表为空」的写法，不清理会被上一次运行或手工留存的行污染
+        estimateErrorMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         fundCatalogMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
         // 未指定品种时校准会回退到全部持有中持仓，dev 库的真实持仓必须隔离
         holdingMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));

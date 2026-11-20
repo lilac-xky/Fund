@@ -54,15 +54,20 @@ class IndexDividendIntegrationTest {
     @Autowired
     private IndexDividendMapper indexDividendMapper;
 
+    @Autowired
+    private com.lilac.mapper.VarietyMapper varietyMapper;
+
     @MockitoBean
     private CsIndexIndicatorAdapter csIndexIndicatorAdapter;
 
     /**
-     * 清掉股息率数据，避免与上一次用例串数据
+     * 清掉股息率与品种数据，避免与上一次用例及 dev 库真实持仓串数据
      */
     @BeforeEach
     void setUp() {
         indexDividendMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
+        // refresh(null) 会按全部红利持仓反查跟踪指数，dev 库有真实红利基金，必须隔离
+        varietyMapper.deleteByQuery(QueryWrapper.create().where("1 = 1"));
     }
 
     /**
