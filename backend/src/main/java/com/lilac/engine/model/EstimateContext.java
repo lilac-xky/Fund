@@ -60,6 +60,11 @@ public class EstimateContext {
     private BondBaselineEstimator.Model bondModel;
 
     /**
+     * 代理标的 α 与 β 回归结果，仅指数直取分支使用；为 null 表示直接沿用代理涨跌
+     */
+    private BetaModel indexBetaModel;
+
+    /**
      * 持仓标的当日行情，按带前缀完整代码索引
      */
     private Map<String, MarketQuote> holdingQuotes;

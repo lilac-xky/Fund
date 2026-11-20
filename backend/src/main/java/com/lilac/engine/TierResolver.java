@@ -87,12 +87,15 @@ public class TierResolver {
     private boolean meetsB(EstimateHistoryStats stats, EstimateThresholds thresholds) {
         BigDecimal accuracy = stats.getDirectionAccuracy();
         BigDecimal ratio = stats.getWidthRatio();
-        if (accuracy == null || ratio == null) {
+        if (accuracy == null) {
             return false;
         }
         BigDecimal coverage = stats.getIntervalCoverage();
-        return accuracy.compareTo(thresholds.getBDirectionAccuracy()) >= 0
-                && ratio.compareTo(thresholds.getBWidthRatio()) < 0
+        // 混合型没有点估计，区间半宽只能按自身波动定，宽波动比恒等于 2 倍 sigma 系数，
+        // 与基金好坏无关；此时再用它卡档位会让 B 档对混合型永远不可达
+        boolean widthOk = stats.getErrorSigma() == null || (ratio != null
+                && ratio.compareTo(thresholds.getBWidthRatio()) < 0);
+        return accuracy.compareTo(thresholds.getBDirectionAccuracy()) >= 0 && widthOk
                 && (coverage == null || coverage.compareTo(thresholds.getIntervalCoverageMin()) >= 0);
     }
 

@@ -128,6 +128,18 @@ public class EstimateThresholds {
     private String bondProxyCode = "511010";
 
     /**
+     * 指数直取时 β 回归的滚动窗口，交易日；实测窗口越长越稳，250 日与全样本结论一致
+     */
+    @Value("${fund.estimate.index-beta.window:250}")
+    private int indexBetaWindow = 250;
+
+    /**
+     * 指数直取 β 回归所需的最少配对样本，不足时退回直接沿用代理涨跌
+     */
+    @Value("${fund.estimate.index-beta.min-pairs:60}")
+    private int indexBetaMinPairs = 60;
+
+    /**
      * 债券传导系数的滚动窗口，交易日；债券日波动极小，窗口太短中位数会抖
      */
     @Value("${fund.estimate.bond.window:60}")

@@ -2,6 +2,7 @@ package com.lilac.engine;
 
 import com.lilac.adapter.model.MarketQuote;
 import com.lilac.domain.vo.HoldingItemVO;
+import com.lilac.engine.model.BetaModel;
 import com.lilac.engine.model.EstimateContext;
 import com.lilac.engine.model.EstimateHistoryStats;
 import com.lilac.engine.model.EstimateOutcome;
@@ -180,11 +181,19 @@ public class EstimateEngine {
         outcome.setCoverage(HUNDRED);
         fillSnapshotDates(context, outcome);
         fillAllocationDate(context, outcome);
-        fillPointOrTier(outcome, scale(quote.getChangePercent()), stats);
+        BetaModel betaModel = context.getIndexBetaModel();
+        BigDecimal proxyChange = scale(quote.getChangePercent());
+        BigDecimal predicted = betaModel == null ? proxyChange : scale(betaModel.predict(proxyChange));
+        fillPointOrTier(outcome, predicted, stats);
         outcome.getRemarks().add(extraNote);
         // 联接基金必须说明个股没有参与加权，否则使用者会以为这只数是用重仓股算的
         if (isLinkFund(context)) {
             outcome.getRemarks().add(LINK_FUND_NOTE);
+        }
+        // 联接基金有现金留存与跟踪误差，β 恒等于 1 本身就是错的假设，用到就要说明
+        if (betaModel != null) {
+            outcome.getRemarks().add("按本基金对代理标的的 β="
+                    + plain(betaModel.getBeta()) + " 校正代理涨跌，样本 " + betaModel.getSamples() + " 个交易日");
         }
     }
 

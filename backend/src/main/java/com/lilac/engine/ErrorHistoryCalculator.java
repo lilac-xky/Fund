@@ -86,11 +86,12 @@ public class ErrorHistoryCalculator {
         }
         EstimateHistoryStats stats = new EstimateHistoryStats();
         stats.setSampleCount(samples);
+        // 波动是混合型唯一可用的误差量纲，与有没有点估计无关，必须无条件填
+        stats.setVolatility(stddev(actuals, samples));
         if (pointSamples > 0) {
             stats.setMae(scale(absSum / pointSamples));
             stats.setMedianAbsError(scale(median(absErrors)));
             stats.setErrorSigma(stddev(errors, pointSamples));
-            stats.setVolatility(stddev(actuals, samples));
         }
         stats.setDirectionAccuracy(directionTotal == 0 ? null : ratio(directionHit, directionTotal));
         stats.setIntervalCoverage(intervalTotal == 0 ? null : ratio(intervalHit, intervalTotal));
@@ -99,19 +100,15 @@ public class ErrorHistoryCalculator {
     }
 
     /**
-     * 填入区间半宽与宽波动比，有实测区间宽度时用它，否则按误差标准差估
+     * 填入区间半宽与宽波动比，有点估计时按误差标准差估，没有时按自身波动估
      *
      * @param stats       统计结果
      * @param widths      实测区间宽度
      * @param sigmaFactor 区间半宽使用的 sigma 倍数
      */
     private void fillIntervalWidth(EstimateHistoryStats stats, List<Double> widths, BigDecimal sigmaFactor) {
-        BigDecimal halfWidth;
-        if (!widths.isEmpty()) {
-            halfWidth = scale(median(widths) / 2);
-        } else if (stats.getErrorSigma() != null) {
-            halfWidth = stats.getErrorSigma().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP);
-        } else {
+        BigDecimal halfWidth = resolveHalfWidth(stats, widths, sigmaFactor);
+        if (halfWidth == null) {
             return;
         }
         stats.setIntervalHalfWidth(halfWidth);
@@ -119,6 +116,28 @@ public class ErrorHistoryCalculator {
             stats.setWidthRatio(halfWidth.multiply(BigDecimal.valueOf(2))
                     .divide(stats.getVolatility(), 4, RoundingMode.HALF_UP));
         }
+    }
+
+    /**
+     * 选区间半宽：有点估计误差时用它，没有时用该基金自身波动当误差量纲
+     *
+     * @param stats       统计结果
+     * @param widths      实测区间宽度
+     * @param sigmaFactor 区间半宽使用的 sigma 倍数
+     * @return 半宽，无从估计时返回 null
+     */
+    private BigDecimal resolveHalfWidth(EstimateHistoryStats stats, List<Double> widths, BigDecimal sigmaFactor) {
+        if (stats.getErrorSigma() != null) {
+            return widths.isEmpty()
+                    ? stats.getErrorSigma().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP)
+                    : scale(median(widths) / 2);
+        }
+        // 混合型没有点估计，历史区间宽度是它自己上次的输出，拿它反推会让宽度永远停在初值，
+        // 日波动 5% 的基金给出 ±0.49% 的区间等于没有区间，必须改用该基金自身波动
+        if (stats.getVolatility() != null && stats.getVolatility().signum() > 0) {
+            return stats.getVolatility().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP);
+        }
+        return null;
     }
 
     /**

@@ -1,13 +1,16 @@
 package com.lilac.controller;
 
 import com.lilac.domain.dto.estimate.CalibrationRequest;
+import com.lilac.domain.dto.estimate.EstimateBacktestRequest;
 import com.lilac.domain.dto.estimate.EstimateErrorQueryRequest;
 import com.lilac.domain.result.Result;
+import com.lilac.domain.vo.BacktestResultVO;
 import com.lilac.domain.vo.CalibrationResultVO;
 import com.lilac.domain.vo.EstimateErrorTrendVO;
 import com.lilac.domain.vo.EstimateErrorVO;
 import com.lilac.domain.vo.GoldBetaRecordVO;
 import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.service.EstimateBacktestService;
 import com.lilac.service.EstimateCalibrationService;
 import com.lilac.service.EstimateErrorService;
 import com.lilac.service.EstimateGoldBetaService;
@@ -38,6 +41,9 @@ public class EstimateCalibrationController {
 
     @Resource
     private EstimateErrorService estimateErrorService;
+
+    @Resource
+    private EstimateBacktestService estimateBacktestService;
 
     /**
      * 执行某一交易日的晚间校准，重复执行同一天只覆盖不重复累计
@@ -84,5 +90,13 @@ public class EstimateCalibrationController {
     @PostMapping("/errors")
     public Result<List<EstimateErrorVO>> errors(@RequestBody(required = false) EstimateErrorQueryRequest request) {
         return Result.success(estimateErrorService.listEstimateError(request));
+    }
+
+    /**
+     * 按指定参数重放历史区间，用于修正因子前先看效果，只读不写
+     */
+    @PostMapping("/backtest")
+    public Result<BacktestResultVO> backtest(@RequestBody(required = false) EstimateBacktestRequest request) {
+        return Result.success(estimateBacktestService.run(request));
     }
 }

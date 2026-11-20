@@ -20,6 +20,7 @@ import com.lilac.domain.vo.HoldingItemVO;
 import com.lilac.domain.vo.HoldingVO;
 import com.lilac.domain.vo.VarietyVO;
 import com.lilac.engine.BenchmarkResolver;
+import com.lilac.engine.BetaRegressor;
 import com.lilac.engine.BondBaselineEstimator;
 import com.lilac.engine.EstimateCache;
 import com.lilac.engine.EstimateConverter;
@@ -36,6 +37,7 @@ import com.lilac.enums.EstimateTier;
 import com.lilac.enums.FundCategory;
 import com.lilac.enums.HoldingStatus;
 import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.enums.VarietyType;
 import com.lilac.exception.BusinessException;
 import com.lilac.service.EstimateErrorService;
 import com.lilac.service.EstimateService;
@@ -89,6 +91,9 @@ public class EstimateServiceImpl implements EstimateService {
 
     @Resource
     private BondBaselineEstimator bondBaselineEstimator;
+
+    @Resource
+    private BetaRegressor betaRegressor;
 
     @Resource
     private EstimateCache estimateCache;
@@ -285,12 +290,26 @@ public class EstimateServiceImpl implements EstimateService {
         prepared.history = loadHistory(variety.getVarietyKey());
         prepared.previousTier = resolvePreviousTier(prepared.history);
         prepared.hkHoldings = hasHongKong(prepared.snapshot);
-        // 黄金与债券都要拿基金自己的净值序列去配对代理日线，两条分支共用同一段取数
-        if (prepared.branch == EstimateBranch.GOLD_PROXY || prepared.branch == EstimateBranch.BOND_PROXY) {
+        // 黄金与债券都要拿基金自己的净值序列去配对代理日线，指数直取要用它回归 β，三条分支共用同一段取数
+        if (prepared.branch == EstimateBranch.GOLD_PROXY || prepared.branch == EstimateBranch.BOND_PROXY
+                || prepared.branch == EstimateBranch.INDEX_ONLY) {
             prepared.netWorthPoints = fundNetWorthService.listRange(variety.getVarietyCode(),
-                    today.minusDays(HISTORY_LOOKBACK_DAYS * 2), null);
+                    today.minusDays(netWorthLookbackDays(prepared.branch)), null);
         }
         return prepared;
+    }
+
+    /**
+     * 按分支算净值回溯的自然日数，250 个配对交易日按 1.5 倍日历折算并留足余量
+     *
+     * @param branch 分支
+     * @return 自然日数
+     */
+    private int netWorthLookbackDays(EstimateBranch branch) {
+        if (branch == EstimateBranch.INDEX_ONLY) {
+            return Math.max(HISTORY_LOOKBACK_DAYS * 2, (int) Math.ceil(thresholds.getIndexBetaWindow() * 1.6));
+        }
+        return HISTORY_LOOKBACK_DAYS * 2;
     }
 
     /**
@@ -431,7 +450,7 @@ public class EstimateServiceImpl implements EstimateService {
     }
 
     /**
-     * 取代理标的日线，供黄金 β 与债券传导系数的滚动估计
+     * 取代理标的日线，供黄金 β、债券传导系数与指数直取 β 的滚动估计
      *
      * @param prepared 中间状态列表
      * @return 代理代码到日线的映射
@@ -441,11 +460,25 @@ public class EstimateServiceImpl implements EstimateService {
         prepared.stream()
                 .filter(item -> item.proxySymbol != null
                         && (item.branch == EstimateBranch.GOLD_PROXY
-                        || item.branch == EstimateBranch.BOND_PROXY))
-                .map(item -> item.proxySymbol)
-                .distinct()
-                .forEach(symbol -> histories.put(symbol, marketQuoteAdapter.history(symbol, GOLD_HISTORY_LIMIT)));
+                        || item.branch == EstimateBranch.BOND_PROXY
+                        || item.branch == EstimateBranch.INDEX_ONLY))
+                .forEach(item -> histories.put(item.proxySymbol,
+                        marketQuoteAdapter.history(item.proxySymbol, historyLimitOf(item))));
         return histories;
+    }
+
+    /**
+     * 按分支算需要的日线根数，指数直取要用 indexBetaWindow，其余沿用默认
+     *
+     * @param item 中间状态
+     * @return 日线根数
+     */
+    private int historyLimitOf(Prepared item) {
+        if (item.branch == EstimateBranch.INDEX_ONLY && item.variety.getVarietyType() != VarietyType.ETF) {
+            // 回归窗口要覆盖 250 个配对交易日，多取一成兜住停牌与净值缺失造成的错位
+            return Math.max(GOLD_HISTORY_LIMIT, (int) Math.ceil(thresholds.getIndexBetaWindow() * 1.1));
+        }
+        return GOLD_HISTORY_LIMIT;
     }
 
     /**
@@ -565,6 +598,14 @@ public class EstimateServiceImpl implements EstimateService {
         if (prepared.branch == EstimateBranch.BOND_PROXY) {
             context.setBondModel(bondBaselineEstimator.estimate(prepared.netWorthPoints, bars,
                     thresholds.getBondWindow(), thresholds.getBondMinPairs()));
+            return;
+        }
+        if (prepared.branch == EstimateBranch.INDEX_ONLY) {
+            // 场内 ETF 自身就是代理标的，β 恒为 1，回归没有意义
+            if (prepared.variety.getVarietyType() != VarietyType.ETF) {
+                context.setIndexBetaModel(betaRegressor.estimate(prepared.netWorthPoints, bars,
+                        thresholds.getIndexBetaWindow(), thresholds.getIndexBetaMinPairs()));
+            }
         }
     }
 
