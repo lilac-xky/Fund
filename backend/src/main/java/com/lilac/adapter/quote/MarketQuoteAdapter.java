@@ -153,6 +153,33 @@ public class MarketQuoteAdapter {
     public MarketHistory history(String rawCode, int limit) {
         MarketSymbol symbol = MarketSymbol.of(rawCode);
         int rows = limit <= 0 ? historyLimit : limit;
+        MarketHistory history = fetchHistory(symbol, rows);
+        if (history.enough(2) || !symbol.ambiguous()) {
+            return history;
+        }
+        // 000300 这类上证指数按号段会被推成深市，深市没有日线时改查沪市，与行情补查保持同一套规则
+        MarketSymbol sibling = symbol.sibling();
+        if (sibling == null) {
+            return history;
+        }
+        MarketHistory alternative = fetchHistory(sibling, rows);
+        if (alternative.enough(2)) {
+            // 只在本方法内改查，不写 MarketSymbol 的进程内记忆：
+            // 那会让调用方传裸代码时的解析结果被日线取数这一步悄悄改变
+            log.info("日线 {} 在推断市场取不到，改查 {} 命中", symbol.symbol(), sibling.symbol());
+            return alternative;
+        }
+        return history;
+    }
+
+    /**
+     * 按标的逐个源取日线，全部失败返回空序列
+     *
+     * @param symbol 标的
+     * @param rows   根数
+     * @return 日线序列
+     */
+    private MarketHistory fetchHistory(MarketSymbol symbol, int rows) {
         List<String> failures = new ArrayList<>();
         for (QuoteSource source : sources) {
             if (!source.supports(symbol)) {

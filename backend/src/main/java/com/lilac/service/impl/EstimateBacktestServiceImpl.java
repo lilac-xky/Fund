@@ -358,13 +358,30 @@ public class EstimateBacktestServiceImpl implements EstimateBacktestService {
         result.setP90AbsError(percentile(absErrors, PERCENTILE_P90));
         result.setOverThresholdRatio(ratio(items.stream().map(BacktestItemVO::getOverThreshold).toList()));
         result.setDirectionAccuracy(ratio(items.stream().map(BacktestItemVO::getDirectionHit).toList()));
-        long skipped = items.stream().filter(item -> item.getDirectionHit() == null).count();
-        if (skipped > 0) {
-            // 债券日波动常常小于方向下限，不计入方向统计，但必须说清为什么分母变小
-            notes.add("有 " + skipped + " 条记录的预估或实际涨跌低于方向下限 "
-                    + effective.getDirectionFloor().stripTrailingZeros().toPlainString()
-                    + " 个百分点，未计入方向命中率");
+        List<BacktestItemVO> counted = items.stream()
+                .filter(item -> item.getDirectionHit() != null).toList();
+        if (counted.isEmpty()) {
+            // 全被方向下限挡掉时不能只说「未计入」，否则使用者会以为方向命中率是 0
+            notes.add("全部 " + items.size() + " 条记录的涨跌都低于方向下限 "
+                    + plain(effective.getDirectionFloor()) + " 个百分点，方向命中率无从计算");
+            return;
         }
+        long skipped = items.size() - counted.size();
+        if (skipped > 0) {
+            // 债券日波动常常小于方向下限，不计入方向统计，但必须说清分母剩多少
+            notes.add("有 " + skipped + " 条涨跌低于方向下限 " + plain(effective.getDirectionFloor())
+                    + " 个百分点未计入方向判定，方向命中率实际基于 " + counted.size() + " 条");
+        }
+    }
+
+    /**
+     * 去掉多余尾零，便于写进说明文案
+     *
+     * @param value 数值
+     * @return 文本，入参为 null 时给破折号
+     */
+    private String plain(BigDecimal value) {
+        return value == null ? "—" : value.stripTrailingZeros().toPlainString();
     }
 
     /**

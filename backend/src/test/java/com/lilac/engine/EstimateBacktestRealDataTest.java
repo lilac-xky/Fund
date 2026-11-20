@@ -63,6 +63,29 @@ class EstimateBacktestRealDataTest {
     }
 
     /**
+     * 上证指数类基金必须能进回测，钉住 000300 日线的跨市场补查
+     */
+    @Test
+    @DisplayName("沪深300 指数基金能进回测")
+    void shanghaiIndexFundParticipates() {
+        EstimateBacktestRequest request = new EstimateBacktestRequest();
+        request.setStartDate(LocalDate.of(2026, 8, 22).toString());
+        request.setEndDate(LocalDate.of(2026, 11, 19).toString());
+        request.setVarietyKeys(List.of("OF:018258"));
+
+        BacktestResultVO result = estimateBacktestService.run(request);
+
+        System.out.println("018258 回测 样本=" + result.getSampleCount() + " MAE=" + result.getMae());
+        result.getNotes().forEach(note -> System.out.println("  note: " + note));
+
+        assertThat(result.getSampleCount()).isPositive();
+        assertThat(result.getSummaries()).isNotEmpty();
+        assertThat(result.getSummaries().get(0).getVarietyCode()).isEqualTo("018258");
+        // 不该再出现「日线取不到」
+        assertThat(result.getNotes()).noneMatch(note -> note.contains("日线取不到"));
+    }
+
+    /**
      * 关掉 β 校正后结果应变化，证明开关真的生效
      */
     @Test
