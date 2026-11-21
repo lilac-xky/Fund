@@ -283,7 +283,7 @@ class DividendAdviceIntegrationTest {
         DividendAdvisoryVO result = dividendAdviceService.adviseAll();
 
         assertThat(result.getParamUsable()).isFalse();
-        assertThat(result.getParamIssues()).hasSize(4);
+        assertThat(result.getParamIssues()).hasSize(1);
         assertThat(result.getActionCount()).isZero();
         assertThat(result.getUndecidableCount()).isEqualTo(1);
         assertThat(result.getItems()).isEmpty();
@@ -351,10 +351,11 @@ class DividendAdviceIntegrationTest {
     void planRoundTrips() {
         savePlan("120000", "70000", "5.20", "3.10");
 
-        DividendPlanVO plan = dividendAdviceService.getPlan();
+        DividendPlanVO plan = dividendAdviceService.getPlan(DIVIDEND_KEY);
 
         assertThat(plan.getUsable()).isTrue();
         assertThat(plan.getIssues()).isEmpty();
+        assertThat(plan.getVarietyKey()).isEqualTo(DIVIDEND_KEY);
         assertThat(plan.getBaseAmount()).isEqualByComparingTo("120000");
         assertThat(plan.getFloorAmount()).isEqualByComparingTo("70000");
         assertThat(plan.getAddYield()).isEqualByComparingTo("5.20");
@@ -389,6 +390,7 @@ class DividendAdviceIntegrationTest {
     private void savePlan(String base, String floor, String addYield, String reduceYield) {
         DividendParamSaveRequest request = planRequestOf(base, floor, addYield, reduceYield);
         DividendPlan plan = new DividendPlan();
+        plan.setVarietyKey(request.getVarietyKey());
         plan.setBaseAmount(request.getBaseAmount());
         plan.setFloorAmount(request.getFloorAmount());
         plan.setAddYield(request.getAddYield());
@@ -403,6 +405,7 @@ class DividendAdviceIntegrationTest {
      */
     private void saveDirectly(DividendParamSaveRequest request) {
         DividendPlan plan = new DividendPlan();
+        plan.setVarietyKey(request.getVarietyKey());
         plan.setBaseAmount(request.getBaseAmount());
         plan.setFloorAmount(request.getFloorAmount());
         plan.setAddYield(request.getAddYield());
@@ -421,6 +424,7 @@ class DividendAdviceIntegrationTest {
      */
     private DividendParamSaveRequest planRequestOf(String base, String floor, String addYield, String reduceYield) {
         DividendParamSaveRequest request = new DividendParamSaveRequest();
+        request.setVarietyKey(DIVIDEND_KEY);
         request.setBaseAmount(new BigDecimal(base));
         request.setFloorAmount(new BigDecimal(floor));
         request.setAddYield(new BigDecimal(addYield));

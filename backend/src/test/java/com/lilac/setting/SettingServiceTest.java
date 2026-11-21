@@ -2,7 +2,6 @@ package com.lilac.setting;
 
 import com.lilac.domain.dto.setting.MailSettingSaveRequest;
 import com.lilac.domain.dto.setting.SettingBatchSaveRequest;
-import com.lilac.domain.dto.setting.SettingFieldError;
 import com.lilac.domain.dto.setting.SettingGroupSaveRequest;
 import com.lilac.domain.vo.MailSettingVO;
 import com.lilac.domain.vo.SettingGroupVO;
@@ -12,6 +11,10 @@ import com.lilac.domain.vo.SettingSaveVO;
 import com.lilac.enums.ParamGroup;
 import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.SettingService;
+import com.lilac.strategy.DividendPlanResolver;
+import com.lilac.strategy.GridPlanResolver;
+import com.lilac.strategy.model.DividendPlan;
+import com.lilac.strategy.model.GridPlan;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +31,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 参数设置测试，核心是「非法值逐字段拒绝」「指标有默认值」与「授权码只写不回显」
+ * 参数设置测试，核心是「非法值逐字段拒绝」「指标有默认值」「按标的的参数不走全局表」与「授权码只写不回显」
  */
 @SpringBootTest
 @Transactional
@@ -39,6 +42,12 @@ class SettingServiceTest {
 
     @Autowired
     private StrategyParamMapper strategyParamMapper;
+
+    @Autowired
+    private DividendPlanResolver dividendPlanResolver;
+
+    @Autowired
+    private GridPlanResolver gridPlanResolver;
 
     /**
      * 清空策略参数，避免用例之间串数据
@@ -53,14 +62,14 @@ class SettingServiceTest {
     }
 
     /**
-     * 概览返回五个分组，且指标分组在没有库值时能给出默认值
+     * 概览返回三个分组，且指标分组在没有库值时能给出默认值
      */
     @Test
     @DisplayName("指标参数有可用默认值，不改也能跑")
     void indicatorHasDefaults() {
         SettingOverviewVO overview = settingService.overview();
 
-        assertThat(overview.getGroups()).hasSize(5);
+        assertThat(overview.getGroups()).hasSize(3);
         SettingGroupVO indicator = group(overview, "INDICATOR");
         assertThat(indicator.getItems()).isNotEmpty();
         for (SettingItemVO item : indicator.getItems()) {
@@ -79,92 +88,78 @@ class SettingServiceTest {
     @DisplayName("全部参数可保存并持久化")
     void saveThenReload() {
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("baseAmount", "120000");
-        values.put("floorAmount", "60000");
-        values.put("addYield", "5.00");
-        values.put("reduceYield", "3.00");
-        SettingSaveVO result = settingService.save(batch("DIVIDEND", values));
+        values.put("rsiPeriod", "20");
+        values.put("kdjPeriod", "9");
+        values.put("macdFast", "12");
+        values.put("macdSlow", "26");
+        SettingSaveVO result = settingService.save(batch("INDICATOR", values));
 
         assertThat(result.getOk()).isTrue();
         assertThat(result.getSavedCount()).isEqualTo(4);
 
-        SettingGroupVO dividend = group(settingService.overview(), "DIVIDEND");
-        assertThat(item(dividend, "baseAmount").getValue()).isEqualTo("120000");
-        assertThat(item(dividend, "baseAmount").getCustomized()).isTrue();
-        assertThat(item(dividend, "floorAmount").getValue()).isEqualTo("60000");
+        SettingGroupVO indicator = group(settingService.overview(), "INDICATOR");
+        assertThat(item(indicator, "rsiPeriod").getValue()).isEqualTo("20");
+        assertThat(item(indicator, "rsiPeriod").getCustomized()).isTrue();
+        assertThat(item(indicator, "macdSlow").getValue()).isEqualTo("26");
     }
 
     /**
-     * 保底高于基准必须被拒绝，且错误落在「保底分红金额」这个字段上
+     * 红利与网格参数按基金、按标的各存一套，不允许从全局参数表写入
      */
     @Test
-    @DisplayName("保底高于基准时拒绝保存并指出字段")
-    void rejectFloorAboveBase() {
-        Map<String, String> values = new LinkedHashMap<>();
-        values.put("baseAmount", "120000");
-        values.put("floorAmount", "130000");
-        values.put("addYield", "5.00");
-        values.put("reduceYield", "3.00");
-        SettingSaveVO result = settingService.save(batch("DIVIDEND", values));
+    @DisplayName("红利与网格分组不接受全局参数保存")
+    void perVarietyGroupsRejected() {
+        Map<String, String> dividend = new LinkedHashMap<>();
+        dividend.put("baseAmount", "120000");
+        SettingSaveVO dividendResult = settingService.save(batch("DIVIDEND", dividend));
 
-        assertThat(result.getOk()).isFalse();
-        assertThat(result.getErrors()).isNotEmpty();
-        assertThat(result.getErrors()).anyMatch(error -> "floorAmount".equals(error.getField()));
-        assertThat(result.getErrors()).anyMatch(error -> error.getMessage().contains("不得高于基准仓位"));
-        // 整批拒绝，库里不能留下半套参数
-        assertThat(item(group(settingService.overview(), "DIVIDEND"), "baseAmount").getCustomized()).isFalse();
+        assertThat(dividendResult.getOk()).isFalse();
+        assertThat(dividendResult.getErrors()).anyMatch(error -> error.getMessage().contains("不支持通过参数表保存"));
+
+        Map<String, String> grid = new LinkedHashMap<>();
+        grid.put("lowerBound", "3.60");
+        SettingSaveVO gridResult = settingService.save(batch("GRID", grid));
+
+        assertThat(gridResult.getOk()).isFalse();
+        assertThat(gridResult.getErrors()).anyMatch(error -> error.getMessage().contains("不支持通过参数表保存"));
+        // 拒写之后库里不能留下任何一行红利或网格参数
+        assertThat(strategyParamMapper.selectCountByQuery(QueryWrapper.create()
+                .eq("paramGroup", ParamGroup.DIVIDEND.name()))).isZero();
+        assertThat(strategyParamMapper.selectCountByQuery(QueryWrapper.create()
+                .eq("paramGroup", ParamGroup.GRID.name()))).isZero();
     }
 
     /**
-     * 阈值顺序颠倒必须被拒绝
+     * 股息率阈值顺序颠倒必须被拒绝，这条规则现在落在按基金的红利参数上
      */
     @Test
     @DisplayName("减仓阈值不低于加仓阈值时拒绝保存")
     void rejectYieldOrder() {
-        Map<String, String> values = new LinkedHashMap<>();
-        values.put("baseAmount", "120000");
-        values.put("floorAmount", "60000");
-        values.put("addYield", "3.00");
-        values.put("reduceYield", "5.00");
-        SettingSaveVO result = settingService.save(batch("DIVIDEND", values));
+        DividendPlan plan = new DividendPlan();
+        plan.setVarietyKey("OF:007467");
+        plan.setBaseAmount(new java.math.BigDecimal("120000"));
+        plan.setFloorAmount(new java.math.BigDecimal("60000"));
+        plan.setAddYield(new java.math.BigDecimal("3.00"));
+        plan.setReduceYield(new java.math.BigDecimal("5.00"));
 
-        assertThat(result.getOk()).isFalse();
-        assertThat(result.getErrors()).anyMatch(error -> "reduceYield".equals(error.getField()));
+        assertThat(dividendPlanResolver.validate(plan))
+                .anyMatch(text -> text.contains("必须低于加仓阈值"));
     }
 
     /**
-     * 份额为负、成本为 0 这类值在网格与金额字段上同样被拒绝
-     */
-    @Test
-    @DisplayName("负数与零被逐字段拒绝")
-    void rejectNonPositive() {
-        Map<String, String> values = new LinkedHashMap<>();
-        values.put("lowerBound", "0");
-        values.put("upperBound", "-5");
-        values.put("step", "abc");
-        values.put("amountPerGrid", "0");
-        SettingSaveVO result = settingService.save(batch("GRID", values));
-
-        assertThat(result.getOk()).isFalse();
-        List<String> fields = result.getErrors().stream().map(SettingFieldError::getField).toList();
-        assertThat(fields).contains("lowerBound", "upperBound", "step", "amountPerGrid");
-    }
-
-    /**
-     * 网格上下界与格子大小划不出两格时拒绝保存
+     * 网格上下界与格子大小划不出两格时拒绝保存，这条规则现在落在按标的的网格参数上
      */
     @Test
     @DisplayName("格子过大导致划不出网格时拒绝保存")
     void rejectTooFewGrids() {
-        Map<String, String> values = new LinkedHashMap<>();
-        values.put("lowerBound", "3.200");
-        values.put("upperBound", "4.600");
-        values.put("step", "5.000");
-        values.put("amountPerGrid", "2000");
-        SettingSaveVO result = settingService.save(batch("GRID", values));
+        GridPlan plan = new GridPlan();
+        plan.setVarietyKey("ETF:510300");
+        plan.setLowerBound(new java.math.BigDecimal("3.200"));
+        plan.setUpperBound(new java.math.BigDecimal("4.600"));
+        plan.setStep(new java.math.BigDecimal("5.000"));
+        plan.setAmountPerGrid(new java.math.BigDecimal("2000"));
 
-        assertThat(result.getOk()).isFalse();
-        assertThat(result.getErrors()).anyMatch(error -> "step".equals(error.getField()));
+        assertThat(gridPlanResolver.validate(plan)).anyMatch(text -> text.contains("至少需要"));
     }
 
     /**
@@ -319,7 +314,8 @@ class SettingServiceTest {
     void groupsMatchEnum() {
         SettingOverviewVO overview = settingService.overview();
         List<String> names = overview.getGroups().stream().map(SettingGroupVO::getGroup).toList();
-        assertThat(names).containsExactly(ParamGroup.DIVIDEND.name(), ParamGroup.GRID.name(),
-                ParamGroup.BOND.name(), ParamGroup.INDICATOR.name(), ParamGroup.ALERT.name());
+        // 红利与网格参数按基金、按标的各存一套，不在这张全局参数表里
+        assertThat(names).containsExactly(ParamGroup.BOND.name(), ParamGroup.INDICATOR.name(),
+                ParamGroup.ALERT.name());
     }
 }

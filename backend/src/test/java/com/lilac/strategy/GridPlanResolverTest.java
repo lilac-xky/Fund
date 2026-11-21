@@ -1,7 +1,9 @@
 package com.lilac.strategy;
 
+import com.lilac.constant.GridParamKey;
 import com.lilac.enums.ParamGroup;
 import com.lilac.mapper.StrategyParamMapper;
+import com.lilac.service.StrategyParamService;
 import com.lilac.strategy.model.GridPlan;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 网格参数按标的存储测试，核心是两只 ETF 的价格区间互不覆盖
+ * 网格参数按标的存储测试，核心是两只 ETF 的价格区间互不覆盖、未配置的标的没有被悄悄兜底
  */
 @SpringBootTest
 @Transactional
@@ -29,6 +31,9 @@ class GridPlanResolverTest {
 
     @Autowired
     private GridPlanResolver resolver;
+
+    @Autowired
+    private StrategyParamService strategyParamService;
 
     @Autowired
     private StrategyParamMapper strategyParamMapper;
@@ -63,35 +68,36 @@ class GridPlanResolverTest {
     }
 
     /**
-     * 未单独配置的标的回落通用参数，并明确提示这是共用的
+     * 没配过的标的返回缺项清单，不再回落到任何全局参数
      */
     @Test
-    @DisplayName("未配置的标的回落通用参数并说明来源")
-    void fallsBackToGlobal() {
-        resolver.saveGlobal(planOf(null, "3.00", "4.00", "0.10", "800"));
+    @DisplayName("未配置的标的返回缺项而不是回落通用参数")
+    void unconfiguredVarietyHasNoFallback() {
+        resolver.save(planOf(ETF_A, "3.60", "4.40", "0.05", "1000"));
 
-        GridPlan fallback = resolver.resolveFor("ETF:999999", "另一只ETF");
+        GridPlan other = resolver.resolveFor("ETF:999999", "另一只ETF");
 
-        assertThat(fallback.complete()).isTrue();
-        assertThat(fallback.getLowerBound()).isEqualByComparingTo("3.0");
-        // 提示走 notes，不能进 issues，否则会被当成参数不可用而算不出网格
-        assertThat(fallback.getNotes()).anyMatch(text -> text.contains("沿用"));
-        assertThat(fallback.getIssues()).isEmpty();
+        assertThat(other.complete()).isFalse();
+        assertThat(other.getLowerBound()).isNull();
+        assertThat(other.getIssues()).hasSize(4);
+        assertThat(other.getIssues()).anyMatch(text -> text.contains("价格下界未设置"));
     }
 
     /**
-     * 单独配置过的标的不会因为存在通用参数而回落到通用值
+     * 旧版的全局网格键不再被读取，避免又有两条互相矛盾的路径
      */
     @Test
-    @DisplayName("单独配置优先于通用参数")
-    void customOverridesGlobal() {
-        resolver.saveGlobal(planOf(null, "3.00", "4.00", "0.10", "800"));
-        resolver.save(planOf(ETF_A, "3.60", "4.40", "0.05", "1000"));
+    @DisplayName("旧版全局网格键不再兜底")
+    void legacyGlobalKeysIgnored() {
+        strategyParamService.saveParam(legacyOf(GridParamKey.LOWER_BOUND, "3.00"));
+        strategyParamService.saveParam(legacyOf(GridParamKey.UPPER_BOUND, "4.00"));
+        strategyParamService.saveParam(legacyOf(GridParamKey.STEP, "0.10"));
+        strategyParamService.saveParam(legacyOf(GridParamKey.AMOUNT_PER_GRID, "800"));
 
-        GridPlan custom = resolver.resolveFor(ETF_A, "沪深300ETF");
+        GridPlan plan = resolver.resolveFor(ETF_A, "沪深300ETF");
 
-        assertThat(custom.getLowerBound()).isEqualByComparingTo("3.6");
-        assertThat(custom.getIssues()).noneMatch(text -> text.contains("沿用"));
+        assertThat(plan.complete()).isFalse();
+        assertThat(plan.getLowerBound()).isNull();
     }
 
     /**
@@ -129,6 +135,36 @@ class GridPlanResolverTest {
 
         assertThat(all).hasSize(2);
         assertThat(all).extracting(GridPlan::getVarietyKey).containsExactly(ETF_A, ETF_B);
+    }
+
+    /**
+     * 清除后这只标的回到未配置，另一只不受影响
+     */
+    @Test
+    @DisplayName("清除单只不影响另一只")
+    void removeOnlyAffectsTarget() {
+        resolver.save(planOf(ETF_A, "3.60", "4.40", "0.05", "1000"));
+        resolver.save(planOf(ETF_B, "1.00", "1.40", "0.02", "500"));
+
+        assertThat(resolver.remove(ETF_A)).isEqualTo(4);
+
+        assertThat(resolver.resolveFor(ETF_A, "A").complete()).isFalse();
+        assertThat(resolver.resolveFor(ETF_B, "B").complete()).isTrue();
+    }
+
+    /**
+     * 构造旧版全局键的保存请求
+     *
+     * @param key   参数名
+     * @param value 参数值
+     * @return 保存请求
+     */
+    private com.lilac.domain.dto.param.ParamSaveRequest legacyOf(String key, String value) {
+        com.lilac.domain.dto.param.ParamSaveRequest request = new com.lilac.domain.dto.param.ParamSaveRequest();
+        request.setParamGroup(ParamGroup.GRID);
+        request.setParamKey(key);
+        request.setParamValue(value);
+        return request;
     }
 
     /**
