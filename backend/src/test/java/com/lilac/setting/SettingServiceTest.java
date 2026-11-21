@@ -13,6 +13,7 @@ import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.SettingService;
 import com.lilac.strategy.DividendPlanResolver;
 import com.lilac.strategy.GridPlanResolver;
+import com.lilac.strategy.model.DividendLadderRung;
 import com.lilac.strategy.model.DividendPlan;
 import com.lilac.strategy.model.GridPlan;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -130,20 +131,32 @@ class SettingServiceTest {
     }
 
     /**
-     * 股息率阈值顺序颠倒必须被拒绝，这条规则现在落在按基金的红利参数上
+     * 阶梯金额不随股息率递增时必须被拒绝，这条规则落在按基金的红利参数上
      */
     @Test
-    @DisplayName("减仓阈值不低于加仓阈值时拒绝保存")
-    void rejectYieldOrder() {
+    @DisplayName("阶梯金额不随股息率递增时拒绝保存")
+    void rejectNonMonotonicLadder() {
         DividendPlan plan = new DividendPlan();
         plan.setVarietyKey("OF:007467");
-        plan.setBaseAmount(new java.math.BigDecimal("120000"));
-        plan.setFloorAmount(new java.math.BigDecimal("60000"));
-        plan.setAddYield(new java.math.BigDecimal("3.00"));
-        plan.setReduceYield(new java.math.BigDecimal("5.00"));
+        plan.setLadder(new java.util.ArrayList<>(java.util.List.of(
+                rungOf("6.00", "30000"), rungOf("5.00", "60000"))));
 
         assertThat(dividendPlanResolver.validate(plan))
-                .anyMatch(text -> text.contains("必须低于加仓阈值"));
+                .anyMatch(text -> text.contains("股息率越高应持有越多"));
+    }
+
+    /**
+     * 构造一档
+     *
+     * @param yield  股息率门槛
+     * @param amount 应持有金额
+     * @return 档位
+     */
+    private DividendLadderRung rungOf(String yield, String amount) {
+        DividendLadderRung rung = new DividendLadderRung();
+        rung.setYield(new java.math.BigDecimal(yield));
+        rung.setAmount(new java.math.BigDecimal(amount));
+        return rung;
     }
 
     /**

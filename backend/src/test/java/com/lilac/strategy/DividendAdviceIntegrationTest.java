@@ -2,7 +2,6 @@ package com.lilac.strategy;
 
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
 import com.lilac.domain.dto.dividend.DividendManualRequest;
-import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.dto.variety.VarietySaveRequest;
 import com.lilac.domain.entity.FundNetWorth;
 import com.lilac.domain.entity.Holding;
@@ -22,6 +21,7 @@ import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.DividendAdviceService;
 import com.lilac.service.IndexDividendService;
 import com.lilac.service.VarietyService;
+import com.lilac.strategy.model.DividendLadderRung;
 import com.lilac.strategy.model.DividendPlan;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +32,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,7 +93,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("监控对象带出跟踪指数与股息率")
     void watchListExplainsTarget() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(1), "4.23"));
         saveHolding("50000.0000");
         saveNetWorth("1.5000");
@@ -115,7 +117,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("未登记跟踪指数时说明原因")
     void watchListExplainsMissingIndex() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         // 另建一只从未登记过跟踪指数的红利基金，避免去改已有行的 null 值
         String noIndexCode = "990923";
         String noIndexKey = "OF:" + noIndexCode;
@@ -147,7 +149,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("股息率过期时监控对象标注原因")
     void watchListMarksStale() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(30), "4.23"));
         saveHolding("50000.0000");
         saveNetWorth("1.5000");
@@ -165,18 +167,18 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("按份额乘净值推算当前金额")
     void producesYuanPreciseAmount() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(1), "6.20"));
         saveHolding("50000.5000");
         saveNetWorth("2.0000");
 
         DividendAdviceVO advice = dividendAdviceService.adviseOne(requestOf(null));
 
-        // 50000.5 × 2.0000 = 100001.00 已超基准，股息率再高也不追
-        assertThat(advice.getAction()).isEqualTo(DividendAction.HOLD);
+        // 50000.5 × 2.0000 = 100001.00，高于 6.20% 档的 10 万，按阶梯要减回该档
         assertThat(advice.getCurrentAmount()).isEqualByComparingTo("100001");
-        assertThat(advice.getSuggestAmount()).isNull();
-        assertThat(advice.getRemarks()).anyMatch(text -> text.contains("不追高"));
+        assertThat(advice.getAction()).isEqualTo(DividendAction.REDUCE);
+        assertThat(advice.getSuggestAmount()).isEqualByComparingTo("1");
+        assertThat(advice.getRemainingAmount()).isEqualByComparingTo("100000");
     }
 
     /**
@@ -185,7 +187,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("减仓建议金额与剩余金额精确到元")
     void reduceAmountIsYuanPrecise() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY, "2.30"));
         saveHolding("4000.0000");
         saveNetWorth("25.0000");
@@ -203,22 +205,24 @@ class DividendAdviceIntegrationTest {
     }
 
     /**
-     * 减仓会击穿保底分红金额时输出持有，并说明是保底拦下
+     * 股息率跌破阶梯最低档时按住保底档：不足则补到保底，多于此则减回保底，不会清仓
      */
     @Test
-    @DisplayName("减仓会击穿保底金额时输出持有")
-    void holdsWhenFloorBreaks() {
-        savePlan("100000", "60000", "5.00", "3.00");
+    @DisplayName("跌破最低档时按住保底金额")
+    void belowBottomRungHoldsFloor() {
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY, "1.80"));
         saveHolding("5000.0000");
         saveNetWorth("11.0000");
 
         DividendAdviceVO advice = dividendAdviceService.adviseOne(requestOf(null));
 
-        assertThat(advice.getAction()).isEqualTo(DividendAction.HOLD);
-        assertThat(advice.getSuggestAmount()).isNull();
-        assertThat(advice.getFloorProtected()).isTrue();
-        assertThat(advice.getRemarks()).anyMatch(text -> text.contains("减仓会击穿保底"));
+        // 5000 × 11 = 55000，低于保底档 6 万，补到 6 万
+        assertThat(advice.getCurrentAmount()).isEqualByComparingTo("55000");
+        assertThat(advice.getAction()).isEqualTo(DividendAction.ADD);
+        assertThat(advice.getSuggestAmount()).isEqualByComparingTo("5000");
+        assertThat(advice.getRemainingAmount()).isEqualByComparingTo("60000");
+        assertThat(advice.getRemarks()).anyMatch(text -> text.contains("按最低一档的保底金额"));
     }
 
     /**
@@ -227,7 +231,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("股息率过期时不给动作且标注数据日期")
     void staleDividendYieldsNoAction() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(20), "6.20"));
         saveHolding("1000.0000");
         saveNetWorth("50.0000");
@@ -243,32 +247,31 @@ class DividendAdviceIntegrationTest {
     }
 
     /**
-     * 保底高于基准时拒绝保存并指出字段，不静默接受
+     * 金额不随股息率递增时拒绝保存，否则越跌越买会变成越跌越卖
      */
     @Test
-    @DisplayName("保底高于基准时拒绝保存并指出字段")
-    void floorAboveBaseRejected() {
-        DividendParamSaveRequest request = planRequestOf("100000", "150000", "5.00", "3.00");
+    @DisplayName("金额不随股息率递增时拒绝保存")
+    void nonMonotonicAmountRejected() {
+        DividendPlan plan = planOf(rungOf("6.00", "30000"), rungOf("5.00", "60000"));
 
-        assertThatThrownBy(() -> saveDirectly(request))
+        assertThatThrownBy(() -> saveDirectly(plan))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("保底分红金额")
-                .hasMessageContaining("不得高于基准仓位");
+                .hasMessageContaining("股息率越高应持有越多");
         assertThat(strategyParamMapper.selectCountByQuery(QueryWrapper.create()
                 .eq("paramGroup", "DIVIDEND"))).isZero();
     }
 
     /**
-     * 阈值顺序颠倒时拒绝保存，减仓阈值必须低于加仓阈值
+     * 只有一档时拒绝保存，因为表达不了金字塔
      */
     @Test
-    @DisplayName("阈值顺序颠倒时拒绝保存")
-    void reversedBandRejected() {
-        DividendParamSaveRequest request = planRequestOf("100000", "60000", "3.00", "5.00");
+    @DisplayName("只有一档时拒绝保存")
+    void singleRungRejected() {
+        DividendPlan plan = planOf(rungOf("5.00", "60000"));
 
-        assertThatThrownBy(() -> saveDirectly(request))
+        assertThatThrownBy(() -> saveDirectly(plan))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("必须低于加仓阈值");
+                .hasMessageContaining("至少需要 2 档");
     }
 
     /**
@@ -296,7 +299,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("批量建议只纳入持有中的红利基金")
     void batchCoversOnlyHeldDividendFunds() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(1), "2.20"));
         saveHolding("4000.0000");
         saveNetWorth("25.0000");
@@ -318,7 +321,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("无红利持仓时给出可读提示")
     void noHoldingGivesNotice() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
 
         DividendAdvisoryVO result = dividendAdviceService.adviseAll();
 
@@ -333,7 +336,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("非红利品种不接受红利建议")
     void nonDividendRejected() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         varietyService.saveVariety(stockVariety());
 
         DividendAdviceRequest request = new DividendAdviceRequest();
@@ -349,17 +352,17 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("参数保存后可读回")
     void planRoundTrips() {
-        savePlan("120000", "70000", "5.20", "3.10");
+        savePlan();
 
         DividendPlanVO plan = dividendAdviceService.getPlan(DIVIDEND_KEY);
 
         assertThat(plan.getUsable()).isTrue();
         assertThat(plan.getIssues()).isEmpty();
         assertThat(plan.getVarietyKey()).isEqualTo(DIVIDEND_KEY);
-        assertThat(plan.getBaseAmount()).isEqualByComparingTo("120000");
-        assertThat(plan.getFloorAmount()).isEqualByComparingTo("70000");
-        assertThat(plan.getAddYield()).isEqualByComparingTo("5.20");
-        assertThat(plan.getReduceYield()).isEqualByComparingTo("3.10");
+        assertThat(plan.getLadder()).hasSize(3);
+        assertThat(plan.getTopAmount()).isEqualByComparingTo("100000");
+        assertThat(plan.getBottomAmount()).isEqualByComparingTo("60000");
+        assertThat(plan.getLadder().get(0).getYield()).isEqualByComparingTo("6.20");
     }
 
     /**
@@ -368,7 +371,7 @@ class DividendAdviceIntegrationTest {
     @Test
     @DisplayName("手工指定当前金额时以手工值为准")
     void manualAmountOverridesHolding() {
-        savePlan("100000", "60000", "5.00", "3.00");
+        savePlan();
         indexDividendService.saveManual(manualOf(TODAY.minusDays(1), "6.20"));
 
         DividendAdviceVO advice = dividendAdviceService.adviseOne(requestOf(new BigDecimal("40000")));
@@ -380,56 +383,61 @@ class DividendAdviceIntegrationTest {
     }
 
     /**
-     * 保存红利参数
-     *
-     * @param base        基准仓位金额
-     * @param floor       保底分红金额
-     * @param addYield    加仓阈值
-     * @param reduceYield 减仓阈值
+     * 保存一条三档阶梯：6.20% 补到 10 万、5.00% 补到 8 万、3.00% 保底 6 万
      */
-    private void savePlan(String base, String floor, String addYield, String reduceYield) {
-        DividendParamSaveRequest request = planRequestOf(base, floor, addYield, reduceYield);
+    private void savePlan() {
+        dividendPlanResolver.save(defaultLadder());
+    }
+
+    /**
+     * 构造默认阶梯
+     *
+     * @return 参数
+     */
+    private DividendPlan defaultLadder() {
         DividendPlan plan = new DividendPlan();
-        plan.setVarietyKey(request.getVarietyKey());
-        plan.setBaseAmount(request.getBaseAmount());
-        plan.setFloorAmount(request.getFloorAmount());
-        plan.setAddYield(request.getAddYield());
-        plan.setReduceYield(request.getReduceYield());
+        plan.setVarietyKey(DIVIDEND_KEY);
+        plan.setLadder(new ArrayList<>(List.of(
+                rungOf("6.20", "100000"),
+                rungOf("5.00", "80000"),
+                rungOf("3.00", "60000"))));
+        return plan;
+    }
+
+    /**
+     * 构造一档
+     *
+     * @param yield  股息率门槛
+     * @param amount 应持有金额
+     * @return 档位
+     */
+    private DividendLadderRung rungOf(String yield, String amount) {
+        DividendLadderRung rung = new DividendLadderRung();
+        rung.setYield(new BigDecimal(yield));
+        rung.setAmount(new BigDecimal(amount));
+        return rung;
+    }
+
+    /**
+     * 直接走参数装配器保存，用于验证校验拒绝路径
+     *
+     * @param plan 参数
+     */
+    private void saveDirectly(DividendPlan plan) {
         dividendPlanResolver.save(plan);
     }
 
     /**
-     * 直接走参数装配器保存，用于验证校验拒绝路径；成功路径统一用 savePlan
+     * 构造一条指定阶梯的参数，品种固定为本组用例的红利基金
      *
-     * @param request 保存请求
+     * @param rungs 阶梯
+     * @return 参数
      */
-    private void saveDirectly(DividendParamSaveRequest request) {
+    private DividendPlan planOf(DividendLadderRung... rungs) {
         DividendPlan plan = new DividendPlan();
-        plan.setVarietyKey(request.getVarietyKey());
-        plan.setBaseAmount(request.getBaseAmount());
-        plan.setFloorAmount(request.getFloorAmount());
-        plan.setAddYield(request.getAddYield());
-        plan.setReduceYield(request.getReduceYield());
-        dividendPlanResolver.save(plan);
-    }
-
-    /**
-     * 构造参数保存请求
-     *
-     * @param base        基准仓位金额
-     * @param floor       保底分红金额
-     * @param addYield    加仓阈值
-     * @param reduceYield 减仓阈值
-     * @return 保存请求
-     */
-    private DividendParamSaveRequest planRequestOf(String base, String floor, String addYield, String reduceYield) {
-        DividendParamSaveRequest request = new DividendParamSaveRequest();
-        request.setVarietyKey(DIVIDEND_KEY);
-        request.setBaseAmount(new BigDecimal(base));
-        request.setFloorAmount(new BigDecimal(floor));
-        request.setAddYield(new BigDecimal(addYield));
-        request.setReduceYield(new BigDecimal(reduceYield));
-        return request;
+        plan.setVarietyKey(DIVIDEND_KEY);
+        plan.setLadder(new ArrayList<>(List.of(rungs)));
+        return plan;
     }
 
     /**

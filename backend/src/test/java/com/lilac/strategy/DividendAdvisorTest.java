@@ -2,6 +2,7 @@ package com.lilac.strategy;
 
 import com.lilac.enums.DividendAction;
 import com.lilac.strategy.model.DividendDecision;
+import com.lilac.strategy.model.DividendLadderRung;
 import com.lilac.strategy.model.DividendPlan;
 import com.lilac.strategy.model.DividendSignal;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +16,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 红利加减仓规则测试，核心是「金额精确到元」「保底不被击穿」「过期不给动作」
+ * 红利阶梯规则测试，核心是「按股息率命中的档位补差额」「最低档只加不减」「过期不给动作」
  */
 class DividendAdvisorTest {
 
@@ -25,114 +26,142 @@ class DividendAdvisorTest {
     private DividendPlan plan;
 
     /**
-     * 装配计算器与一组基准参数：基准 100000、保底 60000、加仓 5%、减仓 3%
+     * 装配计算器与一条四档金字塔：6.0%→10 万、5.5%→8 万、5.0%→6 万、4.5%→3 万
      */
     @BeforeEach
     void setUp() {
         advisor = new DividendAdvisor();
-        plan = planOf("100000", "60000", "5.00", "3.00");
+        plan = planOf(rung("6.00", "100000"), rung("5.50", "80000"),
+                rung("5.00", "60000"), rung("4.50", "30000"));
     }
 
     /**
-     * 股息率高于加仓阈值时补到基准仓位，金额与差额一致
+     * 股息率命中某档时补到该档金额，差多少补多少，不是固定金额
      */
     @Test
-    @DisplayName("股息率高于加仓阈值补到基准仓位")
-    void addsUpToBaseAmount() {
-        DividendDecision decision = advisor.decide(plan, signalOf("6.20"), new BigDecimal("50000"));
+    @DisplayName("股息率命中档位时补到该档金额")
+    void addsUpToHitRung() {
+        DividendDecision decision = advisor.decide(plan, signalOf("5.60"), new BigDecimal("50000"));
 
+        // 5.60% 命中 5.50% 档（8 万），差额 3 万
         assertThat(decision.getAction()).isEqualTo(DividendAction.ADD);
-        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("50000");
-        assertThat(decision.getTargetAmount()).isEqualByComparingTo("100000");
-        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("100000");
+        assertThat(decision.getHitYield()).isEqualByComparingTo("5.50");
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("80000");
+        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("80000");
         assertThat(decision.getGridSuppressed()).isTrue();
-        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("建议加仓"));
     }
 
     /**
-     * 建议金额取整到元，零头向下截断，加仓后不会超过基准仓位
+     * 阶梯的幂等性：已经是该档金额时不再买，反复跑不会重复投入
+     */
+    @Test
+    @DisplayName("已达该档金额时持有不再加仓")
+    void holdsAtHitRungAmount() {
+        DividendDecision decision = advisor.decide(plan, signalOf("5.60"), new BigDecimal("80000"));
+
+        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
+        assertThat(decision.getSuggestAmount()).isNull();
+        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("一致"));
+    }
+
+    /**
+     * 股息率跳档时直接补到位，不是只补最近一档
+     */
+    @Test
+    @DisplayName("股息率跳档时一次补到位")
+    void jumpsStraightToRung() {
+        DividendDecision decision = advisor.decide(plan, signalOf("6.30"), new BigDecimal("10000"));
+
+        // 6.30% 直接命中最高档 6.0%（10 万），不是逐档 3 万→6 万→8 万→10 万
+        assertThat(decision.getHitYield()).isEqualByComparingTo("6.00");
+        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("90000");
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("100000");
+    }
+
+    /**
+     * 股息率走低时减到该档金额
+     */
+    @Test
+    @DisplayName("股息率走低时减到该档金额")
+    void reducesDownToRung() {
+        DividendDecision decision = advisor.decide(plan, signalOf("4.60"), new BigDecimal("100000"));
+
+        // 4.60% 命中 4.50% 档（3 万），减 7 万
+        assertThat(decision.getAction()).isEqualTo(DividendAction.REDUCE);
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("70000");
+        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getGridSuppressed()).isTrue();
+    }
+
+    /**
+     * 最低一档就是保底：减到它为止，不会更少
+     */
+    @Test
+    @DisplayName("最低档就是保底，减到它为止")
+    void bottomRungIsTheFloor() {
+        DividendDecision decision = advisor.decide(plan, signalOf("4.60"), new BigDecimal("50000"));
+
+        assertThat(decision.getAction()).isEqualTo(DividendAction.REDUCE);
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getFloorProtected()).isTrue();
+        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("已到保底底仓"));
+    }
+
+    /**
+     * 最低档金额不足时仍然加仓，保底不是“不能买”的上限
+     */
+    @Test
+    @DisplayName("最低档金额不足时仍补仓")
+    void bottomRungStillAdds() {
+        DividendDecision decision = advisor.decide(plan, signalOf("4.60"), new BigDecimal("10000"));
+
+        assertThat(decision.getAction()).isEqualTo(DividendAction.ADD);
+        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("20000");
+        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("30000");
+    }
+
+    /**
+     * 股息率跌破阶梯最低门槛时按住最低一档，不会因为股息率极低就要求清仓
+     */
+    @Test
+    @DisplayName("股息率低于最低档时按住最低档")
+    void belowLadderHoldsBottomRung() {
+        DividendDecision decision = advisor.decide(plan, signalOf("4.00"), new BigDecimal("30000"));
+
+        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("30000");
+        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("按最低一档的保底金额"));
+    }
+
+    /**
+     * 建议金额取整到元，零头向下截断，加仓后不会超过该档金额
      */
     @Test
     @DisplayName("建议金额精确到元且向下取整")
     void amountRoundsToYuan() {
-        DividendDecision decision = advisor.decide(plan, signalOf("5.10"), new BigDecimal("50000.789"));
+        DividendDecision decision = advisor.decide(plan, signalOf("5.60"), new BigDecimal("50000.789"));
 
         assertThat(decision.getAction()).isEqualTo(DividendAction.ADD);
-        // 100000 − 50000.789 = 49999.211，向下取整得 49999
-        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("49999");
+        // 80000 − 50000.789 = 29999.211，向下取整得 29999
+        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("29999");
         assertThat(decision.getSuggestAmount().scale()).isZero();
-        assertThat(decision.getRemainingAmount()).isLessThanOrEqualTo(new BigDecimal("100000"));
+        assertThat(decision.getRemainingAmount()).isLessThanOrEqualTo(new BigDecimal("80000"));
     }
 
     /**
-     * 已持有超过基准仓位时，股息率再高也只持有，不追高
+     * 与目标金额的差额不足一元时无实际动作，不会给出 0 元建议
      */
     @Test
-    @DisplayName("已超基准仓位时股息率高也不追")
-    void doesNotChaseAboveBase() {
-        DividendDecision decision = advisor.decide(plan, signalOf("7.00"), new BigDecimal("130000"));
+    @DisplayName("差额不足一元时无动作")
+    void tinyGapYieldsHold() {
+        DividendDecision decision = advisor.decide(plan, signalOf("5.60"), new BigDecimal("79999.60"));
 
         assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
         assertThat(decision.getSuggestAmount()).isNull();
-        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("不追高"));
-    }
-
-    /**
-     * 股息率低于减仓阈值时减到保底分红金额，减仓后剩余不低于保底
-     */
-    @Test
-    @DisplayName("股息率低于减仓阈值减到保底分红金额")
-    void reducesDownToFloor() {
-        DividendDecision decision = advisor.decide(plan, signalOf("2.10"), new BigDecimal("100000"));
-
-        assertThat(decision.getAction()).isEqualTo(DividendAction.REDUCE);
-        assertThat(decision.getSuggestAmount()).isEqualByComparingTo("40000");
-        assertThat(decision.getRemainingAmount()).isEqualByComparingTo("60000");
-        assertThat(decision.getRemainingAmount()).isGreaterThanOrEqualTo(plan.getFloorAmount());
-        assertThat(decision.getFloorProtected()).isTrue();
-        assertThat(decision.getGridSuppressed()).isTrue();
-    }
-
-    /**
-     * 减仓会击穿保底金额时改为持有，并说明是保底护城河拦下
-     */
-    @Test
-    @DisplayName("减仓会击穿保底金额时改为持有")
-    void holdsWhenFloorWouldBreak() {
-        DividendDecision decision = advisor.decide(plan, signalOf("1.50"), new BigDecimal("58000"));
-
-        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
-        assertThat(decision.getSuggestAmount()).isNull();
-        assertThat(decision.getFloorProtected()).isTrue();
-        assertThat(decision.getGridSuppressed()).isFalse();
-        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("减仓会击穿保底"));
-    }
-
-    /**
-     * 持有金额正好等于保底金额时不减仓，边界不能越线
-     */
-    @Test
-    @DisplayName("持有金额等于保底金额时持有")
-    void holdsAtExactFloor() {
-        DividendDecision decision = advisor.decide(plan, signalOf("0.50"), new BigDecimal("60000"));
-
-        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
-        assertThat(decision.getSuggestAmount()).isNull();
-        assertThat(decision.getFloorProtected()).isTrue();
-    }
-
-    /**
-     * 股息率在阈值区间内时维持当前仓位，不给金额
-     */
-    @Test
-    @DisplayName("股息率在阈值区间内维持持有")
-    void holdsInsideBand() {
-        DividendDecision decision = advisor.decide(plan, signalOf("4.00"), new BigDecimal("80000"));
-
-        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
-        assertThat(decision.getSuggestAmount()).isNull();
-        assertThat(decision.getGridSuppressed()).isFalse();
-        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("位于减仓阈值"));
+        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("不足 1 元"));
     }
 
     /**
@@ -187,43 +216,53 @@ class DividendAdvisorTest {
     @Test
     @DisplayName("参数不合法时不给动作")
     void invalidPlanYieldsNoAction() {
-        DividendPlan invalid = planOf("100000", "120000", "5.00", "3.00");
-        invalid.setIssues(List.of("保底分红金额 120000 元不得高于基准仓位 100000 元"));
+        DividendPlan invalid = planOf(rung("5.00", "60000"));
+        invalid.setIssues(List.of("股息率阶梯只有 1 档，至少需要 2 档，否则表达不了越跌越买"));
 
         DividendDecision decision = advisor.decide(invalid, signalOf("6.20"), new BigDecimal("50000"));
 
         assertThat(decision.getAction()).isEqualTo(DividendAction.UNDECIDABLE);
-        assertThat(decision.getRemarks()).contains("保底分红金额 120000 元不得高于基准仓位 100000 元");
+        assertThat(decision.getRemarks()).contains("股息率阶梯只有 1 档，至少需要 2 档，否则表达不了越跌越买");
     }
 
     /**
-     * 与基准仓位的差额不足一元时无实际动作，不会给出 0 元建议
+     * 阶梯乱序传入时按股息率自动排序，不要求调用方预先排好
      */
     @Test
-    @DisplayName("差额不足一元时无动作")
-    void tinyGapYieldsHold() {
-        DividendDecision decision = advisor.decide(plan, signalOf("6.20"), new BigDecimal("99999.60"));
+    @DisplayName("乱序阶梯按股息率自动排序")
+    void unsortedLadderIsNormalized() {
+        DividendPlan unordered = planOf(rung("4.50", "30000"), rung("6.00", "100000"),
+                rung("5.00", "60000"));
 
-        assertThat(decision.getAction()).isEqualTo(DividendAction.HOLD);
-        assertThat(decision.getSuggestAmount()).isNull();
-        assertThat(decision.getRemarks()).anyMatch(text -> text.contains("不足 1 元"));
+        DividendDecision decision = advisor.decide(unordered, signalOf("5.10"), new BigDecimal("10000"));
+
+        assertThat(decision.getHitYield()).isEqualByComparingTo("5.00");
+        assertThat(decision.getTargetAmount()).isEqualByComparingTo("60000");
+    }
+
+    /**
+     * 构造一档
+     *
+     * @param yield  股息率门槛
+     * @param amount 应持有金额
+     * @return 档位
+     */
+    private DividendLadderRung rung(String yield, String amount) {
+        DividendLadderRung rung = new DividendLadderRung();
+        rung.setYield(new BigDecimal(yield));
+        rung.setAmount(new BigDecimal(amount));
+        return rung;
     }
 
     /**
      * 构造参数
      *
-     * @param base         基准仓位金额
-     * @param floor        保底分红金额
-     * @param addYield     加仓阈值
-     * @param reduceYield  减仓阈值
+     * @param rungs 阶梯
      * @return 参数
      */
-    private DividendPlan planOf(String base, String floor, String addYield, String reduceYield) {
+    private DividendPlan planOf(DividendLadderRung... rungs) {
         DividendPlan built = new DividendPlan();
-        built.setBaseAmount(new BigDecimal(base));
-        built.setFloorAmount(new BigDecimal(floor));
-        built.setAddYield(new BigDecimal(addYield));
-        built.setReduceYield(new BigDecimal(reduceYield));
+        built.setLadder(new java.util.ArrayList<>(List.of(rungs)));
         return built;
     }
 
