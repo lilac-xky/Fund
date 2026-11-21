@@ -480,10 +480,12 @@ declare namespace API {
     currentAmount?: number
     /** 减仓后的剩余金额，单位元 */
     remainingAmount?: number
-    /** 基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 保底分红金额，单位元 */
-    floorAmount?: number
+    /** 命中的阶梯档位股息率，单位百分点 */
+    hitYield?: number
+    /** 仓位上限，即最高档的应持有金额，单位元 */
+    topAmount?: number
+    /** 保底底仓，即最低档的应持有金额，单位元 */
+    bottomAmount?: number
     /** 使用的股息率，单位百分点 */
     dividendYield?: number
     /** 股息率数据日期，页面与邮件必须显示 */
@@ -527,14 +529,6 @@ declare namespace API {
     paramUsable?: boolean
     /** 参数问题清单 */
     paramIssues?: string[]
-    /** 基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 保底分红金额，单位元 */
-    floorAmount?: number
-    /** 加仓股息率阈值，单位百分点 */
-    addYield?: number
-    /** 减仓股息率阈值，单位百分点 */
-    reduceYield?: number
     /** 最新股息率数据日期，页面与邮件必须显示 */
     dataDate?: string
     /** 数据最旧已过天数 */
@@ -563,14 +557,8 @@ declare namespace API {
   type DividendParamSaveRequest = {
     /** 品种业务主键，必填：参数按基金分开，没有标的就无处挂靠 */
     varietyKey?: string
-    /** 基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 保底分红金额，单位元，不得高于基准仓位 */
-    floorAmount?: number
-    /** 加仓股息率阈值，单位百分点 */
-    addYield?: number
-    /** 减仓股息率阈值，单位百分点，必须低于加仓阈值 */
-    reduceYield?: number
+    /** 股息率阶梯，至少两档；最低一档即保底底仓 */
+    ladder?: LadderRung1[]
   }
 
   type DividendPlanVO = {
@@ -582,14 +570,12 @@ declare namespace API {
     indexCode?: string
     /** 跟踪指数全称 */
     indexName?: string
-    /** 基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 保底分红金额，单位元 */
-    floorAmount?: number
-    /** 加仓股息率阈值，单位百分点 */
-    addYield?: number
-    /** 减仓股息率阈值，单位百分点 */
-    reduceYield?: number
+    /** 股息率阶梯，按股息率降序 */
+    ladder?: LadderRung[]
+    /** 仓位上限，即最高档的应持有金额，单位元 */
+    topAmount?: number
+    /** 保底底仓，即最低档的应持有金额，单位元 */
+    bottomAmount?: number
     /** 参数是否齐全且自洽 */
     usable?: boolean
     /** 参数问题清单，可用时为空 */
@@ -630,14 +616,12 @@ declare namespace API {
     ageDays?: number
     /** 股息率是否已过期，过期时不给加减仓动作 */
     stale?: boolean
-    /** 这只基金自己的基准仓位金额，单位元 */
-    baseAmount?: number
-    /** 这只基金自己的保底分红金额，单位元 */
-    floorAmount?: number
-    /** 这只基金自己的加仓股息率阈值，单位百分点 */
-    addYield?: number
-    /** 这只基金自己的减仓股息率阈值，单位百分点 */
-    reduceYield?: number
+    /** 这只基金的红利阶梯，按股息率降序 */
+    ladder?: LadderRung[]
+    /** 仓位上限，即最高档的应持有金额，单位元 */
+    topAmount?: number
+    /** 保底底仓，即最低档的应持有金额，单位元 */
+    bottomAmount?: number
     /** 这只基金的参数是否齐全且自洽 */
     paramUsable?: boolean
     /** 参数问题清单，可用时为空 */
@@ -1713,6 +1697,20 @@ declare namespace API {
     manualRequired?: boolean
     /** 结果说明，失败与跳过时给出原因 */
     message?: string
+  }
+
+  type LadderRung = {
+    /** 股息率门槛，单位百分点 */
+    yield?: number
+    /** 该档的应持有金额，单位元 */
+    amount?: number
+  }
+
+  type LadderRung1 = {
+    /** 股息率门槛，单位百分点 */
+    yield?: number
+    /** 该档的应持有金额，单位元 */
+    amount?: number
   }
 
   type LessonAdvisoryVO = {

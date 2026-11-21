@@ -208,73 +208,99 @@
                   </p>
                 </div>
 
-                <!-- 这只基金自己的四个参数 -->
-                <div class="app-dividend-form">
-                  <AppField
-                    label="基准仓位金额"
-                    description="股息率不低于加仓阈值时，把这只补到该金额"
-                    :error="dividendError('baseAmount')"
-                  >
-                    <AppInput
-                      :model-value="dividendDraft.baseAmount"
-                      :numeric="true"
-                      :invalid="Boolean(dividendError('baseAmount'))"
-                      inputmode="decimal"
-                      placeholder="120000"
-                      @update:model-value="dividendDraft.baseAmount = $event"
-                    />
-                    <span class="app-unit">元</span>
-                  </AppField>
-                  <AppField
-                    label="保底分红金额"
-                    description="减仓后的剩余金额不得低于该值"
-                    :error="dividendError('floorAmount')"
-                  >
-                    <AppInput
-                      :model-value="dividendDraft.floorAmount"
-                      :numeric="true"
-                      :invalid="Boolean(dividendError('floorAmount'))"
-                      inputmode="decimal"
-                      placeholder="60000"
-                      @update:model-value="dividendDraft.floorAmount = $event"
-                    />
-                    <span class="app-unit">元</span>
-                  </AppField>
-                  <AppField
-                    label="加仓股息率阈值"
-                    description="这只跟踪的指数股息率不低于该值时补到基准仓位"
-                    :error="dividendError('addYield')"
-                  >
-                    <AppInput
-                      :model-value="dividendDraft.addYield"
-                      :numeric="true"
-                      :invalid="Boolean(dividendError('addYield'))"
-                      inputmode="decimal"
-                      placeholder="5.00"
-                      @update:model-value="dividendDraft.addYield = $event"
-                    />
-                    <span class="app-unit">%</span>
-                  </AppField>
-                  <AppField
-                    label="减仓股息率阈值"
-                    description="股息率不高于该值时减到保底分红金额"
-                    :error="dividendError('reduceYield')"
-                  >
-                    <AppInput
-                      :model-value="dividendDraft.reduceYield"
-                      :numeric="true"
-                      :invalid="Boolean(dividendError('reduceYield'))"
-                      inputmode="decimal"
-                      placeholder="3.00"
-                      @update:model-value="dividendDraft.reduceYield = $event"
-                    />
-                    <span class="app-unit">%</span>
-                  </AppField>
+                <!-- 这只基金自己的股息率阶梯：每档写「这个股息率下该持有多少钱」 -->
+                <div class="app-ladder">
+                  <div class="app-ladder__head">
+                    <div>
+                      <b>股息率阶梯</b>
+                      <span class="app-ladder__tip">
+                        每档写「这个股息率下我该持有多少钱」。股息率越高越便宜，持有越多；
+                        最低一档就是永远不卖的保底底仓。
+                      </span>
+                    </div>
+                    <div class="app-ladder__acts">
+                      <AppButton :disabled="dividendDraft.ladder.length >= 12" @click="addRung">
+                        加一档
+                      </AppButton>
+                      <AppButton :disabled="dividendDraft.ladder.length <= 2" @click="removeRung">
+                        删最低一档
+                      </AppButton>
+                    </div>
+                  </div>
+
+                  <div class="app-ladder__grid">
+                    <div
+                      v-for="(rung, index) in dividendDraft.ladder"
+                      :key="index"
+                      class="app-ladder__row"
+                    >
+                      <span class="app-ladder__no">
+                        {{
+                          index === 0
+                            ? '最高'
+                            : index === dividendDraft.ladder.length - 1
+                              ? '保底'
+                              : index + 1
+                        }}
+                      </span>
+                      <label class="app-ladder__f">
+                        <span>股息率</span>
+                        <input
+                          v-model="rung.yield"
+                          inputmode="decimal"
+                          class="app-ladder__in"
+                          placeholder="5.50"
+                        />
+                        <span class="app-ladder__u">%</span>
+                      </label>
+                      <span class="app-ladder__arw">→</span>
+                      <label class="app-ladder__f">
+                        <span>应持有</span>
+                        <input
+                          v-model="rung.amount"
+                          inputmode="decimal"
+                          class="app-ladder__in app-ladder__in--wide"
+                          placeholder="80000"
+                        />
+                        <span class="app-ladder__u">元</span>
+                      </label>
+                      <button
+                        v-if="dividendDraft.ladder.length > 2"
+                        type="button"
+                        class="app-ladder__del"
+                        @click="removeRungAt(index)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-if="ladderPreview.length" class="app-ladder__preview">
+                    <span class="app-ladder__pv">
+                      仓位上限 {{ fmtMoney(ladderPreview[0]?.amount) }} 元 · 保底
+                      {{ fmtMoney(ladderPreview[ladderPreview.length - 1]?.amount) }} 元
+                    </span>
+                    <span class="app-ladder__pv">
+                      当前股息率
+                      {{
+                        dividendDetail.dividendYield != null
+                          ? fmt(dividendDetail.dividendYield) + '%'
+                          : '未知'
+                      }}
+                      <template v-if="hitPreview">
+                        → 应持有 {{ fmtMoney(hitPreview.amount) }} 元
+                      </template>
+                    </span>
+                  </div>
+
+                  <ul v-if="ladderErrors.length" class="app-ladder__err">
+                    <li v-for="(issue, index) in ladderErrors" :key="index">{{ issue }}</li>
+                  </ul>
                 </div>
 
                 <div class="app-actions">
                   <AppButton variant="primary" :disabled="dividendSaving" @click="saveDividendRow">
-                    {{ dividendSaving ? '保存中…' : '保存这只的参数' }}
+                    {{ dividendSaving ? '保存中…' : '保存这只的阶梯' }}
                   </AppButton>
                   <AppButton
                     :disabled="!dividendDetail.paramUsable && !hasDividendParam"
@@ -289,7 +315,7 @@
 
                 <p class="app-hint">
                   同一指数的不同基金（如 A/C
-                  类，或跟踪同一指数但管理不同的两只）各自持有各自的一套参数：
+                  类，或跟踪同一指数但管理不同的两只）各自持有各自的一套阶梯：
                   改这只不影响那只，金额也不是合计口径。
                 </p>
               </template>
@@ -800,12 +826,17 @@ interface SettingGroupPayload {
   values: Record<string, string>
 }
 
-/** 一只基金的红利参数草稿，数值都按字符串存以复用输入框 */
+/** 阶梯一档的草稿，数值都按字符串存以复用输入框 */
+interface RungDraft {
+  /** 股息率门槛，百分点 */
+  yield: string
+  /** 该档应持有金额，元 */
+  amount: string
+}
+
+/** 一只基金的红利阶梯草稿，按股息率降序 */
 interface DividendDraft {
-  baseAmount: string
-  floorAmount: string
-  addYield: string
-  reduceYield: string
+  ladder: RungDraft[]
 }
 
 /** 一只标的的网格参数草稿 */
@@ -886,16 +917,11 @@ const selectedDividend = ref('')
 /** 选中基金的完整信息，含股息率与它自己的参数 */
 const dividendDetail = ref<DividendWatch | null>(null)
 
-/** 红利参数草稿 */
-const dividendDraft = reactive<DividendDraft>({
-  baseAmount: '',
-  floorAmount: '',
-  addYield: '',
-  reduceYield: '',
-})
+/** 红利阶梯草稿，按股息率降序 */
+const dividendDraft = reactive<DividendDraft>({ ladder: [] })
 
-/** 红利字段级错误，键为字段名 */
-const dividendErrors = reactive<Record<string, string>>({})
+/** 阶梯的校验问题，逐条显示在阶梯下方 */
+const ladderErrors = ref<string[]>([])
 
 /** 红利保存中 */
 const dividendSaving = ref(false)
@@ -1054,23 +1080,46 @@ const changes = computed(() => {
   return list
 })
 
+/** 成对读出阶梯草稿的数值，非法值给 0 便于逐项判断 */
+const parsedLadder = computed(() =>
+  dividendDraft.ladder.map((row) => ({
+    yield: Number(row.yield),
+    amount: Number(row.amount),
+  })),
+)
+
+/** 按股息率降序排好的阶梯，用于预览 */
+const ladderPreview = computed(() =>
+  [...parsedLadder.value]
+    .filter((row) => Number.isFinite(row.yield) && Number.isFinite(row.amount))
+    .sort((left, right) => right.yield - left.yield),
+)
+
+/** 当前股息率命中的那一档，用于告诉使用者「现在该持多少」 */
+const hitPreview = computed(() => {
+  const rows = ladderPreview.value
+  const yieldValue = dividendDetail.value?.dividendYield
+  if (!rows.length || yieldValue == null) {
+    return null
+  }
+  return rows.find((row) => yieldValue >= row.yield) ?? rows[rows.length - 1] ?? null
+})
+
 /** 校验清单，页面右侧逐项显示 */
 const checks = computed(() => {
   const list: Array<{ label: string; pass: boolean }> = []
   if (activeGroup.value === 'DIVIDEND') {
-    const base = Number(dividendDraft.baseAmount)
-    const floor = Number(dividendDraft.floorAmount)
-    const addYield = Number(dividendDraft.addYield)
-    const reduceYield = Number(dividendDraft.reduceYield)
-    list.push({ label: '基准仓位为正数', pass: Number.isFinite(base) && base > 0 })
+    const rows = parsedLadder.value
+    list.push({ label: '至少两档阶梯', pass: rows.length >= 2 })
     list.push({
-      label: '保底分红 ≤ 基准仓位',
-      pass: Number.isFinite(floor) && Number.isFinite(base) && floor <= base,
+      label: '股息率逐档递减',
+      pass: rows.every((row, index) => index === 0 || row.yield < rows[index - 1]!.yield),
     })
     list.push({
-      label: '减仓阈值 < 加仓阈值',
-      pass: Number.isFinite(addYield) && Number.isFinite(reduceYield) && reduceYield < addYield,
+      label: '金额随股息率递增',
+      pass: rows.every((row, index) => index === 0 || row.amount > rows[index - 1]!.amount),
     })
+    list.push({ label: '最低档即保底，金额为正', pass: (rows.at(-1)?.amount ?? 0) > 0 })
   } else if (activeGroup.value === 'GRID') {
     const lower = Number(gridDraft.lowerBound)
     const upper = Number(gridDraft.upperBound)
@@ -1406,13 +1455,13 @@ function gridTagClass(row: GridWatch): string {
 }
 
 /**
- * 判断这只基金是否存过哪怕一条参数，用于区分「未配置」与「配置不全」
+ * 判断这只基金是否存过阶梯，用于区分「未配置」与「配了但有问题」
  *
  * @param row 监控对象
- * @returns 存过任一条返回 true
+ * @returns 存过阶梯返回 true
  */
 function hasRowParam(row: DividendWatch): boolean {
-  return Boolean(row.baseAmount ?? row.floorAmount ?? row.addYield ?? row.reduceYield)
+  return Boolean(row.ladder?.length)
 }
 
 /**
@@ -1479,17 +1528,77 @@ async function loadWatch(): Promise<void> {
  */
 function fillDividendDetail(row: DividendWatch): void {
   dividendDetail.value = row
-  Object.keys(dividendErrors).forEach((key) => delete dividendErrors[key])
+  ladderErrors.value = []
   dividendSavedNote.value = ''
   manualOpen.value = false
   manualBlocked.value = ''
   manualDraft.dataDate = ''
   manualDraft.dividendYield = ''
   manualDraft.indexName = row.indexName ?? ''
-  dividendDraft.baseAmount = toText(row.baseAmount)
-  dividendDraft.floorAmount = toText(row.floorAmount)
-  dividendDraft.addYield = toText(row.addYield)
-  dividendDraft.reduceYield = toText(row.reduceYield)
+  const ladder = row.ladder ?? []
+  if (ladder.length) {
+    dividendDraft.ladder = ladder.map((rung) => ({
+      yield: toText(rung.yield),
+      amount: toText(rung.amount),
+    }))
+    return
+  }
+  // 没配过时给一条以当前股息率为中心的三档起步阶梯，让使用者有东西可改
+  dividendDraft.ladder = defaultLadder(row.dividendYield)
+}
+
+/**
+ * 给出三档起步阶梯：以当前股息率为中间档，上下各推一档
+ *
+ * @param currentYield 当前股息率，缺数据时用 5% 兜底
+ * @returns 降序的三档草稿
+ */
+function defaultLadder(currentYield?: number): RungDraft[] {
+  const mid = currentYield != null && currentYield > 0 ? currentYield : 5
+  return [
+    { yield: (mid + 0.6).toFixed(2), amount: '100000' },
+    { yield: mid.toFixed(2), amount: '80000' },
+    { yield: Math.max(mid - 1.5, 0.5).toFixed(2), amount: '50000' },
+  ]
+}
+
+/**
+ * 在最高档之上新增一档，股息率 +0.5、金额 +2 万，保证仍满足单调
+ *
+ * @returns 无
+ */
+function addRung(): void {
+  const rows = dividendDraft.ladder
+  const top = rows[0]
+  const topYield = Number(top?.yield ?? 5)
+  const topAmount = Number(top?.amount ?? 100000)
+  rows.unshift({
+    yield: (topYield + 0.5).toFixed(2),
+    amount: String(Math.round(topAmount + 20000)),
+  })
+}
+
+/**
+ * 删除最低一档，保底随之上移
+ *
+ * @returns 无
+ */
+function removeRung(): void {
+  if (dividendDraft.ladder.length > 2) {
+    dividendDraft.ladder.pop()
+  }
+}
+
+/**
+ * 删除指定档位
+ *
+ * @param index 下标
+ * @returns 无
+ */
+function removeRungAt(index: number): void {
+  if (dividendDraft.ladder.length > 2) {
+    dividendDraft.ladder.splice(index, 1)
+  }
 }
 
 /**
@@ -1552,16 +1661,6 @@ async function loadGridLines(varietyKey: string): Promise<void> {
 }
 
 /**
- * 取红利字段错误
- *
- * @param field 字段名
- * @returns 错误文案，无错误返回空串
- */
-function dividendError(field: string): string {
-  return dividendErrors[field] ?? ''
-}
-
-/**
  * 取网格字段错误
  *
  * @param field 字段名
@@ -1581,53 +1680,42 @@ async function saveDividendRow(): Promise<void> {
   if (!target?.varietyKey) {
     return
   }
-  Object.keys(dividendErrors).forEach((key) => delete dividendErrors[key])
-  const base = Number(dividendDraft.baseAmount)
-  const floor = Number(dividendDraft.floorAmount)
-  const addYield = Number(dividendDraft.addYield)
-  const reduceYield = Number(dividendDraft.reduceYield)
-  if (!Number.isFinite(base) || base <= 0) {
-    dividendErrors.baseAmount = '基准仓位必须为正数'
+  ladderErrors.value = []
+  const rows = parsedLadder.value
+  if (rows.length < 2) {
+    ladderErrors.value.push('至少要两档，否则表达不了越跌越买')
   }
-  if (!Number.isFinite(floor) || floor <= 0) {
-    dividendErrors.floorAmount = '保底分红金额必须为正数'
-  } else if (Number.isFinite(base) && floor > base) {
-    dividendErrors.floorAmount = '保底分红金额不得高于基准仓位'
-  }
-  if (!Number.isFinite(addYield) || addYield <= 0) {
-    dividendErrors.addYield = '加仓阈值必须为正数'
-  }
-  if (!Number.isFinite(reduceYield) || reduceYield <= 0) {
-    dividendErrors.reduceYield = '减仓阈值必须为正数'
-  } else if (Number.isFinite(addYield) && reduceYield >= addYield) {
-    dividendErrors.reduceYield = '减仓阈值必须低于加仓阈值'
-  }
-  if (Object.keys(dividendErrors).length > 0) {
+  rows.forEach((row, index) => {
+    if (!Number.isFinite(row.yield) || row.yield <= 0 || row.yield > 100) {
+      ladderErrors.value.push(`第 ${index + 1} 档的股息率应在 0~100 之间`)
+    }
+    if (!Number.isFinite(row.amount) || row.amount <= 0) {
+      ladderErrors.value.push(`第 ${index + 1} 档的应持有金额必须为正数`)
+    }
+    if (index > 0 && row.yield >= rows[index - 1]!.yield) {
+      ladderErrors.value.push(`第 ${index + 1} 档的股息率必须低于上一档`)
+    }
+    if (index > 0 && row.amount <= rows[index - 1]!.amount) {
+      ladderErrors.value.push(`第 ${index + 1} 档的应持有金额必须高于上一档（股息率越高持有越多）`)
+    }
+  })
+  if (ladderErrors.value.length > 0) {
     return
   }
   dividendSaving.value = true
   try {
     await saveDividendPlanApi({
       varietyKey: target.varietyKey,
-      baseAmount: base,
-      floorAmount: floor,
-      addYield,
-      reduceYield,
+      ladder: rows.map((row) => ({ yield: row.yield, amount: row.amount })),
     })
-    dividendSavedNote.value = `已保存 ${target.varietyName ?? target.varietyKey} 的参数`
-    ElMessage.success('红利参数已保存')
+    dividendSavedNote.value = `已保存 ${target.varietyName ?? target.varietyKey} 的阶梯`
+    ElMessage.success('股息率阶梯已保存')
     await loadWatch()
   } catch (error) {
-    // 后端也会校验，把它的问题逐条摊到字段上，避免只弹一条笼统提示
+    // 后端的校验文案更具体，原样接到阶梯下方，不只弹一条笼统提示
     const message = error instanceof Error ? error.message : ''
-    if (message.includes('基准仓位')) {
-      dividendErrors.baseAmount = message
-    } else if (message.includes('保底')) {
-      dividendErrors.floorAmount = message
-    } else if (message.includes('加仓')) {
-      dividendErrors.addYield = message
-    } else if (message.includes('减仓')) {
-      dividendErrors.reduceYield = message
+    if (message) {
+      ladderErrors.value.push(message)
     }
   } finally {
     dividendSaving.value = false
@@ -1809,9 +1897,10 @@ async function clearGridRow(): Promise<void> {
 }
 
 watch(
-  () => dividendDraft.baseAmount,
+  () => dividendDraft.ladder.map((row) => `${row.yield}|${row.amount}`).join(','),
   () => {
-    delete dividendErrors.floorAmount
+    // 改过阶梯就清掉上一次的报错，避免已修好的问题一直挂着
+    ladderErrors.value = []
   },
 )
 
@@ -2141,6 +2230,150 @@ onMounted(() => {
 /* ── 逐只参数表单 ── */
 .app-dividend-form {
   margin-top: 4px;
+}
+
+/* ── 股息率阶梯 ── */
+.app-ladder {
+  margin-top: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--s2);
+}
+
+.app-ladder__head {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.app-ladder__head b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--t1);
+}
+
+.app-ladder__tip {
+  display: block;
+  max-width: 560px;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--t4);
+}
+
+.app-ladder__acts {
+  display: flex;
+  flex: none;
+  gap: 7px;
+  margin-left: auto;
+}
+
+.app-ladder__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.app-ladder__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.app-ladder__no {
+  flex: none;
+  width: 34px;
+  padding-bottom: 8px;
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--t4);
+}
+
+.app-ladder__f {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--t4);
+}
+
+.app-ladder__in {
+  width: 72px;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid var(--hair-2);
+  border-radius: 7px;
+  background: var(--inp-bg);
+  color: var(--t1);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.app-ladder__in--wide {
+  width: 104px;
+}
+
+.app-ladder__in:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-glow);
+}
+
+.app-ladder__u {
+  font-size: 10.5px;
+  color: var(--t4);
+}
+
+.app-ladder__arw {
+  padding-bottom: 9px;
+  font-size: 10px;
+  color: var(--t4);
+}
+
+.app-ladder__del {
+  margin-bottom: 5px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--t4);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.app-ladder__del:hover {
+  background: var(--s3);
+  color: var(--acc);
+}
+
+.app-ladder__preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--hair);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+}
+
+.app-ladder__pv {
+  white-space: nowrap;
+}
+
+.app-ladder__err {
+  margin: 9px 0 0;
+  padding-left: 16px;
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--acc);
 }
 
 .app-actions {
