@@ -58,6 +58,11 @@ public class TaskProperties {
     private String eveningRetryCron = "0 */10 20-22 * * MON-FRI";
 
     /**
+     * 股息率刷新 cron，红利加减仓依赖指数股息率，过期就取不到数
+     */
+    private String dividendRefreshCron = "0 10 8 * * MON-FRI";
+
+    /**
      * 额外节假日清单，格式 yyyy-MM-dd，周末之外的休市日在此补充
      */
     private List<String> holidays = new ArrayList<>();

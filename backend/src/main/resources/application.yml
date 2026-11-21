@@ -55,6 +55,8 @@ fund:
     sweep-cron: "0 5 * * * *"
     # 晚间净值重试 cron，20:00 之后每隔一段时间重看一次净值是否到齐，齐了立刻发
     evening-retry-cron: "0 */10 20-22 * * MON-FRI"
+    # 股息率刷新 cron，红利加减仓依赖指数股息率，每天开盘前自动抓一次
+    dividend-refresh-cron: "0 10 8 * * MON-FRI"
     # 额外节假日清单，周末由代码判断，其余休市日在此补充
     holidays: []
     points:

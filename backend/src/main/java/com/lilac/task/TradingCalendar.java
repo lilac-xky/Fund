@@ -94,6 +94,16 @@ public class TradingCalendar {
     }
 
     /**
+     * 股息率刷新 cron，写错时退回每个交易日开盘前刷新一次
+     *
+     * @return 六段 cron 表达式
+     */
+    public String dividendRefreshCron() {
+        String normalized = normalizeCron("DIVIDEND_REFRESH", taskProperties.getDividendRefreshCron());
+        return normalized == null ? "0 10 8 * * MON-FRI" : normalized;
+    }
+
+    /**
      * 判断是否为交易日，周末与自行维护的节假日清单都不算
      *
      * @param date 日期
