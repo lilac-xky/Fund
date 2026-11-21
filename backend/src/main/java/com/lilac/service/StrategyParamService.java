@@ -3,6 +3,7 @@ package com.lilac.service;
 import com.lilac.domain.dto.param.ParamQueryRequest;
 import com.lilac.domain.dto.param.ParamSaveRequest;
 import com.lilac.domain.vo.StrategyParamVO;
+import com.lilac.enums.ParamGroup;
 
 import java.util.List;
 
@@ -26,4 +27,13 @@ public interface StrategyParamService {
      * @return 是否成功
      */
     boolean saveParam(ParamSaveRequest request);
+
+    /**
+     * 按「分组 + 参数名」删除一条参数，不存在时返回 false
+     *
+     * @param group 分组
+     * @param key   参数名
+     * @return 是否真的删掉了一行
+     */
+    boolean deleteParam(ParamGroup group, String key);
 }

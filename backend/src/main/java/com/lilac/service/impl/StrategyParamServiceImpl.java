@@ -6,6 +6,7 @@ import com.lilac.domain.dto.param.ParamSaveRequest;
 import com.lilac.domain.entity.StrategyParam;
 import com.lilac.domain.vo.StrategyParamVO;
 import com.lilac.enums.HttpsCodeEnum;
+import com.lilac.enums.ParamGroup;
 import com.lilac.mapper.StrategyParamMapper;
 import com.lilac.service.StrategyParamService;
 import com.lilac.utils.ThrowUtils;
@@ -63,5 +64,22 @@ public class StrategyParamServiceImpl implements StrategyParamService {
         // 沿用已存在行的主键，否则会写成新行并撞上分组内唯一索引
         param.setId(existing.get(0).getId());
         return strategyParamMapper.update(param) > 0;
+    }
+
+    /**
+     * 按「分组 + 参数名」删除一条参数，用于标的被清仓后清除它的专属配置
+     *
+     * @param group 分组
+     * @param key   参数名
+     * @return 是否真的删掉了一行
+     */
+    @Override
+    public boolean deleteParam(ParamGroup group, String key) {
+        if (group == null || key == null || key.isBlank()) {
+            return false;
+        }
+        return strategyParamMapper.deleteByQuery(QueryWrapper.create()
+                .eq(StrategyParam::getParamGroup, group)
+                .eq(StrategyParam::getParamKey, key)) > 0;
     }
 }

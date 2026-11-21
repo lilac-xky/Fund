@@ -10,16 +10,9 @@ import com.lilac.domain.vo.GridWatchVO;
 import java.util.List;
 
 /**
- * 网格到价提醒业务接口，含参数读写、逐只提醒、监控对象与试算
+ * 网格到价提醒业务接口，参数按标的各存一套，先选标的再配格子
  */
 public interface GridAdviceService {
-
-    /**
-     * 读取通用网格参数与划格结果，尚未按标的分开配置时作为兜底
-     *
-     * @return 参数视图
-     */
-    GridPlanVO getPlan();
 
     /**
      * 读取指定标的的网格参数与划格结果
@@ -38,14 +31,22 @@ public interface GridAdviceService {
     GridPlanVO savePlan(GridParamSaveRequest request);
 
     /**
-     * 对全部持有中的场内 ETF 逐只判断是否触及网格线，每只用它自己的参数
+     * 清除指定标的的网格参数，回到未配置状态
+     *
+     * @param varietyKey 品种业务主键
+     * @return 是否清掉了至少一条
+     */
+    boolean removePlan(String varietyKey);
+
+    /**
+     * 对全部持有中的标的逐只判断是否触及网格线，每只用它自己的参数
      *
      * @return 提醒总览
      */
     GridAdvisoryVO adviseAll();
 
     /**
-     * 列出网格的监控对象，说明每只 ETF 用的是哪套格子
+     * 列出网格的监控对象，说明每只标的用的是哪套格子、当前价落在区间内外
      *
      * @return 监控对象列表
      */
@@ -60,9 +61,10 @@ public interface GridAdviceService {
     GridAdviceVO adviseOne(GridAdviceRequest request);
 
     /**
-     * 列出通用参数下的网格线，供页面展示划格结果
+     * 列出指定标的的网格线，供页面展示划格结果
      *
+     * @param varietyKey 品种业务主键
      * @return 网格线价格，按升序
      */
-    List<java.math.BigDecimal> lines();
+    List<java.math.BigDecimal> lines(String varietyKey);
 }

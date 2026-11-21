@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 红利策略参数装配器，负责从 strategy_param 读值、校验并识别不合法组合
+ * 红利策略参数装配器，按标的读写 strategy_param 的 DIVIDEND 分组并校验，兼容尚未拆分的全局旧键
  */
 @Slf4j
 @Component
@@ -34,34 +34,103 @@ public class DividendPlanResolver {
     private StrategyParamService strategyParamService;
 
     /**
-     * 读取并校验当前红利参数，缺项与非法值都记入问题清单
+     * 读取指定标的的红利参数，该标的没配时回落到旧版完整参数并说明来源
      *
+     * @param varietyKey  品种业务主键
+     * @param varietyName 品种名称，可为 null
      * @return 参数，含问题清单
      */
-    public DividendPlan resolve() {
-        DividendPlan plan = fill(readValues());
+    public DividendPlan resolveFor(String varietyKey, String varietyName) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要配置的标的");
+        Map<String, String> values = readValues();
+        DividendPlan plan = fill(values, varietyKey);
+        plan.setVarietyKey(varietyKey);
+        plan.setVarietyName(varietyName);
+        if (isEmpty(plan)) {
+            DividendPlan legacy = fill(values, null);
+            legacy.setVarietyKey(varietyKey);
+            legacy.setVarietyName(varietyName);
+            // 旧键只作迁移兜底：必须四条齐全才算「真的配过」，半套旧值不参与，避免凭空长出一半参数
+            if (legacy.complete()) {
+                legacy.getNotes().add("该标的尚未单独配置，正在沿用旧版的全红利共用参数，请按这只基金重新设定");
+                return legacy;
+            }
+            if (!isEmpty(legacy)) {
+                plan.getNotes().add("库内还留着旧版的全红利共用参数，但未配全，本次不采用；请按这只基金重新设定");
+            }
+        }
         plan.setIssues(validate(plan));
         return plan;
     }
 
     /**
-     * 保存一组红利参数，非法时拒绝保存并指出字段
+     * 列出全部已按标的配置过的红利参数，供页面逐只编辑
      *
-     * @param plan 待保存参数
+     * @return 参数列表，按品种主键排序
+     */
+    public List<DividendPlan> listAll() {
+        Map<String, String> values = readValues();
+        Map<String, DividendPlan> byVariety = new LinkedHashMap<>();
+        values.keySet().stream()
+                .map(DividendParamKey::varietyKeyOf)
+                .filter(key -> key != null)
+                .distinct()
+                .sorted()
+                .forEach(key -> {
+                    DividendPlan plan = fill(values, key);
+                    plan.setVarietyKey(key);
+                    plan.setIssues(validate(plan));
+                    byVariety.put(key, plan);
+                });
+        return new ArrayList<>(byVariety.values());
+    }
+
+    /**
+     * 保存某只标的的红利参数，非法时拒绝保存并指出字段
+     *
+     * @param plan 待保存参数，必须带 varietyKey
      * @return 保存后的参数
      */
     public DividendPlan save(DividendPlan plan) {
+        ThrowUtils.throwIf(plan == null || plan.getVarietyKey() == null || plan.getVarietyKey().isBlank(),
+                HttpsCodeEnum.PARAMS_ERROR, "必须指定要配置的标的");
         List<String> issues = validate(plan);
         plan.setIssues(issues);
         // 参数进了库就会长期参与建议，不合法时宁可拒绝保存也不让脏值落地
         ThrowUtils.throwIf(!issues.isEmpty(), HttpsCodeEnum.PARAMS_ERROR, String.join("；", issues));
-        writeParam(DividendParamKey.BASE_AMOUNT, plan.getBaseAmount(), DividendParamKey.BASE_AMOUNT_DESC);
-        writeParam(DividendParamKey.FLOOR_AMOUNT, plan.getFloorAmount(), DividendParamKey.FLOOR_AMOUNT_DESC);
-        writeParam(DividendParamKey.ADD_YIELD, plan.getAddYield(), DividendParamKey.ADD_YIELD_DESC);
-        writeParam(DividendParamKey.REDUCE_YIELD, plan.getReduceYield(), DividendParamKey.REDUCE_YIELD_DESC);
-        log.info("红利参数已保存 基准={} 保底={} 加仓阈值={} 减仓阈值={}",
-                plan.getBaseAmount(), plan.getFloorAmount(), plan.getAddYield(), plan.getReduceYield());
+        String varietyKey = plan.getVarietyKey().trim();
+        writeParam(DividendParamKey.keyOf(varietyKey, DividendParamKey.BASE_AMOUNT), plan.getBaseAmount(),
+                DividendParamKey.BASE_AMOUNT_DESC);
+        writeParam(DividendParamKey.keyOf(varietyKey, DividendParamKey.FLOOR_AMOUNT), plan.getFloorAmount(),
+                DividendParamKey.FLOOR_AMOUNT_DESC);
+        writeParam(DividendParamKey.keyOf(varietyKey, DividendParamKey.ADD_YIELD), plan.getAddYield(),
+                DividendParamKey.ADD_YIELD_DESC);
+        writeParam(DividendParamKey.keyOf(varietyKey, DividendParamKey.REDUCE_YIELD), plan.getReduceYield(),
+                DividendParamKey.REDUCE_YIELD_DESC);
+        log.info("红利参数已保存 标的={} 基准={} 保底={} 加仓阈值={} 减仓阈值={}",
+                varietyKey, plan.getBaseAmount(), plan.getFloorAmount(), plan.getAddYield(), plan.getReduceYield());
         return plan;
+    }
+
+    /**
+     * 删除某只标的的红利参数，标的被清仓后不再参与建议时用它
+     *
+     * @param varietyKey 品种业务主键
+     * @return 实际删除的条数
+     */
+    public int remove(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要清除的标的");
+        int removed = 0;
+        for (String field : DividendParamKey.FIELDS) {
+            if (strategyParamService.deleteParam(ParamGroup.DIVIDEND,
+                    DividendParamKey.keyOf(varietyKey.trim(), field))) {
+                removed++;
+            }
+        }
+        log.info("红利参数已清除 标的={} 删除 {} 条", varietyKey, removed);
+        return removed;
     }
 
     /**
@@ -95,7 +164,7 @@ public class DividendPlanResolver {
     }
 
     /**
-     * 读库内四条红利参数
+     * 读库内全部 DIVIDEND 参数，同时包含按标的存放的键与全局旧键
      *
      * @return 参数名到参数值的映射
      */
@@ -112,18 +181,41 @@ public class DividendPlanResolver {
     }
 
     /**
-     * 把字符串参数转成数值，无法解析时留空交给校验说明
+     * 把字符串参数转成数值，品种主键为空时读全局旧键
      *
-     * @param values 参数映射
+     * @param values     参数映射
+     * @param varietyKey 品种业务主键，为 null 读全局旧键
      * @return 参数
      */
-    private DividendPlan fill(Map<String, String> values) {
+    private DividendPlan fill(Map<String, String> values, String varietyKey) {
         DividendPlan plan = new DividendPlan();
-        plan.setBaseAmount(decimal(values.get(DividendParamKey.BASE_AMOUNT)));
-        plan.setFloorAmount(decimal(values.get(DividendParamKey.FLOOR_AMOUNT)));
-        plan.setAddYield(decimal(values.get(DividendParamKey.ADD_YIELD)));
-        plan.setReduceYield(decimal(values.get(DividendParamKey.REDUCE_YIELD)));
+        plan.setBaseAmount(decimal(values.get(keyFor(varietyKey, DividendParamKey.BASE_AMOUNT))));
+        plan.setFloorAmount(decimal(values.get(keyFor(varietyKey, DividendParamKey.FLOOR_AMOUNT))));
+        plan.setAddYield(decimal(values.get(keyFor(varietyKey, DividendParamKey.ADD_YIELD))));
+        plan.setReduceYield(decimal(values.get(keyFor(varietyKey, DividendParamKey.REDUCE_YIELD))));
         return plan;
+    }
+
+    /**
+     * 是否一条参数都没读到
+     *
+     * @param plan 参数
+     * @return 全为空返回 true
+     */
+    private boolean isEmpty(DividendPlan plan) {
+        return plan.getBaseAmount() == null && plan.getFloorAmount() == null
+                && plan.getAddYield() == null && plan.getReduceYield() == null;
+    }
+
+    /**
+     * 按品种主键拼参数键，空主键时返回全局旧键
+     *
+     * @param varietyKey 品种业务主键
+     * @param field      字段名
+     * @return 参数键
+     */
+    private String keyFor(String varietyKey, String field) {
+        return varietyKey == null ? field : DividendParamKey.keyOf(varietyKey, field);
     }
 
     /**

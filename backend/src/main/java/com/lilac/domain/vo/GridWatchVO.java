@@ -5,10 +5,11 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 网格监控对象，说明这套参数管的是哪只标的、用哪种价格口径判断
+ * 网格监控对象，一只持仓标的加它自己的格子，带上当前价以便直接判断格子在不在合理区间
  */
 @Data
 public class GridWatchVO implements Serializable {
@@ -54,6 +55,21 @@ public class GridWatchVO implements Serializable {
     private String proxySymbol;
 
     /**
+     * 当前价，单位元；取不到时为 null
+     */
+    private BigDecimal currentPrice;
+
+    /**
+     * 当前价的数据日期
+     */
+    private LocalDate priceDate;
+
+    /**
+     * 当前价的来源说明
+     */
+    private String priceSource;
+
+    /**
      * 该标的的价格下界，单位元
      */
     private BigDecimal lowerBound;
@@ -84,7 +100,7 @@ public class GridWatchVO implements Serializable {
     private List<String> paramIssues;
 
     /**
-     * 参数提示，如「正在沿用通用参数」
+     * 参数提示，如「当前价已高于上界」
      */
     private List<String> paramNotes;
 
@@ -94,9 +110,19 @@ public class GridWatchVO implements Serializable {
     private Integer lineCount;
 
     /**
-     * 是否已单独配置；false 表示仍在沿用通用参数
+     * 是否已单独配置；false 表示还没配过，网格对它不生效
      */
     private Boolean customized;
+
+    /**
+     * 当前价相对格子区间的状态 INSIDE / ABOVE / BELOW，未配置时为 null
+     */
+    private String position;
+
+    /**
+     * 区间状态说明，如「当前价已高于网格上界，需重新划格」
+     */
+    private String positionNote;
 
     private static final long serialVersionUID = 1L;
 }

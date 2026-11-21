@@ -20,7 +20,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 网格到价提醒接口，含参数读写、逐只提醒与划格结果
+ * 网格到价提醒接口，参数按标的读写，不再提供全局兜底
  */
 @RestController
 @RequestMapping("/grid")
@@ -28,14 +28,6 @@ public class GridController {
 
     @Resource
     private GridAdviceService gridAdviceService;
-
-    /**
-     * 读取通用网格参数与划格结果，未按标的分开配置时作为兜底
-     */
-    @GetMapping("/plan")
-    public Result<GridPlanVO> plan() {
-        return Result.success(gridAdviceService.getPlan());
-    }
 
     /**
      * 读取指定标的的网格参数，页面逐只编辑时用它
@@ -54,7 +46,15 @@ public class GridController {
     }
 
     /**
-     * 列出网格的监控对象，说明每只 ETF 用的是哪套格子
+     * 清除指定标的的网格参数，回到未配置状态
+     */
+    @PostMapping("/plan/remove")
+    public Result<Boolean> removePlan(@RequestBody GridParamSaveRequest request) {
+        return Result.success(gridAdviceService.removePlan(request == null ? null : request.getVarietyKey()));
+    }
+
+    /**
+     * 列出网格的监控对象，说明每只标的用的是哪套格子、当前价落在区间内外
      */
     @GetMapping("/watch")
     public Result<List<GridWatchVO>> watch() {
@@ -62,7 +62,7 @@ public class GridController {
     }
 
     /**
-     * 对全部持有中的场内 ETF 逐只判断是否触及网格线
+     * 对全部持有中的标的逐只判断是否触及网格线
      */
     @PostMapping("/list")
     public Result<GridAdvisoryVO> list() {
@@ -78,10 +78,10 @@ public class GridController {
     }
 
     /**
-     * 列出当前参数下的网格线
+     * 列出指定标的的网格线
      */
     @GetMapping("/lines")
-    public Result<List<BigDecimal>> lines() {
-        return Result.success(gridAdviceService.lines());
+    public Result<List<BigDecimal>> lines(@RequestParam("varietyKey") String varietyKey) {
+        return Result.success(gridAdviceService.lines(varietyKey));
     }
 }

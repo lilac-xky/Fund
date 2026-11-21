@@ -6,10 +6,15 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 
 /**
- * 红利策略参数保存请求，金额单位元，股息率阈值为百分点
+ * 红利策略参数保存请求，按标的各存一套，金额单位元，股息率阈值为百分点
  */
 @Data
 public class DividendParamSaveRequest implements Serializable {
+
+    /**
+     * 品种业务主键，必填：参数按基金分开，没有标的就无处挂靠
+     */
+    private String varietyKey;
 
     /**
      * 基准仓位金额，单位元

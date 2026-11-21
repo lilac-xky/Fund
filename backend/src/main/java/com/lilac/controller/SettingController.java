@@ -27,7 +27,7 @@ public class SettingController {
     private SettingService settingService;
 
     /**
-     * 读取参数设置页的全部数据，含四个分组、邮件状态与生效说明
+     * 读取参数设置页的全部数据，含债券、指标、警示三组、邮件状态与生效说明
      */
     @GetMapping("/overview")
     public Result<SettingOverviewVO> overview() {

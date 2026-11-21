@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 网格策略参数装配器，按标的读写 strategy_param 的 GRID 分组，并兼容尚未拆分的全局旧键
+ * 网格策略参数装配器，按标的读写 strategy_param 的 GRID 分组并校验，不再提供全局兜底
  */
 @Slf4j
 @Component
@@ -34,47 +34,24 @@ public class GridPlanResolver {
     private StrategyParamService strategyParamService;
 
     /**
-     * 读取全局旧参数，供尚未按标的配置时的兜底与迁移提示
+     * 读取指定标的的网格参数，没配过时返回空参数并由问题清单说明
      *
-     * @return 参数，含问题清单
-     */
-    public GridPlan resolve() {
-        GridPlan plan = fill(readValues(), null);
-        plan.setIssues(validate(plan));
-        return plan;
-    }
-
-    /**
-     * 读取指定标的的网格参数，该标的没配时回落到全局旧参数并说明来源
-     *
-     * @param varietyKey 品种业务主键
+     * @param varietyKey  品种业务主键
      * @param varietyName 品种名称，可为 null
      * @return 参数，含问题清单
      */
     public GridPlan resolveFor(String varietyKey, String varietyName) {
-        Map<String, String> values = readValues();
-        GridPlan plan = fill(values, varietyKey);
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要配置的标的");
+        GridPlan plan = fill(readValues(), varietyKey);
         plan.setVarietyKey(varietyKey);
         plan.setVarietyName(varietyName);
-        if (plan.getLowerBound() == null && plan.getUpperBound() == null
-                && plan.getStep() == null && plan.getAmountPerGrid() == null) {
-            // 该标的还没配过，用全局旧参数顶上，并明确告诉使用者这是共用的
-            plan = fill(values, null);
-            plan.setVarietyKey(varietyKey);
-            plan.setVarietyName(varietyName);
-            plan.setIssues(validate(plan));
-            if (plan.complete()) {
-                // 提示进 notes 而不是 issues，否则会被当成参数不可用
-                plan.getNotes().add("该标的尚未单独配置，正在沿用未分标的的通用网格参数");
-            }
-            return plan;
-        }
         plan.setIssues(validate(plan));
         return plan;
     }
 
     /**
-     * 列出全部已单独配置过的网格参数，供页面逐只编辑
+     * 列出全部已配置过的网格参数，供页面逐只编辑
      *
      * @return 参数列表，按品种主键排序
      */
@@ -123,22 +100,22 @@ public class GridPlanResolver {
     }
 
     /**
-     * 保存全局旧参数，保留给尚未迁移的调用方与参数页的兼容入口
+     * 删除某只标的的网格参数，标的清仓后不再参与提醒时用它
      *
-     * @param plan 待保存参数
-     * @return 保存后的参数
+     * @param varietyKey 品种业务主键
+     * @return 实际删除的条数
      */
-    public GridPlan saveGlobal(GridPlan plan) {
-        List<String> issues = validate(plan);
-        plan.setIssues(issues);
-        ThrowUtils.throwIf(!issues.isEmpty(), HttpsCodeEnum.PARAMS_ERROR, String.join("；", issues));
-        writeParam(GridParamKey.LOWER_BOUND, plan.getLowerBound(), GridParamKey.LOWER_BOUND_DESC);
-        writeParam(GridParamKey.UPPER_BOUND, plan.getUpperBound(), GridParamKey.UPPER_BOUND_DESC);
-        writeParam(GridParamKey.STEP, plan.getStep(), GridParamKey.STEP_DESC);
-        writeParam(GridParamKey.AMOUNT_PER_GRID, plan.getAmountPerGrid(), GridParamKey.AMOUNT_PER_GRID_DESC);
-        log.info("通用网格参数已保存 下界={} 上界={} 格子大小={} 每格金额={}",
-                plan.getLowerBound(), plan.getUpperBound(), plan.getStep(), plan.getAmountPerGrid());
-        return plan;
+    public int remove(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要清除的标的");
+        int removed = 0;
+        for (String field : GridParamKey.FIELDS) {
+            if (strategyParamService.deleteParam(ParamGroup.GRID, GridParamKey.keyOf(varietyKey.trim(), field))) {
+                removed++;
+            }
+        }
+        log.info("网格参数已清除 标的={} 删除 {} 条", varietyKey, removed);
+        return removed;
     }
 
     /**
@@ -175,7 +152,7 @@ public class GridPlanResolver {
     }
 
     /**
-     * 读库内全部 GRID 参数，同时包含全局旧键与按标的存放的键
+     * 读库内全部 GRID 参数
      *
      * @return 参数名到参数值的映射
      */
@@ -192,30 +169,19 @@ public class GridPlanResolver {
     }
 
     /**
-     * 把字符串参数转成数值，品种主键为空时读全局旧键
+     * 把字符串参数转成数值
      *
      * @param values     参数映射
-     * @param varietyKey 品种业务主键，为 null 读全局旧键
+     * @param varietyKey 品种业务主键
      * @return 参数
      */
     private GridPlan fill(Map<String, String> values, String varietyKey) {
         GridPlan plan = new GridPlan();
-        plan.setLowerBound(decimal(values.get(keyFor(varietyKey, GridParamKey.LOWER_BOUND))));
-        plan.setUpperBound(decimal(values.get(keyFor(varietyKey, GridParamKey.UPPER_BOUND))));
-        plan.setStep(decimal(values.get(keyFor(varietyKey, GridParamKey.STEP))));
-        plan.setAmountPerGrid(decimal(values.get(keyFor(varietyKey, GridParamKey.AMOUNT_PER_GRID))));
+        plan.setLowerBound(decimal(values.get(GridParamKey.keyOf(varietyKey, GridParamKey.LOWER_BOUND))));
+        plan.setUpperBound(decimal(values.get(GridParamKey.keyOf(varietyKey, GridParamKey.UPPER_BOUND))));
+        plan.setStep(decimal(values.get(GridParamKey.keyOf(varietyKey, GridParamKey.STEP))));
+        plan.setAmountPerGrid(decimal(values.get(GridParamKey.keyOf(varietyKey, GridParamKey.AMOUNT_PER_GRID))));
         return plan;
-    }
-
-    /**
-     * 按品种主键拼参数键，空主键时返回全局旧键
-     *
-     * @param varietyKey 品种业务主键
-     * @param field      字段名
-     * @return 参数键
-     */
-    private String keyFor(String varietyKey, String field) {
-        return varietyKey == null ? field : GridParamKey.keyOf(varietyKey, field);
     }
 
     /**

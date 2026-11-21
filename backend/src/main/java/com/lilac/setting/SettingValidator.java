@@ -2,8 +2,6 @@ package com.lilac.setting;
 
 import com.lilac.constant.AlertParamKey;
 import com.lilac.constant.BondParamKey;
-import com.lilac.constant.DividendParamKey;
-import com.lilac.constant.GridParamKey;
 import com.lilac.constant.IndicatorParamKey;
 import com.lilac.constant.SettingCatalog;
 import com.lilac.domain.dto.setting.SettingFieldError;
@@ -22,11 +20,6 @@ import java.util.Map;
  */
 @Component
 public class SettingValidator {
-
-    /**
-     * 股息率阈值的百分点上限
-     */
-    private static final BigDecimal MAX_YIELD = new BigDecimal("100");
 
     /**
      * RSI 阈值的上限
@@ -126,12 +119,6 @@ public class SettingValidator {
             errors.add(error(def, "必须大于 0"));
             return;
         }
-        if (DividendParamKey.ADD_YIELD.equals(def.getKey()) || DividendParamKey.REDUCE_YIELD.equals(def.getKey())) {
-            if (number.compareTo(MAX_YIELD) > 0) {
-                errors.add(error(def, "应在 0~100 的百分点区间内，如 4.08 表示 4.08%"));
-            }
-            return;
-        }
         if (IndicatorParamKey.RSI_UPPER.equals(def.getKey()) || IndicatorParamKey.RSI_LOWER.equals(def.getKey())) {
             if (number.compareTo(MAX_RSI) > 0) {
                 errors.add(error(def, "应在 0~100 之间"));
@@ -164,37 +151,6 @@ public class SettingValidator {
      * @param merged 合并后的取值
      */
     private void crossCheck(List<SettingFieldError> errors, Map<String, String> merged) {
-        String dividend = ParamGroup.DIVIDEND.name();
-        BigDecimal base = decimal(merged.get(dividend + "." + DividendParamKey.BASE_AMOUNT));
-        BigDecimal floor = decimal(merged.get(dividend + "." + DividendParamKey.FLOOR_AMOUNT));
-        if (base != null && floor != null && floor.compareTo(base) > 0) {
-            // 保底高于基准意味着任何减仓都会立刻突破护城河，必须拒绝
-            errors.add(SettingFieldError.of(dividend, DividendParamKey.FLOOR_AMOUNT, "保底分红金额",
-                    "保底分红金额 " + plain(floor) + " 元不得高于基准仓位 " + plain(base) + " 元"));
-        }
-        BigDecimal addYield = decimal(merged.get(dividend + "." + DividendParamKey.ADD_YIELD));
-        BigDecimal reduceYield = decimal(merged.get(dividend + "." + DividendParamKey.REDUCE_YIELD));
-        if (addYield != null && reduceYield != null && reduceYield.compareTo(addYield) >= 0) {
-            errors.add(SettingFieldError.of(dividend, DividendParamKey.REDUCE_YIELD, "减仓股息率阈值",
-                    "减仓股息率阈值 " + plain(reduceYield) + "% 必须低于加仓阈值 " + plain(addYield) + "%"));
-        }
-
-        String grid = ParamGroup.GRID.name();
-        BigDecimal lower = decimal(merged.get(grid + "." + GridParamKey.LOWER_BOUND));
-        BigDecimal upper = decimal(merged.get(grid + "." + GridParamKey.UPPER_BOUND));
-        BigDecimal step = decimal(merged.get(grid + "." + GridParamKey.STEP));
-        if (lower != null && upper != null && lower.compareTo(upper) >= 0) {
-            errors.add(SettingFieldError.of(grid, GridParamKey.UPPER_BOUND, "价格上界",
-                    "价格上界必须大于下界 " + plain(lower) + " 元"));
-        } else if (lower != null && upper != null && step != null) {
-            BigDecimal span = upper.subtract(lower);
-            int grids = span.divide(step, 0, java.math.RoundingMode.DOWN).intValue();
-            if (grids < 2) {
-                errors.add(SettingFieldError.of(grid, GridParamKey.STEP, "格子大小",
-                        "按当前上下界与格子大小只能划出 " + grids + " 格，至少需要 2 格"));
-            }
-        }
-
         String bond = ParamGroup.BOND.name();
         Integer bondWindow = integer(merged.get(bond + "." + BondParamKey.WINDOW));
         Integer bondDays = integer(merged.get(bond + "." + BondParamKey.SIDEWAYS_DAYS));

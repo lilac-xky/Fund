@@ -2,8 +2,6 @@ package com.lilac.setting;
 
 import com.lilac.constant.AlertParamKey;
 import com.lilac.constant.BondParamKey;
-import com.lilac.constant.DividendParamKey;
-import com.lilac.constant.GridParamKey;
 import com.lilac.constant.IndicatorParamKey;
 import com.lilac.constant.LessonParamKey;
 import com.lilac.constant.SettingCatalog;
@@ -19,31 +17,12 @@ import java.util.List;
 public final class SettingFieldCatalog {
 
     /**
-     * 全部字段定义，按分组与页面顺序排列
+     * 全部字段定义，按分组与页面顺序排列；红利与网格参数按标的各存一套，不走这里
      *
      * @return 字段定义
      */
     public static List<FieldDef> all() {
         List<FieldDef> defs = new ArrayList<>();
-        defs.add(new FieldDef(ParamGroup.DIVIDEND, DividendParamKey.BASE_AMOUNT, "基准仓位金额",
-                DividendParamKey.BASE_AMOUNT_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
-        defs.add(new FieldDef(ParamGroup.DIVIDEND, DividendParamKey.FLOOR_AMOUNT, "保底分红金额",
-                DividendParamKey.FLOOR_AMOUNT_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
-        defs.add(new FieldDef(ParamGroup.DIVIDEND, DividendParamKey.ADD_YIELD, "加仓股息率阈值",
-                DividendParamKey.ADD_YIELD_DESC, "%", SettingCatalog.TYPE_DECIMAL,
-                DividendParamKey.DEFAULT_ADD_YIELD.toPlainString()));
-        defs.add(new FieldDef(ParamGroup.DIVIDEND, DividendParamKey.REDUCE_YIELD, "减仓股息率阈值",
-                DividendParamKey.REDUCE_YIELD_DESC, "%", SettingCatalog.TYPE_DECIMAL,
-                DividendParamKey.DEFAULT_REDUCE_YIELD.toPlainString()));
-
-        defs.add(new FieldDef(ParamGroup.GRID, GridParamKey.LOWER_BOUND, "价格下界",
-                GridParamKey.LOWER_BOUND_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
-        defs.add(new FieldDef(ParamGroup.GRID, GridParamKey.UPPER_BOUND, "价格上界",
-                GridParamKey.UPPER_BOUND_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
-        defs.add(new FieldDef(ParamGroup.GRID, GridParamKey.STEP, "格子大小",
-                GridParamKey.STEP_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
-        defs.add(new FieldDef(ParamGroup.GRID, GridParamKey.AMOUNT_PER_GRID, "每格金额",
-                GridParamKey.AMOUNT_PER_GRID_DESC, "元", SettingCatalog.TYPE_DECIMAL, null));
 
         defs.add(new FieldDef(ParamGroup.BOND, BondParamKey.WINDOW, "回看窗口",
                 BondParamKey.WINDOW_DESC, "日", SettingCatalog.TYPE_INTEGER, BondParamKey.DEFAULT_WINDOW));
@@ -148,14 +127,13 @@ public final class SettingFieldCatalog {
     }
 
     /**
-     * 是否属于可写的分组，邮件与 SMTP 参数不进数据库，故不在其中
+     * 是否属于可写的分组，红利与网格按标的各存一套、邮件参数不进数据库，故都不在其中
      *
      * @param group 分组
      * @return 可写返回 true
      */
     public static boolean writable(ParamGroup group) {
-        return group == ParamGroup.DIVIDEND || group == ParamGroup.GRID || group == ParamGroup.BOND
-                || group == ParamGroup.INDICATOR || group == ParamGroup.ALERT;
+        return group == ParamGroup.BOND || group == ParamGroup.INDICATOR || group == ParamGroup.ALERT;
     }
 
     private SettingFieldCatalog() {

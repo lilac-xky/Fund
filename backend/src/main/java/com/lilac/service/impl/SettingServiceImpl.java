@@ -43,14 +43,6 @@ public class SettingServiceImpl implements SettingService {
 
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
-    private static final String GROUP_DIVIDEND = "DIVIDEND";
-
-    private static final String GROUP_GRID = "GRID";
-
-    private static final String GROUP_INDICATOR = "INDICATOR";
-
-    private static final String GROUP_ALERT = "ALERT";
-
     @Resource
     private StrategyParamService strategyParamService;
 
@@ -78,8 +70,7 @@ public class SettingServiceImpl implements SettingService {
     public SettingOverviewVO overview() {
         Map<String, String> stored = storedValues();
         List<SettingGroupVO> groups = new ArrayList<>();
-        groups.add(buildGroup(ParamGroup.DIVIDEND, "红利策略", "股息率达标时补到基准仓位，减仓不得击穿保底金额", stored));
-        groups.add(buildGroup(ParamGroup.GRID, "网格策略", "价格穿越网格线时给出买卖方向与金额", stored));
+        // 红利与网格的参数按基金、按标的各存一套，只能在选择标的之后设定，不在此页
         groups.add(buildGroup(ParamGroup.BOND, "债券监控", "净值横盘或趋势转弱达阈值时提示考虑换仓", stored));
         groups.add(buildGroup(ParamGroup.INDICATOR, "技术指标", "已内置默认值，不改也能跑", stored));
         groups.add(buildGroup(ParamGroup.ALERT, "警示参数", "误差超阈值提示与股息率过期判定", stored));
@@ -326,7 +317,7 @@ public class SettingServiceImpl implements SettingService {
     }
 
     /**
-     * 读出库内全部参数，键形如 DIVIDEND.baseAmount
+     * 读出库内全部参数，键形如 INDICATOR.rsiPeriod
      *
      * @return 取值映射
      */
@@ -401,33 +392,6 @@ public class SettingServiceImpl implements SettingService {
     private String effectiveNote() {
         return "改动在保存成功后的下一个定时时点生效，当日已发出的邮件不会重发（当前 " 
                 + LocalDateTime.now().format(CLOCK) + "）";
-    }
-
-    /**
-     * 取第一个非空值
-     *
-     * @param first  首选
-     * @param second 兜底
-     * @return 取值
-     */
-    private String firstNotBlank(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first;
-        }
-        return second == null || second.isBlank() ? null : second;
-    }
-
-    /**
-     * 把地址列表拼成逗号分隔的字符串
-     *
-     * @param items 地址
-     * @return 逗号分隔文本，空列表返回 null
-     */
-    private String join(List<String> items) {
-        if (items == null || items.isEmpty()) {
-            return null;
-        }
-        return String.join(",", items);
     }
 
     /**

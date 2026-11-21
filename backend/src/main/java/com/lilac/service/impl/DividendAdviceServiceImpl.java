@@ -2,6 +2,7 @@ package com.lilac.service.impl;
 
 import com.lilac.adapter.model.FundNetWorthPoint;
 import com.lilac.domain.dto.dividend.DividendAdviceRequest;
+import com.lilac.domain.dto.dividend.DividendParamSaveRequest;
 import com.lilac.domain.dto.dividend.DividendQueryRequest;
 import com.lilac.domain.dto.holding.HoldingQueryRequest;
 import com.lilac.domain.dto.variety.VarietyQueryRequest;
@@ -39,7 +40,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
- * 红利加减仓建议业务实现，取股息率与持仓金额后交给规则计算器出结论
+ * 红利加减仓建议业务实现，取股息率与持仓金额后，按这只基金自己的参数交给规则计算器出结论
  */
 @Slf4j
 @Service
@@ -69,27 +70,78 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     private FundNetWorthService fundNetWorthService;
 
     /**
-     * 读取当前红利参数，空库时返回缺项清单而不是静默给默认值
+     * 读取指定基金的红利参数，没配过时回落到旧版共用参数并说明
      *
+     * @param varietyKey 品种业务主键
      * @return 参数视图
      */
     @Override
-    public DividendPlanVO getPlan() {
-        return toPlanVO(dividendPlanResolver.resolve());
+    public DividendPlanVO getPlan(String varietyKey) {
+        VarietyVO variety = findVariety(varietyKey);
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR, "未找到品种 " + varietyKey);
+        ThrowUtils.throwIf(variety.getCategory() != FundCategory.DIVIDEND, HttpsCodeEnum.PARAMS_ERROR,
+                "该品种类型为 " + label(variety) + "，红利参数只适用于红利基金");
+        return toPlanVO(dividendPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName()),
+                variety);
     }
 
     /**
-     * 对全部持有中的红利持仓逐只给建议
+     * 保存指定基金的红利参数，标的本身不合法时先拦下
+     *
+     * @param request 保存请求
+     * @return 保存后的参数视图
+     */
+    @Override
+    public DividendPlanVO savePlan(DividendParamSaveRequest request) {
+        ThrowUtils.throwIf(request == null, HttpsCodeEnum.PARAMS_ERROR, "红利参数不能为空");
+        ThrowUtils.throwIf(request.getVarietyKey() == null || request.getVarietyKey().isBlank(),
+                HttpsCodeEnum.PARAMS_ERROR, "保存红利参数必须指定标的");
+        VarietyVO variety = findVariety(request.getVarietyKey().trim());
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR,
+                "未找到品种 " + request.getVarietyKey());
+        ThrowUtils.throwIf(variety.getCategory() != FundCategory.DIVIDEND, HttpsCodeEnum.PARAMS_ERROR,
+                "该品种类型为 " + label(variety) + "，红利参数只适用于红利基金");
+        DividendPlan plan = new DividendPlan();
+        plan.setVarietyKey(variety.getVarietyKey());
+        plan.setVarietyName(variety.getVarietyName());
+        plan.setBaseAmount(request.getBaseAmount());
+        plan.setFloorAmount(request.getFloorAmount());
+        plan.setAddYield(request.getAddYield());
+        plan.setReduceYield(request.getReduceYield());
+        DividendPlan saved = dividendPlanResolver.save(plan);
+        return toPlanVO(saved, variety);
+    }
+
+    /**
+     * 清空指定基金的红利参数，回到未配置状态
+     *
+     * @param varietyKey 品种业务主键
+     * @return 是否清掉了至少一条
+     */
+    @Override
+    public boolean removePlan(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要清除的标的");
+        return dividendPlanResolver.remove(varietyKey.trim()) > 0;
+    }
+
+    /**
+     * 对全部持有中的红利持仓逐只给建议，每只用它自己的参数
      *
      * @return 建议总览
      */
     @Override
     public DividendAdvisoryVO adviseAll() {
-        DividendPlan plan = dividendPlanResolver.resolve();
         List<VarietyVO> varieties = dividendVarieties();
         List<DividendAdviceVO> items = new ArrayList<>();
         List<DividendAdviceVO> skipped = new ArrayList<>();
+        List<String> unusable = new ArrayList<>();
         for (VarietyVO variety : varieties) {
+            DividendPlan plan = dividendPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+            if (!plan.complete()) {
+                // 参数缺失要落到总览上，让邮件能说清「哪几只因没配参数而不给动作」
+                unusable.add(variety.getVarietyCode() + " " + variety.getVarietyName() + "：" + String.join("；", plan.getIssues()));
+            }
             DividendAdviceVO advice = advise(variety, plan, null);
             if (advice.getAction() == DividendAction.UNDECIDABLE) {
                 skipped.add(advice);
@@ -97,7 +149,7 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
                 items.add(advice);
             }
         }
-        return assemble(plan, varieties.size(), items, skipped);
+        return assemble(varieties.size(), items, skipped, unusable);
     }
 
     /**
@@ -117,11 +169,12 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
                 "该品种类型为 " + label(variety) + "，红利建议只适用于红利基金");
         ThrowUtils.throwIf(request.getCurrentAmount() != null && request.getCurrentAmount().signum() < 0,
                 HttpsCodeEnum.PARAMS_ERROR, "当前持有金额不能为负数");
-        return advise(variety, dividendPlanResolver.resolve(), request.getCurrentAmount());
+        return advise(variety, dividendPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName()),
+                request.getCurrentAmount());
     }
 
     /**
-     * 列出红利策略的监控对象，说明这套参数管的是哪几只基金与它们的股息率状态
+     * 列出红利策略的监控对象，每只带出跟踪指数、股息率与它自己的参数
      *
      * @return 监控对象列表
      */
@@ -130,47 +183,74 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         List<VarietyVO> varieties = dividendVarieties();
         List<DividendWatchVO> result = new ArrayList<>(varieties.size());
         for (VarietyVO variety : varieties) {
-            DividendWatchVO vo = new DividendWatchVO();
-            vo.setVarietyKey(variety.getVarietyKey());
-            vo.setVarietyCode(variety.getVarietyCode());
-            vo.setVarietyName(variety.getVarietyName());
-            vo.setIndexCode(variety.getTrackIndexCode());
-            List<String> reasons = new ArrayList<>();
-            boolean hasIndex = variety.getTrackIndexCode() != null && !variety.getTrackIndexCode().isBlank();
-            if (!hasIndex) {
-                reasons.add("未登记跟踪指数，取不到股息率，无法给加减仓建议");
-            }
-            DividendSignal signal = hasIndex ? signalOf(variety) : null;
-            if (hasIndex && signal == null) {
-                reasons.add("该指数尚无股息率数据，请先刷新股息率或手工录入");
-            } else if (signal != null) {
-                vo.setDividendYield(signal.getDividendYield());
-                vo.setDataDate(signal.getDataDate());
-                vo.setAgeDays(signal.getAgeDays() == null ? null : signal.getAgeDays().intValue());
-                vo.setStale(signal.getStale());
-                if (Boolean.TRUE.equals(signal.getStale())) {
-                    reasons.add(signal.getStaleReason());
-                }
-            }
-            vo.setIndexName(indexNameOf(variety.getTrackIndexCode()));
-            AmountSource amount = amountOf(variety, null);
-            vo.setCurrentAmount(amount.amount);
-            if (amount.amount == null) {
-                reasons.add(amount.source);
-            }
-            vo.setUsable(reasons.isEmpty());
-            vo.setReasons(reasons);
-            result.add(vo);
+            result.add(watchOf(variety));
         }
         return result;
     }
 
     /**
+     * 组装一只基金的监控对象，参数、股息率、当前金额与今日动作都在这里汇合
+     *
+     * @param variety 品种
+     * @return 监控对象
+     */
+    private DividendWatchVO watchOf(VarietyVO variety) {
+        DividendWatchVO vo = new DividendWatchVO();
+        vo.setVarietyKey(variety.getVarietyKey());
+        vo.setVarietyCode(variety.getVarietyCode());
+        vo.setVarietyName(variety.getVarietyName());
+        vo.setIndexCode(variety.getTrackIndexCode());
+        vo.setGridNote(GRID_NOTE);
+        List<String> reasons = new ArrayList<>();
+        boolean hasIndex = variety.getTrackIndexCode() != null && !variety.getTrackIndexCode().isBlank();
+        if (!hasIndex) {
+            reasons.add("未登记跟踪指数，取不到股息率，无法给加减仓建议");
+        }
+        DividendSignal signal = hasIndex ? signalOf(variety) : null;
+        if (hasIndex && signal == null) {
+            reasons.add("该指数尚无股息率数据，请先刷新股息率或手工录入");
+        } else if (signal != null) {
+            vo.setDividendYield(signal.getDividendYield());
+            vo.setDataDate(signal.getDataDate());
+            vo.setAgeDays(signal.getAgeDays() == null ? null : signal.getAgeDays().intValue());
+            vo.setStale(signal.getStale());
+            if (Boolean.TRUE.equals(signal.getStale())) {
+                reasons.add(signal.getStaleReason());
+            }
+        }
+        vo.setIndexName(indexNameOf(variety.getTrackIndexCode()));
+        DividendPlan plan = dividendPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+        vo.setBaseAmount(plan.getBaseAmount());
+        vo.setFloorAmount(plan.getFloorAmount());
+        vo.setAddYield(plan.getAddYield());
+        vo.setReduceYield(plan.getReduceYield());
+        vo.setParamUsable(plan.complete());
+        vo.setParamIssues(plan.getIssues());
+        vo.setParamNotes(plan.getNotes());
+        AmountSource amount = amountOf(variety, null);
+        vo.setCurrentAmount(amount.amount);
+        vo.setAmountSource(amount.source);
+        if (amount.amount == null) {
+            reasons.add(amount.source);
+        }
+        DividendDecision decision = dividendAdvisor.decide(plan, signal, amount.amount);
+        vo.setActionLabel(decision.getAction().getLabel());
+        vo.setSuggestAmount(decision.getSuggestAmount());
+        // 参数问题是「这只基金还没配好」而不是「数据取不到」，两者分开说，避免互相矛盾
+        if (!plan.complete()) {
+            reasons.addAll(plan.getIssues());
+        }
+        vo.setUsable(reasons.isEmpty());
+        vo.setReasons(reasons);
+        return vo;
+    }
+
+    /**
      * 单只品种出建议，金额来源与股息率新鲜度都在这里装配
      *
-     * @param variety       品种
-     * @param plan          红利参数
-     * @param manualAmount  手工指定的当前金额，为空时按持仓与净值推算
+     * @param variety      品种
+     * @param plan         该只基金的红利参数
+     * @param manualAmount 手工指定的当前金额，为空时按持仓与净值推算
      * @return 建议
      */
     private DividendAdviceVO advise(VarietyVO variety, DividendPlan plan, BigDecimal manualAmount) {
@@ -242,7 +322,7 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     }
 
     /**
-     * 取跟踪指数的中文全称，供页面显示「这套参数管的是哪只指数」
+     * 取跟踪指数的中文全称，供页面显示「股息率来自哪只指数」
      *
      * @param indexCode 指数代码，可为空
      * @return 指数全称，取不到返回 null
@@ -361,8 +441,11 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
      * @return 品种，未找到返回 null
      */
     private VarietyVO findVariety(String varietyKey) {
+        if (varietyKey == null || varietyKey.isBlank()) {
+            return null;
+        }
         VarietyQueryRequest query = new VarietyQueryRequest();
-        query.setVarietyKey(varietyKey);
+        query.setVarietyKey(varietyKey.trim());
         List<VarietyVO> found = varietyService.listVariety(query);
         return found.isEmpty() ? null : found.get(0);
     }
@@ -370,34 +453,31 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     /**
      * 汇总成总览，金额合计只算给出动作的那部分
      *
-     * @param plan      红利参数
      * @param requested 纳入的品种数
      * @param items     有动作的建议
      * @param skipped   不给动作的建议
+     * @param unusable  参数不可用的基金，逐条带缺项
      * @return 总览
      */
-    private DividendAdvisoryVO assemble(DividendPlan plan, int requested, List<DividendAdviceVO> items,
-                                        List<DividendAdviceVO> skipped) {
+    private DividendAdvisoryVO assemble(int requested, List<DividendAdviceVO> items,
+                                        List<DividendAdviceVO> skipped, List<String> unusable) {
         items.sort((left, right) -> compareAmount(right.getSuggestAmount(), left.getSuggestAmount()));
         DividendAdvisoryVO vo = new DividendAdvisoryVO();
         vo.setItems(items);
         vo.setSkippedItems(skipped);
         vo.setRequested(requested);
-        vo.setParamUsable(plan.complete());
-        vo.setParamIssues(plan.getIssues());
-        vo.setBaseAmount(plan.getBaseAmount());
-        vo.setFloorAmount(plan.getFloorAmount());
-        vo.setAddYield(plan.getAddYield());
-        vo.setReduceYield(plan.getReduceYield());
+        vo.setParamIssues(unusable);
+        // 参数按基金各存一套，只有全部都没配时才算整批不可用
+        vo.setParamUsable(unusable.isEmpty());
         vo.setGridNote(GRID_NOTE);
         fillTotals(vo, items, skipped);
         fillFreshness(vo, items, skipped);
-        fillSummary(vo, items, skipped);
+        fillSummary(vo, items, skipped, unusable);
         if (requested == 0) {
             vo.setNotice("尚无持有中的红利基金，请先在品种里把红利的跟踪指数确认好，并录入持仓");
         }
-        log.info("红利建议完成 品种 {} 只 给出动作 {} 只 不给动作 {} 只",
-                requested, vo.getActionCount(), vo.getUndecidableCount());
+        log.info("红利建议完成 品种 {} 只 给出动作 {} 只 不给动作 {} 只 参数不可用 {} 只",
+                requested, vo.getActionCount(), vo.getUndecidableCount(), unusable.size());
         return vo;
     }
 
@@ -465,17 +545,21 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     /**
      * 拼装逐条汇总文字，供页面与邮件直接取用
      *
-     * @param vo      总览
-     * @param items   有动作的建议
-     * @param skipped 不给动作的建议
+     * @param vo       总览
+     * @param items    有动作的建议
+     * @param skipped  不给动作的建议
+     * @param unusable 参数不可用的基金
      */
     private void fillSummary(DividendAdvisoryVO vo, List<DividendAdviceVO> items,
-                             List<DividendAdviceVO> skipped) {
+                             List<DividendAdviceVO> skipped, List<String> unusable) {
         List<String> summary = new ArrayList<>();
+        for (String issue : unusable) {
+            summary.add(issue + "（未配置参数，本次不给动作）");
+        }
         for (DividendAdviceVO item : items) {
             summary.add(item.getVarietyCode() + " " + item.getVarietyName() + "：" + item.getActionLabel()
                     + (item.getSuggestAmount() == null ? "" : " " + plain(item.getSuggestAmount()) + " 元")
-                    + (item.getStale() == null ? "" : "（数据日期 " + item.getDataDate() + "）"));
+                    + (item.getDataDate() == null ? "" : "（股息率数据日期 " + item.getDataDate() + "）"));
         }
         for (DividendAdviceVO item : skipped) {
             summary.add(item.getVarietyCode() + " " + item.getVarietyName() + "：不给动作，"
@@ -485,19 +569,27 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     }
 
     /**
-     * 参数转视图
+     * 参数转视图，带上跟踪指数便于页面说明「股息率来自哪只指数」
      *
-     * @param plan 参数
+     * @param plan    参数
+     * @param variety 品种
      * @return 参数视图
      */
-    private DividendPlanVO toPlanVO(DividendPlan plan) {
+    private DividendPlanVO toPlanVO(DividendPlan plan, VarietyVO variety) {
         DividendPlanVO vo = new DividendPlanVO();
+        vo.setVarietyKey(plan.getVarietyKey() == null ? (variety == null ? null : variety.getVarietyKey())
+                : plan.getVarietyKey());
+        vo.setVarietyName(plan.getVarietyName() == null ? (variety == null ? null : variety.getVarietyName())
+                : plan.getVarietyName());
+        vo.setIndexCode(variety == null ? null : variety.getTrackIndexCode());
+        vo.setIndexName(variety == null ? null : indexNameOf(variety.getTrackIndexCode()));
         vo.setBaseAmount(plan.getBaseAmount());
         vo.setFloorAmount(plan.getFloorAmount());
         vo.setAddYield(plan.getAddYield());
         vo.setReduceYield(plan.getReduceYield());
         vo.setUsable(plan.complete());
         vo.setIssues(plan.getIssues());
+        vo.setNotes(plan.getNotes());
         return vo;
     }
 

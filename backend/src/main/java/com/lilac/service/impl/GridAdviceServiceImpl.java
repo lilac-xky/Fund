@@ -51,7 +51,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 网格到价提醒业务实现，场内用实时价、场外按跟踪 ETF 在尾盘估净值，再交给规则计算器判定穿越
+ * 网格到价提醒业务实现，场内用实时价、场外按跟踪 ETF 在尾盘估净值，每只按自己的格子判定穿越
  */
 @Slf4j
 @Service
@@ -65,6 +65,10 @@ public class GridAdviceServiceImpl implements GridAdviceService {
                     + "14:00 之后给提醒。回到这个时间点再看一次即可";
     private static final String NO_BENCHMARK =
             "该基金没有可用的跟踪 ETF 或对标指数，取不到可估的价格，无法参与场外网格";
+    private static final String NOT_CONFIGURED = "这只标的还没划格子，网格对它不生效，请先配置上下界与格子大小";
+    private static final String POSITION_INSIDE = "INSIDE";
+    private static final String POSITION_ABOVE = "ABOVE";
+    private static final String POSITION_BELOW = "BELOW";
 
     @Resource
     private GridPlanResolver gridPlanResolver;
@@ -94,17 +98,7 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     private GridProperties gridProperties;
 
     /**
-     * 读取当前网格参数，连带给出划格结果
-     *
-     * @return 参数视图
-     */
-    @Override
-    public GridPlanVO getPlan() {
-        return toPlanVO(gridPlanResolver.resolve());
-    }
-
-    /**
-     * 读取指定标的的网格参数，未单独配置时回落通用参数并说明来源
+     * 读取指定标的的网格参数，没配过时由问题清单说明
      *
      * @param varietyKey 品种业务主键
      * @return 参数视图
@@ -144,10 +138,23 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
+     * 清除指定标的的网格参数，回到未配置状态
+     *
+     * @param varietyKey 品种业务主键
+     * @return 是否清掉了至少一条
+     */
+    @Override
+    public boolean removePlan(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "必须指定要清除的标的");
+        return gridPlanResolver.remove(varietyKey.trim()) > 0;
+    }
+
+    /**
      * 把保存请求转成参数对象
      *
      * @param request    保存请求
-     * @param varietyKey 品种业务主键，可为 null 表示全局
+     * @param varietyKey 品种业务主键
      * @return 参数
      */
     private GridPlan toPlan(GridParamSaveRequest request, String varietyKey) {
@@ -161,19 +168,23 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 对全部持有中的标的分场内与场外两组判断网格触发
+     * 对全部持有中的标的判断网格触发，每只用它自己的格子
      *
      * @return 提醒总览
      */
     @Override
     public GridAdvisoryVO adviseAll() {
-        GridPlan globalPlan = gridPlanResolver.resolve();
         List<VarietyVO> varieties = gridVarieties();
         List<GridAdviceVO> items = new ArrayList<>();
         List<GridAdviceVO> idle = new ArrayList<>();
+        List<String> unconfigured = new ArrayList<>();
         for (VarietyVO variety : varieties) {
             // 每只标的有自己的上下界，不能拿一套价格区间套在所有标的上
             GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+            if (!plan.complete()) {
+                unconfigured.add(variety.getVarietyCode() + " " + variety.getVarietyName()
+                        + "：" + String.join("；", plan.getIssues()));
+            }
             GridAdviceVO advice = advise(variety, plan, null, null);
             if (advice.getAction() == GridAction.BUY || advice.getAction() == GridAction.SELL) {
                 items.add(advice);
@@ -181,13 +192,13 @@ public class GridAdviceServiceImpl implements GridAdviceService {
                 idle.add(advice);
             }
         }
-        return assemble(globalPlan, varieties.size(), items, idle);
+        return assemble(varieties.size(), items, idle, unconfigured);
     }
 
     /**
-     * 列出网格的监控对象，场内与场外都在列，并说明各自用什么价格判断
+     * 列出网格的监控对象，带上当前价与区间状态，说明每只标的的格子还能不能用
      *
-     * @return 监控对象列表，含各自的参数是否可用
+     * @return 监控对象列表
      */
     @Override
     public List<GridWatchVO> watchList() {
@@ -199,34 +210,117 @@ public class GridAdviceServiceImpl implements GridAdviceService {
                 .collect(Collectors.toSet());
         List<GridWatchVO> result = new ArrayList<>(varieties.size());
         for (VarietyVO variety : varieties) {
-            GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
-            GridWatchVO vo = new GridWatchVO();
-            vo.setVarietyKey(variety.getVarietyKey());
-            vo.setVarietyCode(variety.getVarietyCode());
-            vo.setVarietyName(variety.getVarietyName());
-            vo.setCategoryLabel(variety.getCategory() == null ? "待确认" : variety.getCategory().getLabel());
-            vo.setVarietyType(variety.getVarietyType() == null ? null : variety.getVarietyType().name());
-            boolean onExchange = variety.getVarietyType() == VarietyType.ETF;
-            vo.setBasis(onExchange ? GridBasis.REALTIME_PRICE : GridBasis.ESTIMATED_NAV);
-            vo.setBasisLabel(vo.getBasis().getLabel());
-            vo.setProxySymbol(onExchange ? null : proxySymbolOf(variety));
-            vo.setLowerBound(plan.getLowerBound());
-            vo.setUpperBound(plan.getUpperBound());
-            vo.setStep(plan.getStep());
-            vo.setAmountPerGrid(plan.getAmountPerGrid());
-            vo.setParamUsable(plan.complete());
-            vo.setParamIssues(plan.getIssues());
-            vo.setParamNotes(plan.getNotes());
-            vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
-            vo.setCustomized(customized.contains(variety.getVarietyKey()));
-            if (!onExchange && (vo.getProxySymbol() == null || vo.getProxySymbol().isBlank())) {
-                // 场外没有跟踪 ETF 就推不出价格，必须在监控对象里明说，否则使用者会以为它在工作
-                vo.getParamIssues().add(NO_BENCHMARK);
-                vo.setParamUsable(Boolean.FALSE);
-            }
-            result.add(vo);
+            result.add(watchOf(variety, customized.contains(variety.getVarietyKey())));
         }
         return result;
+    }
+
+    /**
+     * 组装一只标的的监控对象，参数、价格与区间状态都在这里汇合
+     *
+     * @param variety    品种
+     * @param customized 是否已单独配置过格子
+     * @return 监控对象
+     */
+    private GridWatchVO watchOf(VarietyVO variety, boolean customized) {
+        GridPlan plan = gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
+        GridWatchVO vo = new GridWatchVO();
+        vo.setVarietyKey(variety.getVarietyKey());
+        vo.setVarietyCode(variety.getVarietyCode());
+        vo.setVarietyName(variety.getVarietyName());
+        vo.setCategoryLabel(variety.getCategory() == null ? "待确认" : variety.getCategory().getLabel());
+        vo.setVarietyType(variety.getVarietyType() == null ? null : variety.getVarietyType().name());
+        boolean onExchange = variety.getVarietyType() == VarietyType.ETF;
+        vo.setBasis(onExchange ? GridBasis.REALTIME_PRICE : GridBasis.ESTIMATED_NAV);
+        vo.setBasisLabel(vo.getBasis().getLabel());
+        vo.setProxySymbol(onExchange ? null : proxySymbolOf(variety));
+        vo.setLowerBound(plan.getLowerBound());
+        vo.setUpperBound(plan.getUpperBound());
+        vo.setStep(plan.getStep());
+        vo.setAmountPerGrid(plan.getAmountPerGrid());
+        vo.setParamUsable(plan.complete());
+        vo.setParamIssues(plan.getIssues());
+        vo.setParamNotes(plan.getNotes());
+        vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
+        vo.setCustomized(customized);
+        if (!customized) {
+            // 没配过就明说网格对它不生效，不能让使用者以为服务已经在盯着
+            vo.getParamNotes().add(NOT_CONFIGURED);
+        }
+        if (!onExchange && (vo.getProxySymbol() == null || vo.getProxySymbol().isBlank())) {
+            // 场外没有跟踪 ETF 就推不出价格，必须在监控对象里明说
+            vo.getParamIssues().add(NO_BENCHMARK);
+            vo.setParamUsable(Boolean.FALSE);
+        }
+        Price reference = watchPrice(variety, onExchange);
+        vo.setCurrentPrice(reference.current);
+        vo.setPriceDate(reference.date);
+        vo.setPriceSource(reference.source);
+        if (reference.blocked != null) {
+            vo.getParamNotes().add(reference.blocked);
+            return vo;
+        }
+        fillPosition(vo, plan, reference.current);
+        return vo;
+    }
+
+    /**
+     * 标注当前价落在格子区间的哪个位置，出界时明确提示要重新划格
+     *
+     * @param vo    监控对象
+     * @param plan  参数
+     * @param price 当前价
+     */
+    private void fillPosition(GridWatchVO vo, GridPlan plan, BigDecimal price) {
+        if (price == null || !plan.complete()) {
+            return;
+        }
+        if (price.compareTo(plan.getUpperBound()) > 0) {
+            vo.setPosition(POSITION_ABOVE);
+            vo.setPositionNote("当前价 " + plain(price) + " 已高于上界 " + plain(plan.getUpperBound())
+                    + "，超出后没有可卖的网格线，需重新划格");
+            return;
+        }
+        if (price.compareTo(plan.getLowerBound()) < 0) {
+            vo.setPosition(POSITION_BELOW);
+            vo.setPositionNote("当前价 " + plain(price) + " 已低于下界 " + plain(plan.getLowerBound())
+                    + "，超出后没有可买的网格线，需重新划格");
+            return;
+        }
+        vo.setPosition(POSITION_INSIDE);
+        vo.setPositionNote("当前价 " + plain(price) + " 落在格子区间内");
+    }
+
+    /**
+     * 只取当前价，供监控对象展示；场外同样只在尾盘才估得出，盘中如实说明
+     *
+     * @param variety    品种
+     * @param onExchange 是否场内 ETF
+     * @return 价格组合，取不到时 blocked 写明原因
+     */
+    private Price watchPrice(VarietyVO variety, boolean onExchange) {
+        if (variety.getVarietyCode() == null) {
+            return new Price(null, null, "无代码，取不到价格", "该品种没有代码，取不到价格，无法定位网格");
+        }
+        if (onExchange) {
+            try {
+                MarketQuote quote = marketQuoteAdapter.quote(variety.getVarietyCode());
+                if (quote == null || quote.getPrice() == null) {
+                    return new Price(null, null, "行情取不到", "行情取不到，无法定位网格");
+                }
+                String source = Boolean.TRUE.equals(quote.getRealtime()) ? "行情价（实时）" : "行情价（上一交易日）";
+                return new Price(quote.getPrice(), quote.getTradeDate(), source, null);
+            } catch (RuntimeException e) {
+                log.warn("网格监控取行情失败 code={}：{}", variety.getVarietyCode(), e.getMessage());
+                return new Price(null, null, "行情取数失败", "行情取数失败，无法定位网格：" + e.getMessage());
+            }
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.toLocalTime().isBefore(gridProperties.getTailWindowStart())) {
+            return new Price(null, now.toLocalDate(), "未到到尾盘判断时点", OUT_OF_WINDOW);
+        }
+        Price estimated = offExchangePrice(variety, null);
+        return new Price(estimated.current, estimated.date, estimated.source, estimated.blocked);
     }
 
     /**
@@ -252,13 +346,18 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     }
 
     /**
-     * 列出当前参数下的网格线
+     * 列出指定标的的网格线
      *
+     * @param varietyKey 品种业务主键
      * @return 网格线价格，按升序
      */
     @Override
-    public List<BigDecimal> lines() {
-        return gridCalculator.lines(gridPlanResolver.resolve());
+    public List<BigDecimal> lines(String varietyKey) {
+        ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
+                "品种业务主键不能为空");
+        VarietyVO variety = findVariety(varietyKey.trim());
+        ThrowUtils.throwIf(variety == null, HttpsCodeEnum.NOT_FOUND_ERROR, "未找到品种 " + varietyKey);
+        return gridCalculator.lines(gridPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName()));
     }
 
     /**
@@ -289,11 +388,22 @@ public class GridAdviceServiceImpl implements GridAdviceService {
         vo.setPriceSource(reference.source);
         vo.setReferencePrice(reference.previous);
         vo.setReferenceDate(reference.previousDate);
+        if (!plan.complete()) {
+            // 没划格子时直接说明，不拿空参数去算穿越
+            vo.setAction(GridAction.NONE);
+            vo.setActionLabel(GridAction.NONE.getLabel());
+            vo.setLineCount(0);
+            vo.setSuppressed(Boolean.FALSE);
+            List<String> remarks = new ArrayList<>(plan.getIssues());
+            remarks.add(NOT_CONFIGURED);
+            vo.setRemarks(remarks);
+            return vo;
+        }
         if (reference.blocked != null) {
             // 拿不到可比价格时直接说明原因，不进入穿越判定，避免用错价给出动作
             vo.setAction(GridAction.NONE);
             vo.setActionLabel(GridAction.NONE.getLabel());
-            vo.setLineCount(plan.complete() ? gridCalculator.lines(plan).size() : 0);
+            vo.setLineCount(gridCalculator.lines(plan).size());
             vo.setSuppressed(Boolean.FALSE);
             vo.setRemarks(List.of(reference.blocked));
             return vo;
@@ -510,29 +620,30 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     /**
      * 汇总成总览，买卖合计只算给出动作的那部分
      *
-     * @param plan      网格参数
-     * @param requested 纳入的标的数
-     * @param items     触发的提醒
-     * @param idle      未触发的提醒
+     * @param requested    纳入的标的数
+     * @param items        触发的提醒
+     * @param idle         未触发的提醒
+     * @param unconfigured 还没划格子的标的，逐条带缺项
      * @return 总览
      */
-    private GridAdvisoryVO assemble(GridPlan plan, int requested, List<GridAdviceVO> items,
-                                    List<GridAdviceVO> idle) {
+    private GridAdvisoryVO assemble(int requested, List<GridAdviceVO> items, List<GridAdviceVO> idle,
+                                    List<String> unconfigured) {
         items.sort((left, right) -> compareAmount(right.getSuggestAmount(), left.getSuggestAmount()));
         GridAdvisoryVO vo = new GridAdvisoryVO();
         vo.setItems(items);
         vo.setIdleItems(idle);
         vo.setRequested(requested);
-        vo.setParamUsable(plan.complete());
-        vo.setParamIssues(plan.getIssues());
+        vo.setParamIssues(unconfigured);
+        // 参数按标的各存一套，只有全部都没配时才算整批不可用
+        vo.setParamUsable(unconfigured.size() < requested);
         vo.setDividendNote(DIVIDEND_NOTE);
         fillTotals(vo, items, idle);
-        fillSummary(vo, items, idle);
+        fillSummary(vo, items, idle, unconfigured);
         if (requested == 0) {
             vo.setNotice("尚无持有中的标的，网格提醒先录入持仓才会开始工作");
         }
-        log.info("网格提醒完成 标的 {} 只 触发 {} 只 让位 {} 只 未触发 {} 只",
-                requested, vo.getTriggeredCount(), vo.getSuppressedCount(), vo.getIdleCount());
+        log.info("网格提醒完成 标的 {} 只 触发 {} 只 让位 {} 只 未触发 {} 只 未配置 {} 只",
+                requested, vo.getTriggeredCount(), vo.getSuppressedCount(), vo.getIdleCount(), unconfigured.size());
         return vo;
     }
 
@@ -569,12 +680,17 @@ public class GridAdviceServiceImpl implements GridAdviceService {
     /**
      * 拼装逐条摘要，供邮件直接取用
      *
-     * @param vo    总览
-     * @param items 触发的提醒
-     * @param idle  未触发的提醒
+     * @param vo           总览
+     * @param items        触发的提醒
+     * @param idle         未触发的提醒
+     * @param unconfigured 还没划格子的标的
      */
-    private void fillSummary(GridAdvisoryVO vo, List<GridAdviceVO> items, List<GridAdviceVO> idle) {
+    private void fillSummary(GridAdvisoryVO vo, List<GridAdviceVO> items, List<GridAdviceVO> idle,
+                             List<String> unconfigured) {
         List<String> summary = new ArrayList<>();
+        for (String issue : unconfigured) {
+            summary.add(issue + "（还没划格子，网格对它不生效）");
+        }
         for (GridAdviceVO item : items) {
             summary.add(item.getVarietyCode() + " " + item.getVarietyName() + "："
                     + item.getActionLabel() + " " + plain(item.getSuggestAmount()) + " 元，"
@@ -651,5 +767,17 @@ public class GridAdviceServiceImpl implements GridAdviceService {
      */
     private record Price(BigDecimal current, LocalDate date, String source, BigDecimal previous,
                          LocalDate previousDate, String blocked) {
+
+        /**
+         * 只需当前价的场景，参考价与 blocked 单独给出
+         *
+         * @param current 当前价
+         * @param date    价格日期
+         * @param source  来源说明
+         * @param blocked 不可判断原因，可为 null
+         */
+        private Price(BigDecimal current, LocalDate date, String source, String blocked) {
+            this(current, date, source, null, null, blocked);
+        }
     }
 }

@@ -248,7 +248,7 @@ public class MailContentBuilder {
             content.setDividendAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
             List<String> summaries = new ArrayList<>();
             if (!content.isDividendAvailable()) {
-                summaries.add("红利参数未配置完整，本次不给加减仓动作：" + join(advisory.getParamIssues()));
+                summaries.add("有红利基金还没配置参数，本次不给加减仓动作：" + join(advisory.getParamIssues()));
             }
             for (DividendAdviceVO advice : safe(advisory.getItems())) {
                 summaries.add(summaryOf(advice));
@@ -311,7 +311,7 @@ public class MailContentBuilder {
             content.setGridAvailable(Boolean.TRUE.equals(advisory.getParamUsable()));
             List<String> summaries = new ArrayList<>();
             if (!content.isGridAvailable()) {
-                summaries.add("网格参数未配置完整，本次不给网格提醒：" + join(advisory.getParamIssues()));
+                summaries.add("有标的还没划格子，网格对它不生效：" + join(advisory.getParamIssues()));
             }
             summaries.addAll(safe(advisory.getSummary()));
             if (summaries.isEmpty()) {
