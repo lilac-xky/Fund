@@ -1142,10 +1142,10 @@ const checks = computed(() => {
         filled.length >= 2 && filled.every((row, i) => i === 0 || row.yield < filled[i - 1]!.yield),
     })
     list.push({
-      label: '金额随股息率递增',
+      label: '金额随股息率递减',
       pass:
         filled.length >= 2 &&
-        filled.every((row, i) => i === 0 || row.amount > filled[i - 1]!.amount),
+        filled.every((row, i) => i === 0 || row.amount < filled[i - 1]!.amount),
     })
     list.push({ label: '最低档即保底，金额为正', pass: (filled.at(-1)?.amount ?? 0) > 0 })
   } else if (activeGroup.value === 'GRID') {
@@ -1726,8 +1726,9 @@ async function saveDividendRow(): Promise<void> {
     if (index > 0 && row.yield >= rows[index - 1]!.yield) {
       ladderErrors.value.push(`第 ${index + 1} 档的股息率必须低于上一档`)
     }
-    if (index > 0 && row.amount <= rows[index - 1]!.amount) {
-      ladderErrors.value.push(`第 ${index + 1} 档的应持有金额必须高于上一档（股息率越高持有越多）`)
+    if (index > 0 && row.amount >= rows[index - 1]!.amount) {
+      // 阶梯按股息率降序排列，所以越往下金额必须越少；写反了就成了越跌越卖
+      ladderErrors.value.push(`第 ${index + 1} 档的应持有金额必须低于上一档（股息率越低持有越少）`)
     }
   })
   if (ladderErrors.value.length > 0) {
