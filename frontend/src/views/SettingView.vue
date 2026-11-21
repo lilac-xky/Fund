@@ -220,15 +220,33 @@
                     </div>
                     <div class="app-ladder__acts">
                       <AppButton :disabled="dividendDraft.ladder.length >= 12" @click="addRung">
-                        加一档
+                        {{ dividendDraft.ladder.length ? '加一档' : '开始填第一档' }}
                       </AppButton>
-                      <AppButton :disabled="dividendDraft.ladder.length <= 2" @click="removeRung">
+                      <AppButton
+                        v-if="dividendDraft.ladder.length"
+                        :disabled="dividendDraft.ladder.length <= 2"
+                        @click="removeRung"
+                      >
                         删最低一档
                       </AppButton>
                     </div>
                   </div>
 
-                  <div class="app-ladder__grid">
+                  <!-- 未配置时不预填任何数字，避免把系统的猜测当成使用者的决定 -->
+                  <div v-if="!dividendDraft.ladder.length" class="app-ladder__empty">
+                    这只基金还没有股息率阶梯。
+                    <span class="app-ladder__empty-tip">
+                      系统不会替你猜阈值——当前股息率
+                      {{
+                        dividendDetail.dividendYield != null
+                          ? fmt(dividendDetail.dividendYield) + '%'
+                          : '未知'
+                      }}
+                      只能说明「今天贵不贵」，判断不了「该在多少买」。点「开始填第一档」自己定。
+                    </span>
+                  </div>
+
+                  <div v-else class="app-ladder__grid">
                     <div
                       v-for="(rung, index) in dividendDraft.ladder"
                       :key="index"
@@ -1083,15 +1101,18 @@ const changes = computed(() => {
 /** 成对读出阶梯草稿的数值，非法值给 0 便于逐项判断 */
 const parsedLadder = computed(() =>
   dividendDraft.ladder.map((row) => ({
+    // 空串不能当 0：否则空行会被判成「股息率 0」，单调性校验全部失真
     yield: Number(row.yield),
     amount: Number(row.amount),
+    filled: row.yield.trim() !== '' && row.amount.trim() !== '',
   })),
 )
 
 /** 按股息率降序排好的阶梯，用于预览 */
 const ladderPreview = computed(() =>
-  [...parsedLadder.value]
-    .filter((row) => Number.isFinite(row.yield) && Number.isFinite(row.amount))
+  parsedLadder.value
+    .filter((row) => row.filled && Number.isFinite(row.yield) && Number.isFinite(row.amount))
+    .map((row) => ({ yield: row.yield, amount: row.amount }))
     .sort((left, right) => right.yield - left.yield),
 )
 
@@ -1110,16 +1131,23 @@ const checks = computed(() => {
   const list: Array<{ label: string; pass: boolean }> = []
   if (activeGroup.value === 'DIVIDEND') {
     const rows = parsedLadder.value
-    list.push({ label: '至少两档阶梯', pass: rows.length >= 2 })
+    const filled = rows.filter((row) => row.filled)
+    list.push({
+      label: '至少两档且都已填',
+      pass: filled.length >= 2 && filled.length === rows.length,
+    })
     list.push({
       label: '股息率逐档递减',
-      pass: rows.every((row, index) => index === 0 || row.yield < rows[index - 1]!.yield),
+      pass:
+        filled.length >= 2 && filled.every((row, i) => i === 0 || row.yield < filled[i - 1]!.yield),
     })
     list.push({
       label: '金额随股息率递增',
-      pass: rows.every((row, index) => index === 0 || row.amount > rows[index - 1]!.amount),
+      pass:
+        filled.length >= 2 &&
+        filled.every((row, i) => i === 0 || row.amount > filled[i - 1]!.amount),
     })
-    list.push({ label: '最低档即保底，金额为正', pass: (rows.at(-1)?.amount ?? 0) > 0 })
+    list.push({ label: '最低档即保底，金额为正', pass: (filled.at(-1)?.amount ?? 0) > 0 })
   } else if (activeGroup.value === 'GRID') {
     const lower = Number(gridDraft.lowerBound)
     const upper = Number(gridDraft.upperBound)
@@ -1536,46 +1564,41 @@ function fillDividendDetail(row: DividendWatch): void {
   manualDraft.dividendYield = ''
   manualDraft.indexName = row.indexName ?? ''
   const ladder = row.ladder ?? []
-  if (ladder.length) {
-    dividendDraft.ladder = ladder.map((rung) => ({
-      yield: toText(rung.yield),
-      amount: toText(rung.amount),
-    }))
-    return
-  }
-  // 没配过时给一条以当前股息率为中心的三档起步阶梯，让使用者有东西可改
-  dividendDraft.ladder = defaultLadder(row.dividendYield)
+  dividendDraft.ladder = ladder.map((rung) => ({
+    yield: toText(rung.yield),
+    amount: toText(rung.amount),
+  }))
 }
 
 /**
- * 给出三档起步阶梯：以当前股息率为中间档，上下各推一档
+ * 从一个空的三档骨架开始，不预填任何数字
  *
- * @param currentYield 当前股息率，缺数据时用 5% 兜底
- * @returns 降序的三档草稿
+ * @returns 三档空草稿
  */
-function defaultLadder(currentYield?: number): RungDraft[] {
-  const mid = currentYield != null && currentYield > 0 ? currentYield : 5
+function blankLadder(): RungDraft[] {
   return [
-    { yield: (mid + 0.6).toFixed(2), amount: '100000' },
-    { yield: mid.toFixed(2), amount: '80000' },
-    { yield: Math.max(mid - 1.5, 0.5).toFixed(2), amount: '50000' },
+    { yield: '', amount: '' },
+    { yield: '', amount: '' },
+    { yield: '', amount: '' },
   ]
 }
 
 /**
- * 在最高档之上新增一档，股息率 +0.5、金额 +2 万，保证仍满足单调
+ * 追加一档，从最高档往上加；空骨架时先给三行
  *
  * @returns 无
  */
 function addRung(): void {
   const rows = dividendDraft.ladder
+  if (!rows.length) {
+    dividendDraft.ladder = blankLadder()
+    return
+  }
   const top = rows[0]
-  const topYield = Number(top?.yield ?? 5)
-  const topAmount = Number(top?.amount ?? 100000)
-  rows.unshift({
-    yield: (topYield + 0.5).toFixed(2),
-    amount: String(Math.round(topAmount + 20000)),
-  })
+  if (!top) {
+    return
+  }
+  rows.unshift({ yield: '', amount: '' })
 }
 
 /**
@@ -1682,6 +1705,14 @@ async function saveDividendRow(): Promise<void> {
   }
   ladderErrors.value = []
   const rows = parsedLadder.value
+  if (!rows.length) {
+    ladderErrors.value.push('还没有任何一档，请先填至少两档')
+    return
+  }
+  if (rows.some((row) => !row.filled)) {
+    ladderErrors.value.push('有档位没填完，股息率与应持有金额都要填')
+    return
+  }
   if (rows.length < 2) {
     ladderErrors.value.push('至少要两档，否则表达不了越跌越买')
   }
@@ -2276,6 +2307,22 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+.app-ladder__empty {
+  padding: 14px 12px;
+  border: 1px dashed var(--hair-2);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--t3);
+}
+
+.app-ladder__empty-tip {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--t4);
 }
 
 .app-ladder__row {
