@@ -7,13 +7,13 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 红利策略参数视图，按标的给出，附问题清单供设置页提示不合法组合
+ * 红利阶梯参数视图，按标的给出，附问题清单供设置页提示不合法阶梯
  */
 @Data
 public class DividendPlanVO implements Serializable {
 
     /**
-     * 所属品种业务主键；旧版共用参数为 null
+     * 所属品种业务主键
      */
     private String varietyKey;
 
@@ -33,24 +33,19 @@ public class DividendPlanVO implements Serializable {
     private String indexName;
 
     /**
-     * 基准仓位金额，单位元
+     * 股息率阶梯，按股息率降序
      */
-    private BigDecimal baseAmount;
+    private List<LadderRung> ladder;
 
     /**
-     * 保底分红金额，单位元
+     * 仓位上限，即最高档的应持有金额，单位元
      */
-    private BigDecimal floorAmount;
+    private BigDecimal topAmount;
 
     /**
-     * 加仓股息率阈值，单位百分点
+     * 保底底仓，即最低档的应持有金额，单位元
      */
-    private BigDecimal addYield;
-
-    /**
-     * 减仓股息率阈值，单位百分点
-     */
-    private BigDecimal reduceYield;
+    private BigDecimal bottomAmount;
 
     /**
      * 参数是否齐全且自洽
@@ -63,9 +58,28 @@ public class DividendPlanVO implements Serializable {
     private List<String> issues;
 
     /**
-     * 参数提示，如「正在沿用旧版共用参数」；不影响可用性
+     * 参数提示，如「旧版单阈值方式已停用」
      */
     private List<String> notes;
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * 一档：股息率门槛与该档的应持有金额
+     */
+    @Data
+    public static class LadderRung implements Serializable {
+
+        /**
+         * 股息率门槛，单位百分点
+         */
+        private BigDecimal yield;
+
+        /**
+         * 该档的应持有金额，单位元
+         */
+        private BigDecimal amount;
+
+        private static final long serialVersionUID = 1L;
+    }
 }

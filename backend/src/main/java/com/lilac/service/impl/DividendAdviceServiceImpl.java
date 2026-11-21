@@ -25,6 +25,7 @@ import com.lilac.service.VarietyService;
 import com.lilac.strategy.DividendAdvisor;
 import com.lilac.strategy.DividendPlanResolver;
 import com.lilac.strategy.model.DividendDecision;
+import com.lilac.strategy.model.DividendLadderRung;
 import com.lilac.strategy.model.DividendPlan;
 import com.lilac.strategy.model.DividendSignal;
 import com.lilac.utils.ThrowUtils;
@@ -104,12 +105,32 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         DividendPlan plan = new DividendPlan();
         plan.setVarietyKey(variety.getVarietyKey());
         plan.setVarietyName(variety.getVarietyName());
-        plan.setBaseAmount(request.getBaseAmount());
-        plan.setFloorAmount(request.getFloorAmount());
-        plan.setAddYield(request.getAddYield());
-        plan.setReduceYield(request.getReduceYield());
+        plan.setLadder(toLadder(request.getLadder()));
         DividendPlan saved = dividendPlanResolver.save(plan);
         return toPlanVO(saved, variety);
+    }
+
+    /**
+     * 把保存请求里的阶梯转成内部模型
+     *
+     * @param source 请求里的阶梯，可为 null
+     * @return 内部阶梯
+     */
+    private List<DividendLadderRung> toLadder(List<DividendParamSaveRequest.LadderRung> source) {
+        List<DividendLadderRung> ladder = new ArrayList<>();
+        if (source == null) {
+            return ladder;
+        }
+        for (DividendParamSaveRequest.LadderRung rung : source) {
+            if (rung == null) {
+                continue;
+            }
+            DividendLadderRung target = new DividendLadderRung();
+            target.setYield(rung.getYield());
+            target.setAmount(rung.getAmount());
+            ladder.add(target);
+        }
+        return ladder;
     }
 
     /**
@@ -122,7 +143,7 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
     public boolean removePlan(String varietyKey) {
         ThrowUtils.throwIf(varietyKey == null || varietyKey.isBlank(), HttpsCodeEnum.PARAMS_ERROR,
                 "必须指定要清除的标的");
-        return dividendPlanResolver.remove(varietyKey.trim()) > 0;
+        return dividendPlanResolver.remove(varietyKey.trim());
     }
 
     /**
@@ -220,10 +241,9 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         }
         vo.setIndexName(indexNameOf(variety.getTrackIndexCode()));
         DividendPlan plan = dividendPlanResolver.resolveFor(variety.getVarietyKey(), variety.getVarietyName());
-        vo.setBaseAmount(plan.getBaseAmount());
-        vo.setFloorAmount(plan.getFloorAmount());
-        vo.setAddYield(plan.getAddYield());
-        vo.setReduceYield(plan.getReduceYield());
+        vo.setLadder(toLadderVO(plan));
+        vo.setTopAmount(plan.topAmount());
+        vo.setBottomAmount(plan.bottomAmount());
         vo.setParamUsable(plan.complete());
         vo.setParamIssues(plan.getIssues());
         vo.setParamNotes(plan.getNotes());
@@ -259,8 +279,8 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         vo.setVarietyCode(variety.getVarietyCode());
         vo.setVarietyName(variety.getVarietyName());
         vo.setIndexCode(variety.getTrackIndexCode());
-        vo.setBaseAmount(plan.getBaseAmount());
-        vo.setFloorAmount(plan.getFloorAmount());
+        vo.setTopAmount(plan.topAmount());
+        vo.setBottomAmount(plan.bottomAmount());
         vo.setGridNote(GRID_NOTE);
         DividendSignal signal = signalOf(variety);
         fillSignal(vo, signal);
@@ -272,6 +292,7 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
         vo.setActionLabel(decision.getAction().getLabel());
         vo.setSuggestAmount(decision.getSuggestAmount());
         vo.setTargetAmount(decision.getTargetAmount());
+        vo.setHitYield(decision.getHitYield());
         vo.setRemainingAmount(decision.getRemainingAmount());
         vo.setFloorProtected(decision.getFloorProtected());
         vo.setGridSuppressed(decision.getGridSuppressed());
@@ -583,14 +604,30 @@ public class DividendAdviceServiceImpl implements DividendAdviceService {
                 : plan.getVarietyName());
         vo.setIndexCode(variety == null ? null : variety.getTrackIndexCode());
         vo.setIndexName(variety == null ? null : indexNameOf(variety.getTrackIndexCode()));
-        vo.setBaseAmount(plan.getBaseAmount());
-        vo.setFloorAmount(plan.getFloorAmount());
-        vo.setAddYield(plan.getAddYield());
-        vo.setReduceYield(plan.getReduceYield());
+        vo.setLadder(toLadderVO(plan));
+        vo.setTopAmount(plan.topAmount());
+        vo.setBottomAmount(plan.bottomAmount());
         vo.setUsable(plan.complete());
         vo.setIssues(plan.getIssues());
         vo.setNotes(plan.getNotes());
         return vo;
+    }
+
+    /**
+     * 把内部阶梯转成视图用的一档列表
+     *
+     * @param plan 参数
+     * @return 阶梯，按股息率降序
+     */
+    private List<DividendPlanVO.LadderRung> toLadderVO(DividendPlan plan) {
+        List<DividendPlanVO.LadderRung> ladder = new ArrayList<>();
+        for (DividendLadderRung rung : plan.sortedLadder()) {
+            DividendPlanVO.LadderRung item = new DividendPlanVO.LadderRung();
+            item.setYield(rung.getYield());
+            item.setAmount(rung.getAmount());
+            ladder.add(item);
+        }
+        return ladder;
     }
 
     /**

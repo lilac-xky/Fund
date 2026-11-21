@@ -60,19 +60,24 @@ public class DividendAdviceVO implements Serializable {
     private BigDecimal currentAmount;
 
     /**
-     * 减仓后的剩余金额，单位元
+     * 买卖之后的持有金额，单位元
      */
     private BigDecimal remainingAmount;
 
     /**
-     * 基准仓位金额，单位元
+     * 命中的阶梯档位股息率，单位百分点
      */
-    private BigDecimal baseAmount;
+    private BigDecimal hitYield;
 
     /**
-     * 保底分红金额，单位元
+     * 仓位上限，即最高档的应持有金额，单位元
      */
-    private BigDecimal floorAmount;
+    private BigDecimal topAmount;
+
+    /**
+     * 保底底仓，即最低档的应持有金额，单位元
+     */
+    private BigDecimal bottomAmount;
 
     /**
      * 使用的股息率，单位百分点

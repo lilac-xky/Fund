@@ -69,24 +69,19 @@ public class DividendWatchVO implements Serializable {
     private Boolean stale;
 
     /**
-     * 这只基金自己的基准仓位金额，单位元
+     * 这只基金的红利阶梯，按股息率降序
      */
-    private BigDecimal baseAmount;
+    private List<DividendPlanVO.LadderRung> ladder;
 
     /**
-     * 这只基金自己的保底分红金额，单位元
+     * 仓位上限，即最高档的应持有金额，单位元
      */
-    private BigDecimal floorAmount;
+    private BigDecimal topAmount;
 
     /**
-     * 这只基金自己的加仓股息率阈值，单位百分点
+     * 保底底仓，即最低档的应持有金额，单位元
      */
-    private BigDecimal addYield;
-
-    /**
-     * 这只基金自己的减仓股息率阈值，单位百分点
-     */
-    private BigDecimal reduceYield;
+    private BigDecimal bottomAmount;
 
     /**
      * 这只基金的参数是否齐全且自洽

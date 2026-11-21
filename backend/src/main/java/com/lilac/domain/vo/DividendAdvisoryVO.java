@@ -64,29 +64,9 @@ public class DividendAdvisoryVO implements Serializable {
     private Boolean paramUsable;
 
     /**
-     * 参数问题清单
+     * 参数问题清单，逐只说明哪只没配好阶梯
      */
     private List<String> paramIssues;
-
-    /**
-     * 基准仓位金额，单位元
-     */
-    private BigDecimal baseAmount;
-
-    /**
-     * 保底分红金额，单位元
-     */
-    private BigDecimal floorAmount;
-
-    /**
-     * 加仓股息率阈值，单位百分点
-     */
-    private BigDecimal addYield;
-
-    /**
-     * 减仓股息率阈值，单位百分点
-     */
-    private BigDecimal reduceYield;
 
     /**
      * 最新股息率数据日期，页面与邮件必须显示
