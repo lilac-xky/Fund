@@ -2,15 +2,22 @@
 /* eslint-disable */
 import request from '@/request'
 
-/** 列出当前参数下的网格线 GET /api/grid/lines */
-export async function lines(options?: { [key: string]: any }) {
+/** 列出指定标的的网格线 GET /api/grid/lines */
+export async function lines(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.linesParams,
+  options?: { [key: string]: any },
+) {
   return request<API.ResultListBigDecimal>('/api/grid/lines', {
     method: 'GET',
+    params: {
+      ...params,
+    },
     ...(options || {}),
   })
 }
 
-/** 对全部持有中的场内 ETF 逐只判断是否触及网格线 POST /api/grid/list */
+/** 对全部持有中的标的逐只判断是否触及网格线 POST /api/grid/list */
 export async function list(options?: { [key: string]: any }) {
   return request<API.ResultGridAdvisoryVO>('/api/grid/list', {
     method: 'POST',
@@ -18,10 +25,14 @@ export async function list(options?: { [key: string]: any }) {
   })
 }
 
-/** 读取通用网格参数与划格结果，未按标的分开配置时作为兜底 GET /api/grid/plan */
-export async function plan(options?: { [key: string]: any }) {
-  return request<API.ResultGridPlanVO>('/api/grid/plan', {
-    method: 'GET',
+/** 清除指定标的的网格参数，回到未配置状态 POST /api/grid/plan/remove */
+export async function removePlan(body: API.GridParamSaveRequest, options?: { [key: string]: any }) {
+  return request<API.ResultBoolean>('/api/grid/plan/remove', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
     ...(options || {}),
   })
 }
@@ -65,7 +76,7 @@ export async function single(body: API.GridAdviceRequest, options?: { [key: stri
   })
 }
 
-/** 列出网格的监控对象，说明每只 ETF 用的是哪套格子 GET /api/grid/watch */
+/** 列出网格的监控对象，说明每只标的用的是哪套格子、当前价落在区间内外 GET /api/grid/watch */
 export async function watch(options?: { [key: string]: any }) {
   return request<API.ResultListGridWatchVO>('/api/grid/watch', {
     method: 'GET',

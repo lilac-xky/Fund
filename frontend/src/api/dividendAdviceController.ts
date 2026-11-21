@@ -10,10 +10,47 @@ export async function list(options?: { [key: string]: any }) {
   })
 }
 
-/** 读取红利参数，含不合法组合的问题清单 GET /api/dividend/advice/plan */
-export async function plan(options?: { [key: string]: any }) {
+/** 读取指定基金的红利参数，含不合法组合的问题清单 GET /api/dividend/advice/plan */
+export async function plan(
+  // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
+  params: API.planParams,
+  options?: { [key: string]: any },
+) {
   return request<API.ResultDividendPlanVO>('/api/dividend/advice/plan', {
     method: 'GET',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
+/** 清空指定基金的红利参数，回到未配置状态 POST /api/dividend/advice/plan/remove */
+export async function removePlan(
+  body: API.DividendParamSaveRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultBoolean>('/api/dividend/advice/plan/remove', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 保存指定基金的红利参数，保底高于基准或阈值颠倒时拒绝并指出字段 POST /api/dividend/advice/plan/save */
+export async function savePlan(
+  body: API.DividendParamSaveRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.ResultDividendPlanVO>('/api/dividend/advice/plan/save', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
     ...(options || {}),
   })
 }
@@ -30,7 +67,7 @@ export async function single(body: API.DividendAdviceRequest, options?: { [key: 
   })
 }
 
-/** 列出红利策略的监控对象，说明这套参数管的是哪几只基金 GET /api/dividend/advice/watch */
+/** 列出红利监控对象，每只带出跟踪指数、股息率与它自己的参数 GET /api/dividend/advice/watch */
 export async function watch(options?: { [key: string]: any }) {
   return request<API.ResultListDividendWatchVO>('/api/dividend/advice/watch', {
     method: 'GET',

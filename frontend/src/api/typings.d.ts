@@ -560,7 +560,28 @@ declare namespace API {
     indexName?: string
   }
 
+  type DividendParamSaveRequest = {
+    /** 品种业务主键，必填：参数按基金分开，没有标的就无处挂靠 */
+    varietyKey?: string
+    /** 基准仓位金额，单位元 */
+    baseAmount?: number
+    /** 保底分红金额，单位元，不得高于基准仓位 */
+    floorAmount?: number
+    /** 加仓股息率阈值，单位百分点 */
+    addYield?: number
+    /** 减仓股息率阈值，单位百分点，必须低于加仓阈值 */
+    reduceYield?: number
+  }
+
   type DividendPlanVO = {
+    /** 所属品种业务主键；旧版共用参数为 null */
+    varietyKey?: string
+    /** 所属品种名称，供页面显示这套参数管的是哪只 */
+    varietyName?: string
+    /** 跟踪指数代码，页面据此说明股息率来自哪只指数 */
+    indexCode?: string
+    /** 跟踪指数全称 */
+    indexName?: string
     /** 基准仓位金额，单位元 */
     baseAmount?: number
     /** 保底分红金额，单位元 */
@@ -573,6 +594,8 @@ declare namespace API {
     usable?: boolean
     /** 参数问题清单，可用时为空 */
     issues?: string[]
+    /** 参数提示，如「正在沿用旧版共用参数」；不影响可用性 */
+    notes?: string[]
   }
 
   type DividendQueryRequest = {
@@ -597,6 +620,8 @@ declare namespace API {
     indexName?: string
     /** 当前持有金额，单位元；取不到时为 null */
     currentAmount?: number
+    /** 当前持有金额的取数说明 */
+    amountSource?: string
     /** 当前股息率，单位百分点；取不到时为 null */
     dividendYield?: number
     /** 股息率数据日期 */
@@ -605,6 +630,26 @@ declare namespace API {
     ageDays?: number
     /** 股息率是否已过期，过期时不给加减仓动作 */
     stale?: boolean
+    /** 这只基金自己的基准仓位金额，单位元 */
+    baseAmount?: number
+    /** 这只基金自己的保底分红金额，单位元 */
+    floorAmount?: number
+    /** 这只基金自己的加仓股息率阈值，单位百分点 */
+    addYield?: number
+    /** 这只基金自己的减仓股息率阈值，单位百分点 */
+    reduceYield?: number
+    /** 这只基金的参数是否齐全且自洽 */
+    paramUsable?: boolean
+    /** 参数问题清单，可用时为空 */
+    paramIssues?: string[]
+    /** 参数提示，如「正在沿用旧版共用参数」 */
+    paramNotes?: string[]
+    /** 按当前参数与本日股息率算出的动作中文名，供列表直接显示 */
+    actionLabel?: string
+    /** 按当前参数与本日股息率算出的建议金额，单位元 */
+    suggestAmount?: number
+    /** 价格穿越网格时的提示，供列表说明红利与网格的优先级 */
+    gridNote?: string
     /** 该标的是否能正常参与建议，false 时看 reason */
     usable?: boolean
     /** 不能参与建议的原因，逐条可读 */
@@ -1190,6 +1235,12 @@ declare namespace API {
     basisLabel?: string
     /** 场外基金用来估净值的跟踪 ETF 或指数行情代码 */
     proxySymbol?: string
+    /** 当前价，单位元；取不到时为 null */
+    currentPrice?: number
+    /** 当前价的数据日期 */
+    priceDate?: string
+    /** 当前价的来源说明 */
+    priceSource?: string
     /** 该标的的价格下界，单位元 */
     lowerBound?: number
     /** 该标的的价格上界，单位元 */
@@ -1208,6 +1259,10 @@ declare namespace API {
     lineCount?: number
     /** 是否已单独配置；false 表示仍在沿用通用参数 */
     customized?: boolean
+    /** 当前价相对格子区间的状态 INSIDE / ABOVE / BELOW，未配置时为 null */
+    position?: string
+    /** 区间状态说明，如「当前价已高于网格上界，需重新划格」 */
+    positionNote?: string
   }
 
   type historyParams = {
@@ -1755,6 +1810,10 @@ declare namespace API {
     note?: string
   }
 
+  type linesParams = {
+    varietyKey: string
+  }
+
   type LoginRequest = {
     /** 用户名 */
     username?: string
@@ -2032,6 +2091,10 @@ declare namespace API {
   }
 
   type planOfParams = {
+    varietyKey: string
+  }
+
+  type planParams = {
     varietyKey: string
   }
 

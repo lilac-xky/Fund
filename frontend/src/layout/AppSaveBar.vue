@@ -32,8 +32,8 @@
         <slot name="extra" />
         <button type="button" class="app-save__ghost" @click="$emit('discard')">放弃修改</button>
         <button type="button" class="app-save__primary" :disabled="saving" @click="$emit('save')">
-          {{ saving ? '保存中…' : '保存全部' }}
-          <span class="app-save__kbd">⌘S</span>
+          {{ saving ? '保存中…' : primaryLabel }}
+          <span v-if="kbdHint" class="app-save__kbd">{{ kbdHint }}</span>
         </button>
       </div>
     </div>
@@ -55,6 +55,10 @@ defineProps<{
   lastSavedAt?: string
   /** 保存中 */
   saving?: boolean
+  /** 主按钮文案，逐只编辑时改为「保存这只」 */
+  primaryLabel?: string
+  /** 快捷键提示，逐只编辑时不显示 */
+  kbdHint?: string
 }>()
 
 defineEmits<{ (event: 'save'): void; (event: 'discard'): void }>()

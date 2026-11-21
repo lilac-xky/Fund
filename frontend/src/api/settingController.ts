@@ -33,7 +33,7 @@ export async function testMailConnection(options?: { [key: string]: any }) {
   })
 }
 
-/** 读取参数设置页的全部数据，含四个分组、邮件状态与生效说明 GET /api/setting/overview */
+/** 读取参数设置页的全部数据，含债券、指标、警示三组、邮件状态与生效说明 GET /api/setting/overview */
 export async function overview(options?: { [key: string]: any }) {
   return request<API.ResultSettingOverviewVO>('/api/setting/overview', {
     method: 'GET',
