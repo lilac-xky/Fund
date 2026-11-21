@@ -409,6 +409,7 @@
                       v-model="btBetaWindow"
                       type="number"
                       min="0"
+                      :placeholder="btDefaults.indexBetaWindow"
                       class="app-input app-input--num app-btparams__v"
                     />
                     <span class="app-btparams__u">交易日 · 0 表示关闭 β 校正</span>
@@ -419,6 +420,7 @@
                       v-model="btGoldWindow"
                       type="number"
                       min="0"
+                      :placeholder="btDefaults.goldWindow"
                       class="app-input app-input--num app-btparams__v"
                     />
                     <span class="app-btparams__u">交易日</span>
@@ -429,6 +431,7 @@
                       v-model="btBondWindow"
                       type="number"
                       min="0"
+                      :placeholder="btDefaults.bondWindow"
                       class="app-input app-input--num app-btparams__v"
                     />
                     <span class="app-btparams__u">交易日</span>
@@ -440,6 +443,7 @@
                       type="number"
                       step="0.01"
                       min="0"
+                      :placeholder="btDefaults.stockErrorThreshold"
                       class="app-input app-input--num app-btparams__v"
                     />
                     <span class="app-btparams__u">个百分点</span>
@@ -451,10 +455,14 @@
                       type="number"
                       step="0.01"
                       min="0"
+                      :placeholder="btDefaults.bondErrorThreshold"
                       class="app-input app-input--num app-btparams__v"
                     />
                     <span class="app-btparams__u">个百分点</span>
                   </div>
+                  <span class="app-btparams__hint">
+                    留空即沿用当前生效配置（灰字为默认值），改动只影响本次回测
+                  </span>
                 </div>
 
                 <div v-if="!btResult" class="app-listempty">
@@ -686,20 +694,38 @@ const btLoading = ref(false)
 /** 回测结果，未跑过时为 null */
 const btResult = ref<API.BacktestResultVO | null>(null)
 
-/** 指数 β 回归窗口，0 表示关闭 β 校正，用于与直取做对照 */
-const btBetaWindow = ref('250')
+/** 指数 β 回归窗口，留空即沿用后端配置；0 表示关闭 β 校正，用于与直取做对照 */
+const btBetaWindow = ref('')
 
-/** 黄金 β 滚动窗口 */
-const btGoldWindow = ref('20')
+/** 黄金 β 滚动窗口，留空即沿用后端配置 */
+const btGoldWindow = ref('')
 
-/** 债券传导系数滚动窗口 */
-const btBondWindow = ref('60')
+/** 债券回归滚动窗口，留空即沿用后端配置（多代理回归默认 120 交易日） */
+const btBondWindow = ref('')
 
-/** 股票型误差阈值 */
-const btStockThreshold = ref('0.3')
+/** 股票型误差阈值，留空即沿用后端配置 */
+const btStockThreshold = ref('')
 
-/** 债券型误差阈值 */
-const btBondThreshold = ref('0.1')
+/** 债券型误差阈值，留空即沿用后端配置 */
+const btBondThreshold = ref('')
+
+/** 上次回测返回的生效参数，作为输入框的占位提示 */
+const btDefaults = btPlaceholders()
+
+/**
+ * 输入框占位提示用的默认值，仅用于展示，不参与请求
+ *
+ * @returns 各参数的默认展示文本
+ */
+function btPlaceholders(): Record<string, string> {
+  return {
+    indexBetaWindow: '250',
+    goldWindow: '20',
+    bondWindow: '120',
+    stockErrorThreshold: '0.3',
+    bondErrorThreshold: '0.1',
+  }
+}
 
 /** 回测右上角状态 */
 const btMeta = computed(() => {
@@ -1673,6 +1699,13 @@ onBeforeUnmount(() => {
 }
 
 .app-btparams__u {
+  font-size: 10.5px;
+  color: var(--t4);
+}
+
+.app-btparams__hint {
+  flex-basis: 100%;
+  margin-top: 2px;
   font-size: 10.5px;
   color: var(--t4);
 }
