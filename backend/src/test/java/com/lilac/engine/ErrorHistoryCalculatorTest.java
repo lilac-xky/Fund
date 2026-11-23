@@ -166,6 +166,116 @@ class ErrorHistoryCalculatorTest {
     }
 
     /**
+     * 连续超阈值时期区间不可展示，它是区间能不能对外给的闸门
+     */
+    @Test
+    @DisplayName("连续超阈值时区间不可展示")
+    void intervalHiddenWhenConsecutiveOver() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        // 前 17 条残差很小，最后 3 条突然跑远，连续计数由此产生
+        for (int i = 0; i < 20; i++) {
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
+            double resid = i >= 17 ? 9.00 : 0.20;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + resid));
+            vo.setIntervalWidth(new BigDecimal("2.62"));
+            vo.setInInterval(Boolean.FALSE);
+            vo.setOverThreshold(i == 19);
+            history.add(vo);
+        }
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        assertThat(stats.getIntervalHalfWidth()).isNotNull();
+        // 尾部三条残差 9.00 远超半宽，连续计数为 3
+        assertThat(stats.getConsecutiveOver()).isEqualTo(3);
+        assertThat(stats.intervalShowable(new BigDecimal("0.80"))).isFalse();
+    }
+
+    /**
+     * 没有超阈值且覆盖得住时区间可以展示，宽度大小不参与判定
+     */
+    @Test
+    @DisplayName("未超阈值时区间可展示，不看宽度")
+    void intervalShowableWhenNoConsecutiveOver() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 0.80 : -0.80)));
+            vo.setInInterval(Boolean.TRUE);
+            vo.setIntervalWidth(new BigDecimal("2.62"));
+            vo.setOverThreshold(Boolean.FALSE);
+            history.add(vo);
+        }
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        assertThat(stats.getConsecutiveOver()).isZero();
+        assertThat(stats.intervalShowable(new BigDecimal("0.80"))).isTrue();
+        // 宽波动比仍被算出，但不再参与区间是否展示的判定
+        assertThat(stats.getWidthRatio()).isNotNull();
+    }
+
+    /**
+     * 覆盖率按当前半宽自洽重算，不能被历史记录里「当时那把尺子」的 inInterval 拖低
+     */
+    @Test
+    @DisplayName("覆盖率用当前半宽重算，不读历史旧标记")
+    void coverageRecomputedWithCurrentHalfWidth() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        // 残差恒为 ±0.80，历史标记里 inInterval 全是 false（旧区间只有 ±0.492 宽）
+        for (int i = 0; i < 20; i++) {
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 0.80 : -0.80)));
+            vo.setIntervalWidth(new BigDecimal("0.984"));
+            vo.setInInterval(Boolean.FALSE);
+            history.add(vo);
+        }
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        // 半宽 1.312 装得住 ±0.80，真实覆盖率是 100%，而不是旧标记的 0%
+        assertThat(stats.getIntervalHalfWidth()).isEqualByComparingTo("1.312000");
+        assertThat(stats.getIntervalCoverage()).isEqualByComparingTo("1.0000");
+        assertThat(stats.getConsecutiveOver()).isZero();
+        assertThat(stats.intervalShowable(new BigDecimal("0.80"))).isTrue();
+    }
+
+    /**
+     * 最近几天连续超出当前区间时，连续计数按残差自洽判定
+     */
+    @Test
+    @DisplayName("连续超阈值按残差自洽判定")
+    void consecutiveOverComputedFromResiduals() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            double actual = i % 2 == 0 ? 1.00 : -1.00;
+            double resid = i >= 18 ? 9.00 : 0.20;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + resid));
+            // 历史标记全为「没超阈值」，真实结论要看残差
+            vo.setOverThreshold(Boolean.FALSE);
+            history.add(vo);
+        }
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        // 最后两条残差 9.00 远超半宽，连续计数应为 2
+        assertThat(stats.getConsecutiveOver()).isEqualTo(2);
+        assertThat(stats.intervalShowable(new BigDecimal("0.80"))).isFalse();
+    }
+
+    /**
      * 构造一条误差记录
      *
      * @param estimated 预估涨跌幅

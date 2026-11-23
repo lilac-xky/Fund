@@ -476,11 +476,41 @@ class EstimateEngineTest {
     }
 
     /**
-     * 区间比基金自身波动还宽时只给方向，不输出没有信息量的区间
+     * 区间跨零也要展示，位置本身能区分小涨与大涨
      */
     @Test
-    @DisplayName("区间过宽时只给方向不给区间")
-    void mixedIntervalTooWideGivesDirectionOnly() {
+    @DisplayName("区间跨零仍然给出，只附方向不确定说明")
+    void mixedCrossZeroStillShowsInterval() {
+        EstimateContext context = contextOf(variety("OF:011370", VarietyType.OF, "华商均衡成长混合C",
+                FundCategory.MIXED));
+        context.setRawFundType("混合型-偏股");
+        context.setSnapshot(snapshotOf("76.43"));
+        Map<String, MarketQuote> quotes = new LinkedHashMap<>();
+        quotes.put("sh600519", okQuote("sh600519", "0.30"));
+        quotes.put("sz000858", okQuote("sz000858", "0.10"));
+        context.setHoldingQuotes(quotes);
+        context.setHistory(residualMixedHistory());
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        assertThat(outcome.getTier()).isEqualTo(EstimateTier.B);
+        assertThat(outcome.getIntervalLow()).isNotNull();
+        assertThat(outcome.getIntervalHigh()).isNotNull();
+        BigDecimal halfWidth = outcome.getIntervalHigh().subtract(outcome.getIntervalLow())
+                .divide(BigDecimal.valueOf(2), 6, java.math.RoundingMode.HALF_UP);
+        // 中心 0.2 落在半宽 1.312 之内，必然跨零，但区间照样给
+        assertThat(outcome.getIntervalLow()).isNegative();
+        assertThat(outcome.getIntervalHigh()).isPositive();
+        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("跨零"));
+        assertThat(halfWidth).isPositive();
+    }
+
+    /**
+     * 连续超阈值时区间不可信，退回只给方向
+     */
+    @Test
+    @DisplayName("连续超阈值时不给区间")
+    void mixedConsecutiveOverHidesInterval() {
         EstimateContext context = contextOf(variety("OF:011370", VarietyType.OF, "华商均衡成长混合C",
                 FundCategory.MIXED));
         context.setRawFundType("混合型-偏股");
@@ -489,17 +519,35 @@ class EstimateEngineTest {
         quotes.put("sh600519", okQuote("sh600519", "1.60"));
         quotes.put("sz000858", okQuote("sz000858", "1.00"));
         context.setHoldingQuotes(quotes);
-        context.setHistory(wideResidualMixedHistory());
+        context.setHistory(recentOverHistory());
 
         EstimateOutcome outcome = engine.estimate(context);
 
-        assertThat(outcome.getTier()).isEqualTo(EstimateTier.B);
-        assertThat(outcome.getDirection()).isNotNull();
         assertThat(outcome.getIntervalLow()).isNull();
         assertThat(outcome.getIntervalHigh()).isNull();
-        // 中心值仍要留存，否则永远攒不出残差样本
-        assertThat(outcome.getCenterChange()).isNotNull();
-        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("区间"));
+        assertThat(outcome.getDirection()).isNotNull();
+        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("超阈值"));
+    }
+
+    /**
+     * 构造连续超阈值的历史：前段残差可控，尾部几条突然跑远
+     *
+     * @return 历史序列
+     */
+    private List<EstimateErrorVO> recentOverHistory() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
+            // 最后三条残差远超半宽，形成连续超阈值
+            double resid = i >= 37 ? 9.00 : 0.80;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + resid));
+            vo.setDirectionHit(Boolean.TRUE);
+            history.add(vo);
+        }
+        return history;
     }
 
     /**
@@ -515,25 +563,6 @@ class EstimateEngineTest {
             vo.setTradeDate(LocalDate.of(2026, 9, 1));
             vo.setActualChange(BigDecimal.valueOf(actual));
             vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 0.80 : -0.80)));
-            vo.setDirectionHit(Boolean.TRUE);
-            history.add(vo);
-        }
-        return history;
-    }
-
-    /**
-     * 构造残差远大于自身波动的混合型历史：实际在 ±1 摆动，中心偏差 ±6
-     *
-     * @return 历史序列
-     */
-    private List<EstimateErrorVO> wideResidualMixedHistory() {
-        List<EstimateErrorVO> history = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            double actual = i % 2 == 0 ? 1.00 : -1.00;
-            EstimateErrorVO vo = new EstimateErrorVO();
-            vo.setTradeDate(LocalDate.of(2026, 9, 1));
-            vo.setActualChange(BigDecimal.valueOf(actual));
-            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 6.00 : -6.00)));
             vo.setDirectionHit(Boolean.TRUE);
             history.add(vo);
         }
