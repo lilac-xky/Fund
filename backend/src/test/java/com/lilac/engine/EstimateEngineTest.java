@@ -446,11 +446,11 @@ class EstimateEngineTest {
     }
 
     /**
-     * 混合型没有点估计误差时，区间半宽按自身波动而不是写死的默认 sigma 给出
+     * 混合型区间半宽按区间残差给出，不再拿基金自身波动当误差量纲
      */
     @Test
-    @DisplayName("混合型区间半宽按自身波动给出")
-    void mixedIntervalUsesVolatility() {
+    @DisplayName("混合型区间半宽按区间残差给出")
+    void mixedIntervalUsesResidual() {
         EstimateContext context = contextOf(variety("OF:011370", VarietyType.OF, "华商均衡成长混合C",
                 FundCategory.MIXED));
         context.setRawFundType("混合型-偏股");
@@ -459,29 +459,81 @@ class EstimateEngineTest {
         quotes.put("sh600519", okQuote("sh600519", "1.60"));
         quotes.put("sz000858", okQuote("sz000858", "1.00"));
         context.setHoldingQuotes(quotes);
-        context.setHistory(volatileMixedHistory());
+        context.setHistory(residualMixedHistory());
 
         EstimateOutcome outcome = engine.estimate(context);
 
         assertThat(outcome.getTier()).isEqualTo(EstimateTier.B);
+        assertThat(outcome.getIntervalHigh()).isNotNull();
         BigDecimal halfWidth = outcome.getIntervalHigh().subtract(outcome.getIntervalLow())
                 .divide(BigDecimal.valueOf(2), 6, java.math.RoundingMode.HALF_UP);
-        // 写死的默认半宽是 0.3 × 1.64 = 0.492，波动 5% 的基金不该只给这么窄
-        assertThat(halfWidth).isGreaterThan(new BigDecimal("5"));
+        // 残差恒为 ±0.80，σ=0.80、半宽 1.64×0.80=1.312，与「按自身波动 ±5.8」量级完全不同
+        assertThat(halfWidth).isLessThan(new BigDecimal("2"));
+        assertThat(halfWidth).isGreaterThan(new BigDecimal("1"));
+        // 中心值只进统计，不进任何对外字段
+        assertThat(outcome.getEstimatedChange()).isNull();
+        assertThat(outcome.getCenterChange()).isNotNull();
     }
 
     /**
-     * 构造高波动混合型历史：实际涨跌在 ±5.8 之间摆动，方向全部命中，没有点估计
+     * 区间比基金自身波动还宽时只给方向，不输出没有信息量的区间
+     */
+    @Test
+    @DisplayName("区间过宽时只给方向不给区间")
+    void mixedIntervalTooWideGivesDirectionOnly() {
+        EstimateContext context = contextOf(variety("OF:011370", VarietyType.OF, "华商均衡成长混合C",
+                FundCategory.MIXED));
+        context.setRawFundType("混合型-偏股");
+        context.setSnapshot(snapshotOf("76.43"));
+        Map<String, MarketQuote> quotes = new LinkedHashMap<>();
+        quotes.put("sh600519", okQuote("sh600519", "1.60"));
+        quotes.put("sz000858", okQuote("sz000858", "1.00"));
+        context.setHoldingQuotes(quotes);
+        context.setHistory(wideResidualMixedHistory());
+
+        EstimateOutcome outcome = engine.estimate(context);
+
+        assertThat(outcome.getTier()).isEqualTo(EstimateTier.B);
+        assertThat(outcome.getDirection()).isNotNull();
+        assertThat(outcome.getIntervalLow()).isNull();
+        assertThat(outcome.getIntervalHigh()).isNull();
+        // 中心值仍要留存，否则永远攒不出残差样本
+        assertThat(outcome.getCenterChange()).isNotNull();
+        assertThat(outcome.getRemarks()).anyMatch(note -> note.contains("区间"));
+    }
+
+    /**
+     * 构造残差很小的混合型历史：实际在 ±6 摆动，内部中心只偏 0.8，方向全命中
      *
      * @return 历史序列
      */
-    private List<EstimateErrorVO> volatileMixedHistory() {
+    private List<EstimateErrorVO> residualMixedHistory() {
         List<EstimateErrorVO> history = new ArrayList<>();
         for (int i = 0; i < 40; i++) {
-            // 混合型 B 档本来就不给点估计，estimatedChange 必须为空才有代表性
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
             EstimateErrorVO vo = new EstimateErrorVO();
             vo.setTradeDate(LocalDate.of(2026, 9, 1));
-            vo.setActualChange(BigDecimal.valueOf(i % 2 == 0 ? 5.80 : -5.80));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 0.80 : -0.80)));
+            vo.setDirectionHit(Boolean.TRUE);
+            history.add(vo);
+        }
+        return history;
+    }
+
+    /**
+     * 构造残差远大于自身波动的混合型历史：实际在 ±1 摆动，中心偏差 ±6
+     *
+     * @return 历史序列
+     */
+    private List<EstimateErrorVO> wideResidualMixedHistory() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            double actual = i % 2 == 0 ? 1.00 : -1.00;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 6.00 : -6.00)));
             vo.setDirectionHit(Boolean.TRUE);
             history.add(vo);
         }

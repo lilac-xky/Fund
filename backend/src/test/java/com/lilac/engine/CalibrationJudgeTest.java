@@ -77,7 +77,7 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("混合型不参与点估计阈值判定")
     void mixedIgnoresPointError() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.UP, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.UP, null, null,
                 new BigDecimal("2.00"), new BigDecimal("1.00"), new BigDecimal("3.00"), thresholds);
 
         assertThat(verdict.getThresholdValue()).isNull();
@@ -93,7 +93,7 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("混合型方向不命中即超阈值")
     void mixedDirectionMissIsOver() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.UP, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.UP, null, null,
                 new BigDecimal("-1.00"), new BigDecimal("-2.00"), new BigDecimal("2.00"), thresholds);
 
         assertThat(verdict.getDirectionHit()).isFalse();
@@ -107,7 +107,7 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("混合型落在区间外即超阈值")
     void mixedOutOfIntervalIsOver() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null, null,
                 new BigDecimal("-3.50"), new BigDecimal("-1.00"), new BigDecimal("0.50"), thresholds);
 
         assertThat(verdict.getDirectionHit()).isTrue();
@@ -121,7 +121,7 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("两侧都横盘时按命中处理")
     void bothFlatCountsAsHit() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.FLAT, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.FLAT, null, null,
                 new BigDecimal("0.01"), new BigDecimal("-0.50"), new BigDecimal("0.50"), thresholds);
 
         assertThat(verdict.getDirectionHit()).isTrue();
@@ -134,14 +134,14 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("无区间时只判方向")
     void mixedWithoutInterval() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null, null,
                 new BigDecimal("-1.20"), null, null, thresholds);
 
         assertThat(verdict.getInInterval()).isNull();
         assertThat(verdict.getIntervalWidth()).isNull();
         assertThat(verdict.getOverThreshold()).isFalse();
 
-        EstimateCalibrationVerdict missed = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null,
+        EstimateCalibrationVerdict missed = judge.judge(FundCategory.MIXED, ChangeDirection.DOWN, null, null,
                 new BigDecimal("1.20"), null, null, thresholds);
         assertThat(missed.getOverThreshold()).isTrue();
     }
@@ -166,7 +166,7 @@ class CalibrationJudgeTest {
     @Test
     @DisplayName("非混合型无点估计时按超阈值处理")
     void missingPointIsOver() {
-        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.STOCK, null, null,
+        EstimateCalibrationVerdict verdict = judge.judge(FundCategory.STOCK, null, null, null,
                 new BigDecimal("1.00"), null, null, thresholds);
 
         assertThat(verdict.getOverThreshold()).isTrue();
@@ -182,7 +182,7 @@ class CalibrationJudgeTest {
      * @return 判定结论
      */
     private EstimateCalibrationVerdict point(FundCategory category, String estimated, String actual) {
-        return judge.judge(category, null, new BigDecimal(estimated), new BigDecimal(actual),
+        return judge.judge(category, null, new BigDecimal(estimated), null, new BigDecimal(actual),
                 null, null, thresholds);
     }
 }

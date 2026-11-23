@@ -229,6 +229,50 @@ class EstimateCalibrationIntegrationTest {
     }
 
     /**
+     * 混合型留存里的内部中心值要带进误差表，否则残差样本永远攒不起来
+     */
+    @Test
+    @DisplayName("内部中心值随校准写入误差表")
+    void centerChangePersistedOnCalibration() {
+        saveVariety("OF:990014", VarietyType.OF, "990014", "华商均衡成长混合C", FundCategory.MIXED);
+        saveNetWorth("990014", DAY1, "1.20", "1.20");
+        saveSnapshotWithCenter("OF:990014", DAY1, "2.00", "UP");
+
+        CalibrationResultVO result = calibrationService.calibrate(requestOf(DAY1));
+
+        CalibrationItemVO item = result.getItems().get(0);
+        assertThat(item.getCenterChange()).isEqualByComparingTo("2.000000");
+        // 中心值只进统计，不变成对外点估计
+        assertThat(item.getEstimatedChange()).isNull();
+        // 区间被压掉时仍要留下中心值，这一天才能产出残差样本
+        assertThat(item.getInInterval()).isNull();
+
+        EstimateErrorQueryRequest query = new EstimateErrorQueryRequest();
+        query.setVarietyKey("OF:990014");
+        query.setStartDate(DAY1);
+        query.setEndDate(DAY1);
+        assertThat(estimateErrorService.listEstimateError(query).get(0).getCenterChange())
+                .isEqualByComparingTo("2.000000");
+    }
+
+    /**
+     * 写入一条只有方向与内部中心值的混合型留存，模拟区间被信息量门槛压掉的那天
+     *
+     * @param varietyKey 业务主键
+     * @param date       交易日
+     * @param center     内部点估计
+     * @param direction  方向
+     */
+    private void saveSnapshotWithCenter(String varietyKey, LocalDate date, String center, String direction) {
+        saveSnapshot(varietyKey, date, "MIXED", "STOCK_WEIGHTED", "B", null, null, null, direction);
+        EstimateSnapshot row = estimateSnapshotMapper.selectOneByQuery(QueryWrapper.create()
+                .eq(EstimateSnapshot::getVarietyKey, varietyKey)
+                .eq(EstimateSnapshot::getTradeDate, date));
+        row.setCenterChange(new BigDecimal(center));
+        estimateSnapshotMapper.update(row);
+    }
+
+    /**
      * 混合型连续多期方向不达标时降级为 C 档，并按说明提示无法预估
      */
     @Test

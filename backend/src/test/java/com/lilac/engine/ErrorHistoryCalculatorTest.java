@@ -122,6 +122,50 @@ class ErrorHistoryCalculatorTest {
     }
 
     /**
+     * 混合型没有点估计误差时，区间半宽按区间残差给，不再拿自身波动当误差量纲
+     */
+    @Test
+    @DisplayName("混合型区间半宽按区间残差给出")
+    void mixedHalfWidthUsesResidual() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        // 实际每天都差 6 个百分点，但中心值只偏 0.8，残差才是区间该用的量纲
+        for (int i = 0; i < 20; i++) {
+            double actual = i % 2 == 0 ? 6.00 : -6.00;
+            EstimateErrorVO vo = new EstimateErrorVO();
+            vo.setTradeDate(LocalDate.of(2026, 9, 1));
+            vo.setActualChange(BigDecimal.valueOf(actual));
+            vo.setCenterChange(BigDecimal.valueOf(actual + (i % 2 == 0 ? 0.80 : -0.80)));
+            history.add(vo);
+        }
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        assertThat(stats.getResidualSamples()).isEqualTo(20);
+        // 残差 σ = 0.80，半宽 1.64 × 0.80 = 1.312；按自身波动 σ=6 会得到 9.84
+        assertThat(stats.getResidualSigma()).isEqualByComparingTo("0.800000");
+        assertThat(stats.getIntervalHalfWidth()).isEqualByComparingTo("1.312000");
+    }
+
+    /**
+     * 连残差都没有时不给半宽，绝不退回写死的默认宽度
+     */
+    @Test
+    @DisplayName("无残差样本时不给区间半宽")
+    void noHalfWidthWithoutResidual() {
+        List<EstimateErrorVO> history = new ArrayList<>();
+        EstimateErrorVO vo = new EstimateErrorVO();
+        vo.setTradeDate(LocalDate.of(2026, 9, 1));
+        vo.setActualChange(new BigDecimal("3.00"));
+        vo.setDirectionHit(Boolean.TRUE);
+        history.add(vo);
+
+        EstimateHistoryStats stats = calculator.summarize(history, 60, new BigDecimal("1.64"));
+
+        assertThat(stats.getResidualSamples()).isZero();
+        assertThat(stats.getIntervalHalfWidth()).isNull();
+    }
+
+    /**
      * 构造一条误差记录
      *
      * @param estimated 预估涨跌幅
