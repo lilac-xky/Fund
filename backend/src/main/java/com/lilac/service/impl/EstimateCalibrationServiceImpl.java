@@ -303,7 +303,8 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
             return null;
         }
         EstimateCalibrationVerdict verdict = calibrationJudge.judge(category, snapshot.getDirection(),
-                snapshot.getEstimatedChange(), actual, snapshot.getIntervalLow(), snapshot.getIntervalHigh(),
+                snapshot.getEstimatedChange(), snapshot.getCenterChange(), actual,
+                snapshot.getIntervalLow(), snapshot.getIntervalHigh(),
                 settingOverrideResolver.effective(thresholds));
         CalibrationItemVO item = new CalibrationItemVO();
         item.setVarietyKey(variety.getVarietyKey());
@@ -320,6 +321,7 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
         item.setOverThreshold(verdict.getOverThreshold());
         item.setDirectionHit(verdict.getDirectionHit());
         item.setInInterval(verdict.getInInterval());
+        item.setCenterChange(verdict.getCenterChange());
         item.setIntervalLow(snapshot.getIntervalLow());
         item.setIntervalHigh(snapshot.getIntervalHigh());
         item.setIntervalWidth(verdict.getIntervalWidth());
@@ -397,6 +399,7 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
         row.setOverThreshold(item.getOverThreshold());
         row.setDirectionHit(item.getDirectionHit());
         row.setInInterval(item.getInInterval());
+        row.setCenterChange(item.getCenterChange());
         row.setIntervalWidth(item.getIntervalWidth());
         return row;
     }
@@ -595,6 +598,7 @@ public class EstimateCalibrationServiceImpl implements EstimateCalibrationServic
         request.setThresholdValue(item.getThresholdValue());
         request.setDirectionHit(item.getDirectionHit());
         request.setInInterval(item.getInInterval());
+        request.setCenterChange(item.getCenterChange());
         request.setIntervalWidth(item.getIntervalWidth());
         request.setHoldingCutoffDate(item.getHoldingCutoffDate());
         request.setHoldingDisclosureDate(item.getHoldingDisclosureDate());

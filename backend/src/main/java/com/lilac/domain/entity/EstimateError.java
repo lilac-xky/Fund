@@ -61,6 +61,11 @@ public class EstimateError extends BaseEntity {
     private Boolean inInterval;
 
     /**
+     * 当时内部点估计，百分点；B 档专用，只供区间残差统计
+     */
+    private BigDecimal centerChange;
+
+    /**
      * 所给区间宽度，百分点，混合型统计用
      */
     private BigDecimal intervalWidth;

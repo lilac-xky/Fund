@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -16,6 +17,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@Order(1)
 public class SchemaColumnUpgrader implements ApplicationRunner {
 
     private static final Map<String, Map<String, String>> REQUIRED_COLUMNS = new LinkedHashMap<>();
@@ -27,6 +29,8 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
         errorColumns.put("thresholdValue", "DECIMAL(12, 6) DEFAULT NULL COMMENT '本次判定所用阈值，百分点；混合型为 null'");
         errorColumns.put("directionHit", "TINYINT(1) DEFAULT NULL COMMENT '方向是否命中，混合型统计用'");
         errorColumns.put("inInterval", "TINYINT(1) DEFAULT NULL COMMENT '实际值是否落在所给区间内，混合型统计用'");
+        errorColumns.put("centerChange",
+                "DECIMAL(12, 6) DEFAULT NULL COMMENT '当时内部点估计，百分点；B 档专用，只供区间残差统计'");
         errorColumns.put("intervalWidth", "DECIMAL(12, 6) DEFAULT NULL COMMENT '所给区间宽度，百分点，混合型统计用'");
         errorColumns.put("holdingCutoffDate", "DATE DEFAULT NULL COMMENT '当时持仓截止日'");
         errorColumns.put("holdingDisclosureDate", "DATE DEFAULT NULL COMMENT '当时持仓披露日'");
@@ -34,6 +38,11 @@ public class SchemaColumnUpgrader implements ApplicationRunner {
         REQUIRED_COLUMNS.put("estimate_error", errorColumns);
         // 混合型只给方向与区间时没有点估计，这两列必须允许为空，否则只能写假数字
         NULLABLE_COLUMNS.put("estimate_error", List.of("estimatedChange", "errorValue"));
+
+        Map<String, String> snapshotColumns = new LinkedHashMap<>();
+        snapshotColumns.put("centerChange",
+                "DECIMAL(12, 6) DEFAULT NULL COMMENT '当时内部点估计，百分点；B 档专用，只供区间残差统计'");
+        REQUIRED_COLUMNS.put("estimate_snapshot", snapshotColumns);
 
         Map<String, String> netWorthColumns = new LinkedHashMap<>();
         netWorthColumns.put("accumulatedNetWorth",

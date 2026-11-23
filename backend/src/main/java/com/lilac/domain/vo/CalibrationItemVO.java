@@ -96,6 +96,11 @@ public class CalibrationItemVO implements Serializable {
     private BigDecimal intervalHigh;
 
     /**
+     * 当时内部点估计，百分点；B 档专用，只供区间残差统计
+     */
+    private BigDecimal centerChange;
+
+    /**
      * 当时区间宽度，百分点
      */
     private BigDecimal intervalWidth;

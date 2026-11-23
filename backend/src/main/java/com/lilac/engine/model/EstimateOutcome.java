@@ -64,12 +64,17 @@ public class EstimateOutcome {
     private ChangeDirection direction;
 
     /**
-     * 区间下限，百分点，仅 B 档
+     * 内部点估计，百分点；仅 B 档，只用于统计区间残差，绝不对外输出
+     */
+    private BigDecimal centerChange;
+
+    /**
+     * 区间下限，百分点；仅 B 档且区间有信息量时给出
      */
     private BigDecimal intervalLow;
 
     /**
-     * 区间上限，百分点，仅 B 档
+     * 区间上限，百分点；仅 B 档且区间有信息量时给出
      */
     private BigDecimal intervalHigh;
 
@@ -170,6 +175,7 @@ public class EstimateOutcome {
         this.unavailableReason = reason;
         this.unavailableDetail = detail;
         this.estimatedChange = null;
+        this.centerChange = null;
         this.intervalLow = null;
         this.intervalHigh = null;
         this.direction = null;

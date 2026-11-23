@@ -58,6 +58,11 @@ public class EstimateSnapshotVO implements Serializable {
     private ChangeDirection direction;
 
     /**
+     * 当时内部点估计，百分点；B 档专用，只供残差统计，不对外输出
+     */
+    private BigDecimal centerChange;
+
+    /**
      * 当时区间下限，百分点
      */
     private BigDecimal intervalLow;

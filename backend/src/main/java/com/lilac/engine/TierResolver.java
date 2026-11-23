@@ -91,8 +91,8 @@ public class TierResolver {
             return false;
         }
         BigDecimal coverage = stats.getIntervalCoverage();
-        // 混合型没有点估计，区间半宽只能按自身波动定，宽波动比恒等于 2 倍 sigma 系数，
-        // 与基金好坏无关；此时再用它卡档位会让 B 档对混合型永远不可达
+        // 混合型不在这里卡区间宽窄：区间过宽时输出层直接不给区间、只给方向，
+        // 若同时在这里降档，会把「方向仍可信」的基金一并打成什么都不显示
         boolean widthOk = stats.getErrorSigma() == null || (ratio != null
                 && ratio.compareTo(thresholds.getBWidthRatio()) < 0);
         return accuracy.compareTo(thresholds.getBDirectionAccuracy()) >= 0 && widthOk

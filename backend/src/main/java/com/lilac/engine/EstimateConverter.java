@@ -36,6 +36,7 @@ public class EstimateConverter {
         vo.setEstimatedChange(outcome.getEstimatedChange());
         vo.setDirection(outcome.getDirection());
         vo.setDirectionLabel(outcome.getDirection() == null ? null : outcome.getDirection().getLabel());
+        vo.setCenterChange(outcome.getCenterChange());
         vo.setIntervalLow(outcome.getIntervalLow());
         vo.setIntervalHigh(outcome.getIntervalHigh());
         vo.setCoverage(outcome.getCoverage());

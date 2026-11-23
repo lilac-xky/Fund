@@ -1,5 +1,6 @@
 package com.lilac.domain.vo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.lilac.enums.ChangeDirection;
 import com.lilac.enums.EstimateBranch;
 import com.lilac.enums.EstimateConfidence;
@@ -89,12 +90,18 @@ public class EstimateVO implements Serializable {
     private String directionLabel;
 
     /**
-     * 区间下限，百分点，仅 B 档
+     * 内部点估计，百分点；仅 B 档有值，只供留存与残差统计，绝不对外输出
+     */
+    @JsonIgnore
+    private BigDecimal centerChange;
+
+    /**
+     * 区间下限，百分点；B 档且区间有信息量时才有值
      */
     private BigDecimal intervalLow;
 
     /**
-     * 区间上限，百分点，仅 B 档
+     * 区间上限，百分点；B 档且区间有信息量时才有值
      */
     private BigDecimal intervalHigh;
 

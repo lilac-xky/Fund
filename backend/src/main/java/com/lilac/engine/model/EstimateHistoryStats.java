@@ -36,12 +36,22 @@ public class EstimateHistoryStats {
     private BigDecimal intervalCoverage;
 
     /**
-     * 误差标准差，百分点
+     * 误差标准差，百分点；仅有点估计的基金才有
      */
     private BigDecimal errorSigma;
 
     /**
-     * 区间半宽，等于 sigma 倍数乘误差标准差
+     * 区间残差标准差，百分点；按内部中心值减实际涨跌算出，混合型专用
+     */
+    private BigDecimal residualSigma;
+
+    /**
+     * 参与残差统计的样本数
+     */
+    private int residualSamples;
+
+    /**
+     * 区间半宽，等于 sigma 倍数乘误差标准差或残差标准差
      */
     private BigDecimal intervalHalfWidth;
 

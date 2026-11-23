@@ -36,6 +36,7 @@ public class ErrorHistoryCalculator {
                 ? history.subList(history.size() - window, history.size()) : history;
         int samples = 0;
         int pointSamples = 0;
+        int residualSamples = 0;
         int directionHit = 0;
         int directionTotal = 0;
         int intervalTotal = 0;
@@ -44,6 +45,7 @@ public class ErrorHistoryCalculator {
         List<Double> absErrors = new ArrayList<>(used.size());
         List<Double> widths = new ArrayList<>(used.size());
         double[] errors = new double[used.size()];
+        double[] residuals = new double[used.size()];
         double[] actuals = new double[used.size()];
         for (EstimateErrorVO row : used) {
             BigDecimal actual = row.getActualChange();
@@ -52,6 +54,11 @@ public class ErrorHistoryCalculator {
             }
             samples++;
             actuals[samples - 1] = actual.doubleValue();
+            // 区间残差才是「预估不准多少」的直接量纲，混合型没有点估计误差时靠它
+            if (row.getCenterChange() != null) {
+                residuals[residualSamples] = row.getCenterChange().subtract(actual).doubleValue();
+                residualSamples++;
+            }
             if (row.getIntervalWidth() != null && row.getInInterval() != null) {
                 intervalTotal++;
                 widths.add(row.getIntervalWidth().doubleValue());
@@ -93,6 +100,8 @@ public class ErrorHistoryCalculator {
             stats.setMedianAbsError(scale(median(absErrors)));
             stats.setErrorSigma(stddev(errors, pointSamples));
         }
+        stats.setResidualSamples(residualSamples);
+        stats.setResidualSigma(residualSamples == 0 ? null : stddev(residuals, residualSamples));
         stats.setDirectionAccuracy(directionTotal == 0 ? null : ratio(directionHit, directionTotal));
         stats.setIntervalCoverage(intervalTotal == 0 ? null : ratio(intervalHit, intervalTotal));
         fillIntervalWidth(stats, widths, sigmaFactor);
@@ -119,7 +128,7 @@ public class ErrorHistoryCalculator {
     }
 
     /**
-     * 选区间半宽：有点估计误差时用它，没有时用该基金自身波动当误差量纲
+     * 选区间半宽：有点估计误差时用它，混合型用区间残差，两者都没有时返回 null
      *
      * @param stats       统计结果
      * @param widths      实测区间宽度
@@ -132,10 +141,10 @@ public class ErrorHistoryCalculator {
                     ? stats.getErrorSigma().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP)
                     : scale(median(widths) / 2);
         }
-        // 混合型没有点估计，历史区间宽度是它自己上次的输出，拿它反推会让宽度永远停在初值，
-        // 日波动 5% 的基金给出 ±0.49% 的区间等于没有区间，必须改用该基金自身波动
-        if (stats.getVolatility() != null && stats.getVolatility().signum() > 0) {
-            return stats.getVolatility().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP);
+        // 混合型没有点估计误差，区间只能按「内部中心值离实际多远」的残差来定，
+        // 拿自身波动当误差量纲会让区间宽到覆盖全部可能，等于没有信息
+        if (stats.getResidualSigma() != null && stats.getResidualSigma().signum() > 0) {
+            return stats.getResidualSigma().multiply(sigmaFactor).setScale(SCALE, RoundingMode.HALF_UP);
         }
         return null;
     }

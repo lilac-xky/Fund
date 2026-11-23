@@ -21,20 +21,22 @@ public class CalibrationJudge {
     /**
      * 判定一条校准记录，混合型不参与点估计阈值判定
      *
-     * @param category   基金类型
-     * @param direction  当时给出的方向，可为 null
-     * @param estimated  当时点估计，百分点；B、C 档为 null
-     * @param actual     当日实际涨跌幅，百分点
-     * @param low        当时区间下限，百分点
-     * @param high       当时区间上限，百分点
-     * @param thresholds 阈值配置
+     * @param category      基金类型
+     * @param direction     当时给出的方向，可为 null
+     * @param estimated     当时点估计，百分点；B、C 档为 null
+     * @param center        当时内部点估计，百分点；供区间残差统计，可为 null
+     * @param actual        当日实际涨跌幅，百分点
+     * @param low           当时区间下限，百分点
+     * @param high          当时区间上限，百分点
+     * @param thresholds    阈值配置
      * @return 判定结论
      */
     public EstimateCalibrationVerdict judge(FundCategory category, ChangeDirection direction, BigDecimal estimated,
-                                            BigDecimal actual, BigDecimal low, BigDecimal high,
+                                            BigDecimal center, BigDecimal actual, BigDecimal low, BigDecimal high,
                                             EstimateThresholds thresholds) {
         EstimateCalibrationVerdict verdict = new EstimateCalibrationVerdict();
         verdict.setActualChange(scale(actual));
+        verdict.setCenterChange(scale(center));
         if (category == FundCategory.MIXED) {
             judgeMixed(verdict, direction, estimated, actual, low, high, thresholds);
             return verdict;

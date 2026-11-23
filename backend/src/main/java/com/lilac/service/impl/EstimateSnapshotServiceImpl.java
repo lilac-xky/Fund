@@ -122,6 +122,7 @@ public class EstimateSnapshotServiceImpl implements EstimateSnapshotService {
         entity.setOutputTier(item.getTier() == null ? null : item.getTier().name());
         entity.setEstimatedChange(item.getEstimatedChange());
         entity.setDirection(item.getDirection() == null ? null : item.getDirection().name());
+        entity.setCenterChange(item.getCenterChange());
         entity.setIntervalLow(item.getIntervalLow());
         entity.setIntervalHigh(item.getIntervalHigh());
         entity.setCoverage(item.getCoverage());
