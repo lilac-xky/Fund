@@ -50,7 +50,7 @@ public class EstimateEngine {
     private static final String BOND_NOTE = "债券型用债券 ETF 代理，误差阈值单独分档";
     private static final String GOLD_DIRECT = "黄金 β 样本不足，已退化为代理直取";
     private static final String INTERVAL_CROSS_ZERO = "预估区间跨零，方向本身不确定，仅供参考";
-    private static final String INTERVAL_TOO_WIDE = "区间比该基金自身日波动还宽，已不做区间估计，只给方向";
+    private static final String INTERVAL_UNRELIABLE = "近期连续超阈值，区间暂不可信，只给方向";
     private static final String INTERVAL_PENDING = "区间残差样本还不够，暂只给方向，攒够后自动恢复区间";
     private static final String LOW_COVERAGE_NOTE = "持仓覆盖率偏低，预估误差可能放大";
     private static final String LINK_FUND_KEYWORD = "联接";
@@ -424,9 +424,9 @@ public class EstimateEngine {
         }
         // 中心值只进统计，不进任何对外字段，用来下次算区间残差
         outcome.setCenterChange(scale(change));
-        if (intervalTooWide(stats, halfWidth)) {
-            // 区间比基金自身波动还宽，等于把「今天可能发生的事」全说一遍，没有信息量
-            outcome.getRemarks().add(INTERVAL_TOO_WIDE);
+        if (!stats.intervalShowable(thresholds.getIntervalCoverageMin())) {
+            // 连续超阈值或覆盖不住时区间不可信，只留方向
+            outcome.getRemarks().add(INTERVAL_UNRELIABLE);
             return;
         }
         outcome.setIntervalLow(scale(change.subtract(halfWidth)));
@@ -435,22 +435,6 @@ public class EstimateEngine {
         if (outcome.getIntervalLow().signum() < 0 && outcome.getIntervalHigh().signum() > 0) {
             outcome.getRemarks().add(INTERVAL_CROSS_ZERO);
         }
-    }
-
-    /**
-     * 判断区间宽是否已超过基金自身波动，超过说明区间没有信息量
-     *
-     * @param stats     历史误差统计
-     * @param halfWidth 区间半宽，百分点
-     * @return 过宽返回 true
-     */
-    private boolean intervalTooWide(EstimateHistoryStats stats, BigDecimal halfWidth) {
-        if (stats == null || stats.getVolatility() == null || stats.getVolatility().signum() <= 0) {
-            // 波动都算不出来时无从判断信息量，不拿它拦，交给残差口径自己收敛
-            return false;
-        }
-        BigDecimal width = halfWidth.multiply(BigDecimal.valueOf(2));
-        return width.compareTo(stats.getVolatility().multiply(thresholds.getBWidthRatio())) >= 0;
     }
 
     /**

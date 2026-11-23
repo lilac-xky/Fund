@@ -61,9 +61,14 @@ public class EstimateHistoryStats {
     private BigDecimal volatility;
 
     /**
-     * 区间宽与波动之比，2 × 半宽 ÷ 波动
+     * 区间宽与波动之比，2 × 半宽 ÷ 波动；仅供观察，不再用于拦截区间输出
      */
     private BigDecimal widthRatio;
+
+    /**
+     * 连续超阈值期数，区间能否对外展示取决于它
+     */
+    private int consecutiveOver;
 
     /**
      * 构造无历史样本的统计
@@ -85,5 +90,21 @@ public class EstimateHistoryStats {
     public boolean enough(int minimum) {
         return sampleCount >= minimum
                 && (medianAbsError != null || directionAccuracy != null || intervalCoverage != null);
+    }
+
+    /**
+     * 区间是否值得展示：有半宽、没连续超阈值、且区间覆盖率没掉到底
+     *
+     * @param coverageMin 区间覆盖率下限
+     * @return 可展示返回 true
+     */
+    public boolean intervalShowable(BigDecimal coverageMin) {
+        if (intervalHalfWidth == null || intervalHalfWidth.signum() <= 0) {
+            return false;
+        }
+        if (consecutiveOver > 0) {
+            return false;
+        }
+        return intervalCoverage == null || intervalCoverage.compareTo(coverageMin) >= 0;
     }
 }

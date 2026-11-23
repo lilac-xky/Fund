@@ -39,8 +39,6 @@ public class ErrorHistoryCalculator {
         int residualSamples = 0;
         int directionHit = 0;
         int directionTotal = 0;
-        int intervalTotal = 0;
-        int intervalHit = 0;
         double absSum = 0;
         List<Double> absErrors = new ArrayList<>(used.size());
         List<Double> widths = new ArrayList<>(used.size());
@@ -59,12 +57,9 @@ public class ErrorHistoryCalculator {
                 residuals[residualSamples] = row.getCenterChange().subtract(actual).doubleValue();
                 residualSamples++;
             }
+            // 历史给的区间宽度只作为半宽的回退来源，覆盖率一律按当前半宽重算
             if (row.getIntervalWidth() != null && row.getInInterval() != null) {
-                intervalTotal++;
                 widths.add(row.getIntervalWidth().doubleValue());
-                if (Boolean.TRUE.equals(row.getInInterval())) {
-                    intervalHit++;
-                }
             }
             if (countsDirection(row)) {
                 directionTotal++;
@@ -103,13 +98,70 @@ public class ErrorHistoryCalculator {
         stats.setResidualSamples(residualSamples);
         stats.setResidualSigma(residualSamples == 0 ? null : stddev(residuals, residualSamples));
         stats.setDirectionAccuracy(directionTotal == 0 ? null : ratio(directionHit, directionTotal));
-        stats.setIntervalCoverage(intervalTotal == 0 ? null : ratio(intervalHit, intervalTotal));
         fillIntervalWidth(stats, widths, sigmaFactor);
+        // 覆盖率与连续超阈值都用「当前这把尺子」重算，库里存的是当时那把尺子的结论
+        fillCoverage(stats, residuals, residualSamples);
+        stats.setConsecutiveOver(consecutiveOverResidual(residuals, residualSamples,
+                stats.getIntervalHalfWidth()));
         return stats;
     }
 
     /**
-     * 填入区间半宽与宽波动比，有点估计时按误差标准差估，没有时按自身波动估
+     * 用当前半宽对残差自洽重算覆盖率，历史标记量的是旧区间宽，不能拿来否新区间
+     *
+     * @param stats     统计结果
+     * @param residuals 残差序列
+     * @param count     有效残差个数
+     */
+    private void fillCoverage(EstimateHistoryStats stats, double[] residuals, int count) {
+        double half = halfOf(stats);
+        if (count == 0 || half <= 0) {
+            return;
+        }
+        int hit = 0;
+        for (int i = 0; i < count; i++) {
+            if (Math.abs(residuals[i]) <= half) {
+                hit++;
+            }
+        }
+        stats.setIntervalCoverage(ratio(hit, count));
+    }
+
+    /**
+     * 从最近一天往前数连续超出当前区间的期数，自洽判定而非读历史标记
+     *
+     * @param residuals 残差序列
+     * @param count     有效残差个数
+     * @param halfWidth 当前半宽
+     * @return 连续期数
+     */
+    private int consecutiveOverResidual(double[] residuals, int count, BigDecimal halfWidth) {
+        if (count == 0 || halfWidth == null || halfWidth.signum() <= 0) {
+            return 0;
+        }
+        double half = halfWidth.doubleValue();
+        int over = 0;
+        for (int i = count - 1; i >= 0; i--) {
+            if (Math.abs(residuals[i]) <= half) {
+                break;
+            }
+            over++;
+        }
+        return over;
+    }
+
+    /**
+     * 取当前生效的半宽，无则返回 0
+     *
+     * @param stats 统计结果
+     * @return 半宽
+     */
+    private double halfOf(EstimateHistoryStats stats) {
+        return stats.getIntervalHalfWidth() == null ? 0 : stats.getIntervalHalfWidth().doubleValue();
+    }
+
+    /**
+     * 填入区间半宽与宽波动比，有点估计时按误差标准差估，没有时按残差估
      *
      * @param stats       统计结果
      * @param widths      实测区间宽度
